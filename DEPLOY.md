@@ -7,12 +7,12 @@
 | 工具/服务 | 用途 | 备注 |
 |---|---|---|
 | Docker 24+ + Docker Compose v2 | 跑应用容器 | 安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/) 即可 |
-| [Neon](https://console.neon.tech) 账号 | PostgreSQL 数据库 | Free 层够 MVP |
+| 本地 PostgreSQL 容器 | 本地开发数据库 | `docker-compose.local.yml` 自动启动，避免误连生产 Neon/NDB |
 | 火山引擎 Ark API key | Seedance 2.0 上游 | 在 [火山引擎控制台](https://console.volcengine.com/ark) 申请，形如 `ark-xxxxxxxx` |
 
-可选：自有域名 + TLS（如要对外提供服务）。
+可选：生产环境可使用 Neon / 托管 PostgreSQL，自有域名 + TLS（如要对外提供服务）。
 
-## 二、5 步部署
+## 二、4 步本地启动
 
 ### 步骤 1：克隆仓库
 
@@ -21,46 +21,42 @@ git clone git@github.com:NekoAIKan/aikanhub.git
 cd aikanhub
 ```
 
-### 步骤 2：创建 Neon 数据库
+### 步骤 2：准备本地环境变量
 
-1. 登录 [console.neon.tech](https://console.neon.tech)，新建 project
-   - Region 推荐 **AWS Singapore** 或 **AWS Tokyo**（国内访问最快）
-2. 进入 project → 右上角 **Connection Details**
-3. ⚠️ 选 **"Direct connection"**，**不要选** "Pooled connection"
-   （PgBouncer 的 transaction mode 会和 GORM prepared statements 冲突）
-4. 复制连接串，形如：
-   ```
-   postgresql://neondb_owner:npg_xxx@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
-   ```
-
-### 步骤 3：配置环境变量
+本地开发默认使用 Docker Compose 内置 PostgreSQL，**不要填生产 Neon/NDB 连接串**。
 
 ```bash
 cp .env.local.example .env.local
 ```
 
-编辑 `.env.local`，填入 Neon 连接串：
+默认会使用：
 
 ```bash
-SQL_DSN=postgresql://neondb_owner:npg_xxx@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+SQL_DSN=postgresql://aikanhub:aikanhub_dev_password@postgres:5432/aikanhub?sslmode=disable
 ```
 
-其他字段（Redis 密码、SESSION_SECRET 等）已生成默认值，**生产部署前务必改 SESSION_SECRET**：
+其他字段（Redis 密码、SESSION_SECRET 等）已生成本地默认值，**生产部署前务必改 SESSION_SECRET**：
 
 ```bash
 # 生成新的 SESSION_SECRET
 openssl rand -hex 32
 ```
 
-### 步骤 4：启动
+### 步骤 3：启动
 
 ```bash
 docker compose -f docker-compose.local.yml --env-file .env.local up -d --build
 ```
 
+如果本地网络访问 `proxy.golang.org` 不稳定，可以在 `.env.local` 里改成：
+
+```bash
+GOPROXY=https://goproxy.cn,direct
+```
+
 首次启动：
 - 镜像 build 约 5–10 分钟（后续 build 缓存命中后 20 秒内）
-- 容器启动后会跑一次 schema migration（Neon 远程往返 60–90 秒）
+- 容器启动后会跑一次 schema migration
 - 之后重启走 schema-hash 跳过迁移，**约 11 秒就绪**
 
 等待就绪：
@@ -69,7 +65,7 @@ docker compose -f docker-compose.local.yml --env-file .env.local up -d --build
 until curl -sf http://localhost:3000/api/status > /dev/null; do sleep 2; done && echo "READY"
 ```
 
-### 步骤 5：首次配置
+### 步骤 4：首次配置
 
 打开浏览器访问 [http://localhost:3000](http://localhost:3000)：
 
@@ -124,7 +120,7 @@ docker compose -f docker-compose.local.yml --env-file .env.local logs app | grep
 # 停服（保留 Redis 数据）
 docker compose -f docker-compose.local.yml --env-file .env.local down
 
-# 完全重置（删除 Redis volume；不影响 Neon 数据）
+# 完全重置（删除本地 Postgres 和 Redis volume；不影响生产 Neon/NDB）
 docker compose -f docker-compose.local.yml --env-file .env.local down -v
 
 # 只重启 app（保留 redis 容器，最快）
@@ -133,10 +129,10 @@ docker compose -f docker-compose.local.yml --env-file .env.local restart app
 
 ### 备份
 
-- **Neon**：自带 Point-in-Time Restore（Launch tier $19/月起），不需要手动备份
+- **本地 PostgreSQL**：数据在 Docker volume `aikanhub_postgres_data`，`down -v` 会删除
 - **Redis**：本地缓存，不需要备份
-- **应用配置**：在 admin 后台「系统设置」改的内容存在 Neon `options` 表里，已被 Neon 自动备份覆盖
-- **`.env.local`**：本地文件，请自行妥善保管（含 Neon 密码、ark key 等敏感信息）
+- **应用配置**：在 admin 后台「系统设置」改的内容存在本地 PostgreSQL `options` 表里
+- **`.env.local`**：本地文件，请自行妥善保管（含 ark key 等敏感信息）
 
 ---
 
@@ -144,7 +140,7 @@ docker compose -f docker-compose.local.yml --env-file .env.local restart app
 
 ### Q1：启动时 SLOW SQL 刷屏
 
-**正常**——首次启动 GORM AutoMigrate 在 Neon 远程跑 ~100 个 schema 检查查询，每个 200–400ms。
+**正常**——首次启动 GORM AutoMigrate 会跑 schema 检查查询。本地 PostgreSQL 通常很快；如果你临时改成远程数据库，延迟会更明显。
 
 > 如果重启依然刷屏，说明 schema-hash 没存进去：检查 `Option` 表里 `SchemaMigrationHash` 是否有值。可以临时用 `SKIP_AUTO_MIGRATION_HASH_CHECK=true` 强制再跑一次。
 
