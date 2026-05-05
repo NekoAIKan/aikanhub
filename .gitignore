@@ -40,4 +40,5 @@ skills-lock.json
 .env.dev
 .env.local
 backups/
+.env.maomao
 docker-compose.local.override.yml

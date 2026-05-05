@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { CopyButton } from '@/components/copy-button'
 import { PublicLayout } from '@/components/layout'
@@ -5,19 +7,116 @@ import { PublicLayout } from '@/components/layout'
 const ENDPOINT_BASE =
   typeof window !== 'undefined' ? window.location.origin : 'https://your.aikanhub.com'
 
-// ------------------------------------------------------------------
-// Code samples
-// ------------------------------------------------------------------
+// ============================================================================
+// Code samples (literal — code stays in English; example prompts kept in
+// Chinese to preserve the model's authentic reference behavior)
+// ============================================================================
 
-const CURL_SUBMIT = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
+const CURL_T2V = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
   -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "doubao-seedance-2-0-fast-260128",
-    "prompt": "一只橘猫慢慢走过夕阳下的东京街道，4K，电影感",
+    "model": "doubao-seedance-2-0-260128",
+    "prompt": "A ginger cat strolls down a Tokyo street at sunset, 4K, cinematic",
+    "size": "720p",
+    "duration": 5,
+    "metadata": { "ratio": "16:9", "generate_audio": true }
+  }'`
+
+const CURL_I2V_FIRST = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
+  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "doubao-seedance-2-0-260128",
+    "prompt": "Slow camera push-in, subject animates from still to motion",
+    "images": ["https://example.com/first.jpg"],
     "size": "720p",
     "duration": 5,
     "metadata": { "ratio": "16:9" }
+  }'`
+
+const CURL_I2V_FIRSTLAST = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
+  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "doubao-seedance-2-0-260128",
+    "prompt": "Smooth transition from first frame to last frame",
+    "metadata": {
+      "content": [
+        { "type": "image_url", "image_url": { "url": "https://example.com/first.jpg" }, "role": "first_frame" },
+        { "type": "image_url", "image_url": { "url": "https://example.com/last.jpg"  }, "role": "last_frame"  }
+      ],
+      "ratio": "16:9"
+    },
+    "duration": 5
+  }'`
+
+const CURL_MULTIMODAL = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
+  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "doubao-seedance-2-0-260128",
+    "prompt": "Use video1 first-person framing throughout, audio1 as the BGM. A POV beverage commercial...",
+    "metadata": {
+      "content": [
+        { "type": "image_url", "image_url": { "url": "https://example.com/pic1.jpg" }, "role": "reference_image" },
+        { "type": "image_url", "image_url": { "url": "https://example.com/pic2.jpg" }, "role": "reference_image" },
+        { "type": "video_url", "video_url": { "url": "https://example.com/v1.mp4"  }, "role": "reference_video" },
+        { "type": "audio_url", "audio_url": { "url": "https://example.com/a1.mp3"  }, "role": "reference_audio" }
+      ],
+      "ratio": "16:9",
+      "generate_audio": true
+    },
+    "duration": 11
+  }'`
+
+const CURL_EDIT = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
+  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "doubao-seedance-2-0-260128",
+    "prompt": "Replace the perfume in video1 with the cream from image1; keep camera motion intact",
+    "metadata": {
+      "content": [
+        { "type": "image_url", "image_url": { "url": "https://example.com/cream.jpg" }, "role": "reference_image" },
+        { "type": "video_url", "video_url": { "url": "https://example.com/edit.mp4" }, "role": "reference_video" }
+      ],
+      "ratio": "16:9",
+      "generate_audio": true
+    },
+    "duration": 5
+  }'`
+
+const CURL_EXTEND = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
+  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "doubao-seedance-2-0-260128",
+    "prompt": "Arched window in video1 opens, enter the gallery, then video2; camera zooms into the painting, then video3",
+    "metadata": {
+      "content": [
+        { "type": "video_url", "video_url": { "url": "https://example.com/v1.mp4" }, "role": "reference_video" },
+        { "type": "video_url", "video_url": { "url": "https://example.com/v2.mp4" }, "role": "reference_video" },
+        { "type": "video_url", "video_url": { "url": "https://example.com/v3.mp4" }, "role": "reference_video" }
+      ],
+      "ratio": "16:9",
+      "generate_audio": true
+    },
+    "duration": 8
+  }'`
+
+const CURL_WEB_SEARCH = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
+  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "doubao-seedance-2-0-260128",
+    "prompt": "Macro shot of a glass frog on an emerald leaf; focus shifts from skin to its transparent belly",
+    "metadata": {
+      "ratio": "16:9",
+      "generate_audio": true,
+      "tools": [{ "type": "web_search" }]
+    },
+    "duration": 11
   }'`
 
 const CURL_POLL = `curl ${ENDPOINT_BASE}/v1/video/generations/$TASK_ID \\
@@ -26,65 +125,254 @@ const CURL_POLL = `curl ${ENDPOINT_BASE}/v1/video/generations/$TASK_ID \\
 const CURL_DOWNLOAD = `curl -o video.mp4 ${ENDPOINT_BASE}/v1/videos/$TASK_ID/content \\
   -H "Authorization: Bearer $AIKANHUB_TOKEN"`
 
-const PYTHON_FULL = `"""完整端到端示例：提交 → 轮询 → 下载视频"""
-import os, time, requests
+// ----------------------------------------------------------------------------
+// Python SDK examples.
+//   - Simple endpoints (text-to-video, image-to-video first-frame, polling)
+//     use the official OpenAI SDK pointed at /v1.
+//       pip install openai
+//   - Endpoints that need the full Volcano Ark `content[]` shape — first/last
+//     frame, multi-modal reference, edit, extend, web search — use the
+//     official Volcano SDK pointed at /api/v3.
+//       pip install volcengine-python-sdk[ark]
+// ----------------------------------------------------------------------------
+
+const PY_T2V = `# pip install openai
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.environ["AIKANHUB_TOKEN"],
+    base_url="${ENDPOINT_BASE}/v1",
+)
+
+video = client.videos.create(
+    model="doubao-seedance-2-0-260128",
+    prompt="A ginger cat strolls down a Tokyo street at sunset, 4K, cinematic",
+    seconds="5",
+    size="720p",
+    extra_body={"metadata": {"ratio": "16:9", "generate_audio": True}},
+)
+print(video.id)`
+
+const PY_I2V_FIRST = `# pip install openai
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.environ["AIKANHUB_TOKEN"],
+    base_url="${ENDPOINT_BASE}/v1",
+)
+
+video = client.videos.create(
+    model="doubao-seedance-2-0-260128",
+    prompt="Slow camera push-in, subject animates from still to motion",
+    seconds="5",
+    size="720p",
+    extra_body={
+        "images": ["https://example.com/first.jpg"],
+        "metadata": {"ratio": "16:9"},
+    },
+)
+print(video.id)`
+
+const PY_I2V_FIRSTLAST = `# pip install volcengine-python-sdk[ark]
+import os
+from volcenginesdkarkruntime import Ark
+
+client = Ark(
+    api_key=os.environ["AIKANHUB_TOKEN"],
+    base_url="${ENDPOINT_BASE}/api/v3",
+)
+
+task = client.content_generation.tasks.create(
+    model="doubao-seedance-2-0-260128",
+    content=[
+        {"type": "text", "text": "Smooth transition from first frame to last frame"},
+        {"type": "image_url", "image_url": {"url": "https://example.com/first.jpg"}, "role": "first_frame"},
+        {"type": "image_url", "image_url": {"url": "https://example.com/last.jpg"},  "role": "last_frame"},
+    ],
+    duration=5,
+    ratio="16:9",
+)
+print(task.id)`
+
+const PY_MULTIMODAL = `# pip install volcengine-python-sdk[ark]
+import os
+from volcenginesdkarkruntime import Ark
+
+client = Ark(
+    api_key=os.environ["AIKANHUB_TOKEN"],
+    base_url="${ENDPOINT_BASE}/api/v3",
+)
+
+task = client.content_generation.tasks.create(
+    model="doubao-seedance-2-0-260128",
+    content=[
+        {"type": "text", "text": "Use video1 first-person framing throughout, audio1 as the BGM. A POV beverage commercial..."},
+        {"type": "image_url", "image_url": {"url": "https://example.com/pic1.jpg"}, "role": "reference_image"},
+        {"type": "image_url", "image_url": {"url": "https://example.com/pic2.jpg"}, "role": "reference_image"},
+        {"type": "video_url", "video_url": {"url": "https://example.com/v1.mp4"},   "role": "reference_video"},
+        {"type": "audio_url", "audio_url": {"url": "https://example.com/a1.mp3"},   "role": "reference_audio"},
+    ],
+    duration=11,
+    ratio="16:9",
+    generate_audio=True,
+)
+print(task.id)`
+
+const PY_EDIT = `# pip install volcengine-python-sdk[ark]
+import os
+from volcenginesdkarkruntime import Ark
+
+client = Ark(
+    api_key=os.environ["AIKANHUB_TOKEN"],
+    base_url="${ENDPOINT_BASE}/api/v3",
+)
+
+task = client.content_generation.tasks.create(
+    model="doubao-seedance-2-0-260128",
+    content=[
+        {"type": "text", "text": "Replace the perfume in video1 with the cream from image1; keep camera motion intact"},
+        {"type": "image_url", "image_url": {"url": "https://example.com/cream.jpg"}, "role": "reference_image"},
+        {"type": "video_url", "video_url": {"url": "https://example.com/edit.mp4"},  "role": "reference_video"},
+    ],
+    duration=5,
+    ratio="16:9",
+    generate_audio=True,
+)
+print(task.id)`
+
+const PY_EXTEND = `# pip install volcengine-python-sdk[ark]
+import os
+from volcenginesdkarkruntime import Ark
+
+client = Ark(
+    api_key=os.environ["AIKANHUB_TOKEN"],
+    base_url="${ENDPOINT_BASE}/api/v3",
+)
+
+task = client.content_generation.tasks.create(
+    model="doubao-seedance-2-0-260128",
+    content=[
+        {"type": "text", "text": "Arched window in video1 opens, enter the gallery, then video2; camera zooms into the painting, then video3"},
+        {"type": "video_url", "video_url": {"url": "https://example.com/v1.mp4"}, "role": "reference_video"},
+        {"type": "video_url", "video_url": {"url": "https://example.com/v2.mp4"}, "role": "reference_video"},
+        {"type": "video_url", "video_url": {"url": "https://example.com/v3.mp4"}, "role": "reference_video"},
+    ],
+    duration=8,
+    ratio="16:9",
+    generate_audio=True,
+)
+print(task.id)`
+
+const PY_WEB_SEARCH = `# pip install volcengine-python-sdk[ark]
+import os
+from volcenginesdkarkruntime import Ark
+
+client = Ark(
+    api_key=os.environ["AIKANHUB_TOKEN"],
+    base_url="${ENDPOINT_BASE}/api/v3",
+)
+
+task = client.content_generation.tasks.create(
+    model="doubao-seedance-2-0-260128",
+    content=[
+        {"type": "text", "text": "Macro shot of a glass frog on an emerald leaf; focus shifts from skin to its transparent belly"},
+    ],
+    duration=11,
+    ratio="16:9",
+    generate_audio=True,
+    tools=[{"type": "web_search"}],
+)
+print(task.id)`
+
+const PY_POLL = `# pip install openai
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.environ["AIKANHUB_TOKEN"],
+    base_url="${ENDPOINT_BASE}/v1",
+)
+
+video = client.videos.retrieve("your-task-id-here")
+print(video.status, video.model_extra)
+
+# Volcano SDK alternative — exposes content.video_url directly:
+# from volcenginesdkarkruntime import Ark
+# ark = Ark(api_key=os.environ["AIKANHUB_TOKEN"], base_url="${ENDPOINT_BASE}/api/v3")
+# task = ark.content_generation.tasks.get(task_id="your-task-id-here")
+# print(task.status, task.content.video_url)`
+
+const PY_DOWNLOAD = `# pip install httpx
+import os, httpx
 from pathlib import Path
+
+TASK_ID = "your-task-id-here"
+r = httpx.get(
+    f"${ENDPOINT_BASE}/v1/videos/{TASK_ID}/content",
+    headers={"Authorization": f"Bearer {os.environ['AIKANHUB_TOKEN']}"},
+)
+r.raise_for_status()
+Path("video.mp4").write_bytes(r.content)
+print("saved to video.mp4")`
+
+const PYTHON_FULL = `"""End-to-end example: submit → poll → download (OpenAI SDK + httpx)."""
+# pip install openai httpx
+import os, time, httpx
+from pathlib import Path
+from openai import OpenAI
 
 BASE  = "${ENDPOINT_BASE}"
 TOKEN = os.environ["AIKANHUB_TOKEN"]
-H     = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
+client = OpenAI(api_key=TOKEN, base_url=f"{BASE}/v1")
 
 
-def submit_video_task(prompt: str, *, model="doubao-seedance-2-0-fast-260128",
-                      size="720p", duration=5, ratio="16:9") -> str:
-    r = requests.post(f"{BASE}/v1/video/generations", headers=H, json={
-        "model": model,
-        "prompt": prompt,
-        "size": size,
-        "duration": duration,
-        "metadata": {"ratio": ratio},
-    })
-    r.raise_for_status()
-    body = r.json()
-    return body["task_id"]
+def submit_video_task(prompt, *, model="doubao-seedance-2-0-fast-260128",
+                      size="720p", seconds="5", ratio="16:9"):
+    video = client.videos.create(
+        model=model,
+        prompt=prompt,
+        seconds=seconds,
+        size=size,
+        extra_body={"metadata": {"ratio": ratio}},
+    )
+    return video.id
 
 
-def wait_for_video(task_id: str, *, interval=5, timeout=600) -> str:
-    """轮询直到完成；返回任务最终响应（含 video_url）。"""
+def wait_for_video(task_id, *, interval=5, timeout=600):
     deadline = time.time() + timeout
     while time.time() < deadline:
         time.sleep(interval)
-        r = requests.get(f"{BASE}/v1/video/generations/{task_id}", headers=H)
-        r.raise_for_status()
-        body = r.json()
-        status = body.get("status") or body.get("data", {}).get("status")
-        progress = body.get("data", {}).get("progress", "")
-        print(f"  [{task_id[:12]}] status={status} progress={progress}")
-        if status in ("succeeded", "SUCCESS"):
-            return body["data"]["data"]["content"]["video_url"]
-        if status in ("failed", "FAILED"):
-            reason = body.get("data", {}).get("fail_reason", "unknown")
-            raise RuntimeError(f"task failed: {reason}")
+        video = client.videos.retrieve(task_id)
+        status = video.status
+        print(f"  [{task_id[:12]}] status={status}")
+        if status in ("succeeded", "completed"):
+            # The video file lives behind /v1/videos/{id}/content; the URL is
+            # also stashed on video.metadata for convenience.
+            return (video.metadata or {}).get("url", "")
+        if status == "failed":
+            err = getattr(video, "error", None)
+            raise RuntimeError(f"task failed: {err}")
     raise TimeoutError(f"task {task_id} did not complete within {timeout}s")
 
 
-def download_video(task_id: str, out_path: str) -> None:
-    """通过 aikanhub 代理下载（24h 内有效）。"""
-    r = requests.get(f"{BASE}/v1/videos/{task_id}/content",
-                     headers={"Authorization": f"Bearer {TOKEN}"}, stream=True)
+def download_video(task_id, out_path):
+    r = httpx.get(f"{BASE}/v1/videos/{task_id}/content",
+                  headers={"Authorization": f"Bearer {TOKEN}"})
     r.raise_for_status()
     Path(out_path).write_bytes(r.content)
 
 
 if __name__ == "__main__":
-    task_id = submit_video_task("一只橘猫慢慢走过夕阳下的东京街道，4K，电影感")
+    task_id = submit_video_task("A ginger cat strolls down a Tokyo street at sunset, 4K, cinematic")
     print(f"submitted: {task_id}")
     video_url = wait_for_video(task_id)
     print(f"video URL: {video_url}")
     download_video(task_id, "out.mp4")
     print("saved to out.mp4")`
 
-const NODE_FULL = `// 完整端到端示例：提交 → 轮询 → 下载视频
+const NODE_FULL = `// End-to-end example: submit -> poll -> download
 import { writeFile } from "node:fs/promises";
 
 const BASE  = "${ENDPOINT_BASE}";
@@ -104,8 +392,7 @@ async function submitVideoTask(prompt, opts = {}) {
     }),
   });
   if (!r.ok) throw new Error(\`submit failed: \${r.status} \${await r.text()}\`);
-  const body = await r.json();
-  return body.task_id;
+  return (await r.json()).task_id;
 }
 
 async function waitForVideo(taskId, { interval = 5000, timeout = 600_000 } = {}) {
@@ -132,16 +419,16 @@ async function downloadVideo(taskId, outPath) {
   await writeFile(outPath, Buffer.from(await r.arrayBuffer()));
 }
 
-const taskId = await submitVideoTask("一只橘猫慢慢走过夕阳下的东京街道，4K，电影感");
+const taskId = await submitVideoTask("A ginger cat strolls down a Tokyo street at sunset, 4K, cinematic");
 console.log("submitted:", taskId);
 const videoUrl = await waitForVideo(taskId);
 console.log("video URL:", videoUrl);
 await downloadVideo(taskId, "out.mp4");
 console.log("saved to out.mp4");`
 
-// ------------------------------------------------------------------
-// Reusable bits
-// ------------------------------------------------------------------
+// ============================================================================
+// Reusable components
+// ============================================================================
 
 function CodeBlock({ code, lang }: { code: string; lang: string }) {
   return (
@@ -159,6 +446,23 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
   )
 }
 
+function CodeTabs({ shell, python }: { shell: string; python: string }) {
+  return (
+    <Tabs defaultValue='shell' className='overflow-hidden rounded-lg border'>
+      <TabsList className='bg-muted h-10 w-full justify-start rounded-none border-b px-2'>
+        <TabsTrigger value='shell'>Shell</TabsTrigger>
+        <TabsTrigger value='python'>Python</TabsTrigger>
+      </TabsList>
+      <TabsContent value='shell' className='m-0'>
+        <CodeBlock lang='shell' code={shell} />
+      </TabsContent>
+      <TabsContent value='python' className='m-0'>
+        <CodeBlock lang='python' code={python} />
+      </TabsContent>
+    </Tabs>
+  )
+}
+
 function Section({
   id,
   title,
@@ -166,17 +470,15 @@ function Section({
   children,
 }: {
   id: string
-  title: string
-  description?: string
+  title: React.ReactNode
+  description?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
-    <section id={id} className='scroll-mt-20 space-y-4'>
+    <section id={id} className='scroll-mt-24 space-y-4'>
       <div className='space-y-1'>
         <h2 className='text-2xl font-semibold tracking-tight'>{title}</h2>
-        {description && (
-          <p className='text-muted-foreground text-sm'>{description}</p>
-        )}
+        {description && <div className='text-muted-foreground text-sm'>{description}</div>}
       </div>
       {children}
     </section>
@@ -190,7 +492,7 @@ function EndpointCard({
 }: {
   method: 'GET' | 'POST'
   path: string
-  description: string
+  description: React.ReactNode
 }) {
   const methodColor =
     method === 'POST'
@@ -211,10 +513,6 @@ function EndpointCard({
   )
 }
 
-// ------------------------------------------------------------------
-// Reusable param table builder
-// ------------------------------------------------------------------
-
 interface Param {
   name: string
   type: string
@@ -222,16 +520,32 @@ interface Param {
   desc: React.ReactNode
 }
 
-function ParamTable({ params }: { params: Param[] }) {
+function ParamTable({
+  params,
+  fieldLabel,
+  typeLabel,
+  requiredLabel,
+  descLabel,
+  yes,
+  no,
+}: {
+  params: Param[]
+  fieldLabel: string
+  typeLabel: string
+  requiredLabel: string
+  descLabel: string
+  yes: string
+  no: string
+}) {
   return (
     <div className='overflow-hidden rounded-lg border'>
       <table className='w-full text-sm'>
         <thead className='bg-muted'>
           <tr className='text-left'>
-            <th className='px-4 py-2 font-medium w-44'>字段</th>
-            <th className='px-4 py-2 font-medium w-28'>类型</th>
-            <th className='px-4 py-2 font-medium w-20'>必填</th>
-            <th className='px-4 py-2 font-medium'>说明</th>
+            <th className='px-4 py-2 font-medium w-44'>{fieldLabel}</th>
+            <th className='px-4 py-2 font-medium w-28'>{typeLabel}</th>
+            <th className='px-4 py-2 font-medium w-20'>{requiredLabel}</th>
+            <th className='px-4 py-2 font-medium'>{descLabel}</th>
           </tr>
         </thead>
         <tbody className='divide-y'>
@@ -241,9 +555,9 @@ function ParamTable({ params }: { params: Param[] }) {
               <td className='px-4 py-2 text-xs'>{p.type}</td>
               <td className='px-4 py-2 text-xs'>
                 {p.required ? (
-                  <span className='font-medium text-red-600 dark:text-red-400'>是</span>
+                  <span className='font-medium text-red-600 dark:text-red-400'>{yes}</span>
                 ) : (
-                  <span className='text-muted-foreground'>否</span>
+                  <span className='text-muted-foreground'>{no}</span>
                 )}
               </td>
               <td className='px-4 py-2 text-xs'>{p.desc}</td>
@@ -255,373 +569,1416 @@ function ParamTable({ params }: { params: Param[] }) {
   )
 }
 
-// ------------------------------------------------------------------
-// Page
-// ------------------------------------------------------------------
+function MethodBadge({ method }: { method: 'GET' | 'POST' }) {
+  const color =
+    method === 'POST'
+      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+      : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+  return (
+    <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold ${color}`}>
+      {method}
+    </span>
+  )
+}
 
-const TOC: Array<{ id: string; label: string }> = [
-  { id: 'overview', label: '概述' },
-  { id: 'quick-start', label: '快速开始' },
-  { id: 'endpoints', label: 'API 端点一览' },
-  { id: 'submit', label: '提交任务' },
-  { id: 'poll', label: '查询状态' },
-  { id: 'download', label: '下载视频' },
-  { id: 'full-example', label: '完整示例' },
-  { id: 'models', label: '支持的模型' },
-  { id: 'pricing', label: '定价' },
-  { id: 'limits', label: '限流与配额' },
-  { id: 'errors', label: '错误码' },
-  { id: 'best-practices', label: '最佳实践' },
-  { id: 'faq', label: '常见问题' },
-]
+function NewBadge() {
+  return (
+    <span className='ml-2 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'>
+      NEW
+    </span>
+  )
+}
+
+function Callout({
+  type = 'info',
+  children,
+}: {
+  type?: 'info' | 'warn' | 'tip'
+  children: React.ReactNode
+}) {
+  const styles = {
+    info: 'bg-blue-50 text-blue-900 dark:bg-blue-900/20 dark:text-blue-200',
+    warn: 'bg-amber-50 text-amber-900 dark:bg-amber-900/20 dark:text-amber-200',
+    tip: 'bg-emerald-50 text-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-200',
+  }
+  return (
+    <div className={`rounded-md p-3 text-xs leading-relaxed ${styles[type]}`}>{children}</div>
+  )
+}
+
+function K({ children }: { children: React.ReactNode }) {
+  return <code className='bg-muted rounded px-1'>{children}</code>
+}
+
+// ============================================================================
+// Capability matrix
+// ============================================================================
+
+const SEEDANCE_MODELS = [
+  { id: 'doubao-seedance-2-0-260128',          name: 'Seedance 2.0' },
+  { id: 'doubao-seedance-2-0-fast-260128',     name: 'Seedance 2.0 fast' },
+  { id: 'doubao-seedance-1-5-pro-251215',      name: 'Seedance 1.5 pro' },
+  { id: 'doubao-seedance-1-0-pro-250528',      name: 'Seedance 1.0 pro' },
+  { id: 'doubao-seedance-1-0-pro-fast-251015', name: 'Seedance 1.0 pro fast' },
+  { id: 'doubao-seedance-1-0-lite-i2v-250428', name: 'Seedance 1.0 lite i2v' },
+  { id: 'doubao-seedance-1-0-lite-t2v-250428', name: 'Seedance 1.0 lite t2v' },
+] as const
+
+type Cap = '✅' | '❌'
+const Y: Cap = '✅'
+const N: Cap = '❌'
+
+// ============================================================================
+// Scroll-spy: track which section is currently in view, then determine which
+// nav group it belongs to.
+// ============================================================================
+
+function useActiveSection(sectionIds: string[]): string | null {
+  const [active, setActive] = useState<string | null>(sectionIds[0] ?? null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const elements = sectionIds
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => !!el)
+
+    if (elements.length === 0) return
+
+    // Track visible sections; pick the topmost one above the fold.
+    const visible = new Map<string, number>()
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            visible.set(e.target.id, e.boundingClientRect.top)
+          } else {
+            visible.delete(e.target.id)
+          }
+        }
+        if (visible.size > 0) {
+          // Section closest to (but above) the top of viewport is active.
+          let best: string | null = null
+          let bestTop = -Infinity
+          for (const [id, top] of visible) {
+            if (top <= 120 && top > bestTop) {
+              best = id
+              bestTop = top
+            }
+          }
+          // Fallback: smallest positive top
+          if (!best) {
+            let smallest = Infinity
+            for (const [id, top] of visible) {
+              if (top >= 0 && top < smallest) {
+                best = id
+                smallest = top
+              }
+            }
+          }
+          if (best) setActive(best)
+        }
+      },
+      { rootMargin: '-80px 0px -50% 0px', threshold: [0, 0.25, 0.5, 1] },
+    )
+
+    elements.forEach((el) => observer.observe(el))
+    return () => observer.disconnect()
+  }, [sectionIds])
+
+  return active
+}
+
+// ============================================================================
+// Page
+// ============================================================================
 
 export function Docs() {
+  const { t } = useTranslation()
+
+  const NAV_GROUPS: Array<{
+    label: string
+    items: Array<{ id: string; label: string; method?: 'GET' | 'POST'; isNew?: boolean }>
+  }> = useMemo(
+    () => [
+      {
+        label: t('Product basics'),
+        items: [
+          { id: 'overview', label: t('Introduction') },
+          { id: 'quick-start', label: t('Quick start') },
+          { id: 'auth', label: t('Authentication') },
+          { id: 'endpoints', label: t('Endpoint reference') },
+        ],
+      },
+      {
+        label: t('Video API · Seedance'),
+        items: [
+          { id: 'seedance-overview', label: t('Seedance overview') },
+          { id: 'models', label: t('Models & capabilities') },
+          { id: 'mode-text', label: t('Text-to-video'), method: 'POST' },
+          { id: 'mode-image-first', label: t('Image-to-video · first frame'), method: 'POST' },
+          { id: 'mode-image-firstlast', label: t('Image-to-video · first/last frame'), method: 'POST' },
+          { id: 'mode-multimodal', label: t('Multi-modal reference'), method: 'POST', isNew: true },
+          { id: 'mode-edit', label: t('Edit video'), method: 'POST', isNew: true },
+          { id: 'mode-extend', label: t('Extend video'), method: 'POST', isNew: true },
+          { id: 'mode-web-search', label: t('Web search augmented'), method: 'POST', isNew: true },
+          { id: 'params', label: t('Full request parameters') },
+          { id: 'media-limits', label: t('Input file limits') },
+        ],
+      },
+      {
+        label: t('Tasks & results'),
+        items: [
+          { id: 'poll', label: t('Query a task'), method: 'GET' },
+          { id: 'download', label: t('Download a video'), method: 'GET' },
+          { id: 'full-example', label: t('End-to-end example') },
+        ],
+      },
+      {
+        label: t('Appendix'),
+        items: [
+          { id: 'pricing', label: t('Pricing') },
+          { id: 'limits', label: t('Rate limits & quotas') },
+          { id: 'errors', label: t('Error codes') },
+          { id: 'best-practices', label: t('Best practices') },
+          { id: 'faq', label: t('FAQ') },
+        ],
+      },
+    ],
+    [t],
+  )
+
+  const allIds = useMemo(() => NAV_GROUPS.flatMap((g) => g.items.map((i) => i.id)), [NAV_GROUPS])
+  const activeId = useActiveSection(allIds)
+  const activeGroup =
+    NAV_GROUPS.find((g) => g.items.some((i) => i.id === activeId)) ?? NAV_GROUPS[0]
+
+  // ---- Capability matrix rows (built inside component so labels can use t()) ----
+  const CAPABILITY_ROWS: Array<{ label: React.ReactNode; values: Cap[] }> = [
+    { label: t('Text to video'),                              values: [Y, Y, Y, Y, Y, N, Y] },
+    { label: t('Image to video · first frame'),                values: [Y, Y, Y, Y, Y, Y, N] },
+    { label: t('Image to video · first/last frame'),           values: [Y, Y, Y, Y, N, Y, N] },
+    { label: <>{t('Multi-modal · image reference')}<NewBadge /></>, values: [Y, Y, N, N, N, Y, N] },
+    { label: <>{t('Multi-modal · video reference')}<NewBadge /></>, values: [Y, Y, N, N, N, N, N] },
+    { label: <>{t('Multi-modal · combined reference')}<NewBadge /></>, values: [Y, Y, N, N, N, N, N] },
+    { label: <>{t('Edit video')}<NewBadge /></>,              values: [Y, N, N, N, N, N, N] },
+    { label: <>{t('Extend video')}<NewBadge /></>,            values: [Y, N, N, N, N, N, N] },
+    { label: t('Audio generation'),                            values: [Y, Y, N, N, N, N, N] },
+    { label: <>{t('Web search augmented')}<NewBadge /></>,    values: [Y, N, N, N, N, N, N] },
+    { label: t('Returns last frame'),                          values: [Y, Y, Y, Y, Y, Y, Y] },
+  ]
+
+  const SPEC_ROWS: Array<{ label: string; values: string[] }> = [
+    {
+      label: t('Output resolution'),
+      values: [
+        '480p / 720p',
+        '480p / 720p / 1080p',
+        '480p / 720p / 1080p',
+        '480p / 720p / 1080p',
+        '480p / 720p / 1080p',
+        '480p / 720p / 1080p',
+        '480p / 720p / 1080p',
+      ],
+    },
+    {
+      label: t('Aspect ratio'),
+      values: Array(7).fill('21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16'),
+    },
+    {
+      label: t('Output duration'),
+      values: [
+        t('4–15 s'),
+        t('4–12 s'),
+        t('2–12 s'),
+        t('2–12 s'),
+        t('2–12 s'),
+        t('2–12 s'),
+        t('2–12 s'),
+      ],
+    },
+    {
+      label: t('RPM (online)'),
+      values: ['600', '600', '600', '600', '600', '300', '300'],
+    },
+    {
+      label: t('Concurrency (online)'),
+      values: ['10', '10', '10', '10', '10', '5', '5'],
+    },
+  ]
+
   return (
-    <PublicLayout>
-      <div className='mx-auto max-w-5xl px-6 py-10'>
-        <header className='space-y-3 border-b pb-8'>
-          <h1 className='text-3xl font-semibold tracking-tight'>API 文档</h1>
-          <p className='text-muted-foreground'>
-            AIKanHub 视频生成 API 参考 · OpenAI 风格异步任务接口
-          </p>
-        </header>
-
-        <div className='grid gap-12 py-10 lg:grid-cols-[1fr_180px]'>
-          {/* Main content */}
-          <article className='space-y-14 min-w-0'>
-            <Section
-              id='overview'
-              title='概述'
-              description='一句话：用一个 sk- key 调通 Seedance、Pixverse 等主流视频生成模型。'
-            >
-              <p className='text-sm leading-relaxed'>
-                AIKanHub 是一个统一的视频生成 API 网关。所有支持的模型都通过同一套接口调用——
-                只需一个 token，无需在每个上游平台分别注册、维护多套 SDK 或对账多个账单。
-              </p>
-              <ul className='text-muted-foreground list-disc space-y-1 pl-6 text-sm'>
-                <li>异步任务模型：提交后拿 <code className='bg-muted rounded px-1'>task_id</code>，轮询直到完成</li>
-                <li>OpenAI 风格的鉴权（<code className='bg-muted rounded px-1'>Authorization: Bearer sk-...</code>）</li>
-                <li>视频通过我们代理流式返回，避免暴露上游签名 URL</li>
-                <li>统一计费，按视频条数扣费（详见<a href='#pricing' className='text-primary hover:underline'>定价</a>）</li>
-              </ul>
-            </Section>
-
-            <Section id='quick-start' title='快速开始' description='三步跑通第一个视频生成请求。'>
-              <ol className='space-y-6'>
-                <li className='space-y-2'>
-                  <h3 className='font-medium'>1. 创建 API 密钥</h3>
-                  <p className='text-muted-foreground text-sm'>
-                    登录后进入 <a href='/keys' className='text-primary hover:underline'>令牌</a> 页面，点击「创建 API 密钥」，复制以 <code className='bg-muted rounded px-1'>sk-</code> 开头的字符串。
-                  </p>
-                </li>
-                <li className='space-y-2'>
-                  <h3 className='font-medium'>2. 设置环境变量</h3>
-                  <CodeBlock
-                    lang='shell'
-                    code={`export AIKANHUB_TOKEN=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`}
-                  />
-                </li>
-                <li className='space-y-2'>
-                  <h3 className='font-medium'>3. 提交一个文生视频任务</h3>
-                  <CodeBlock lang='shell' code={CURL_SUBMIT} />
-                  <p className='text-muted-foreground text-xs'>
-                    成功响应包含 <code className='bg-muted rounded px-1'>task_id</code>，下一步用它查询进度。完整代码见<a href='#full-example' className='text-primary hover:underline'>下方完整示例</a>。
-                  </p>
-                </li>
-              </ol>
-            </Section>
-
-            <Section id='endpoints' title='API 端点一览'>
-              <div className='space-y-2'>
-                <EndpointCard method='POST' path='/v1/video/generations' description='提交视频生成任务，返回 task_id' />
-                <EndpointCard method='GET' path='/v1/video/generations/:task_id' description='查询任务状态、进度与最终视频 URL' />
-                <EndpointCard method='GET' path='/v1/videos/:task_id/content' description='代理下载/预览视频文件（24 小时内有效）' />
-              </div>
-              <p className='text-muted-foreground text-xs'>
-                所有端点均要求 <code className='bg-muted rounded px-1'>Authorization: Bearer $AIKANHUB_TOKEN</code> header。
-              </p>
-            </Section>
-
-            <Section
-              id='submit'
-              title='提交任务'
-              description='POST /v1/video/generations · 异步：返回 task_id 后自行轮询'
-            >
-              <h3 className='text-base font-medium'>请求参数</h3>
-              <ParamTable
-                params={[
-                  { name: 'model', type: 'string', required: true, desc: <>模型 ID，见<a href='#models' className='text-primary hover:underline'>支持的模型</a></> },
-                  { name: 'prompt', type: 'string', required: true, desc: '文本提示词。中文 ≤500 字 / 英文 ≤1000 词' },
-                  { name: 'size', type: 'string', desc: <><code className='bg-muted rounded px-1'>480p</code> · <code className='bg-muted rounded px-1'>720p</code> · <code className='bg-muted rounded px-1'>1080p</code>（默认 720p）</> },
-                  { name: 'duration', type: 'int', desc: '输出时长（秒）。Seedance 2.0 支持 4–15s（默认 5）' },
-                  { name: 'images', type: 'string[]', desc: '图生视频时的参考图 URL 列表（公网可访问，1–9 张）' },
-                  { name: 'metadata.ratio', type: 'string', desc: <>宽高比：<code className='bg-muted rounded px-1'>16:9</code> · <code className='bg-muted rounded px-1'>9:16</code> · <code className='bg-muted rounded px-1'>1:1</code> · <code className='bg-muted rounded px-1'>4:3</code> · <code className='bg-muted rounded px-1'>3:4</code> · <code className='bg-muted rounded px-1'>21:9</code></> },
-                  { name: 'metadata.generate_audio', type: 'boolean', desc: '是否生成音轨（仅 Seedance 2.0 支持）' },
-                  { name: 'metadata.seed', type: 'int', desc: '随机种子，相同 seed + 参数会得到相似输出' },
-                ]}
-              />
-              <h3 className='pt-2 text-base font-medium'>请求示例</h3>
-              <CodeBlock lang='shell' code={CURL_SUBMIT} />
-              <h3 className='pt-2 text-base font-medium'>响应字段</h3>
-              <ParamTable
-                params={[
-                  { name: 'task_id', type: 'string', desc: '任务 ID。形如 task_xxxx，用于后续查询' },
-                  { name: 'status', type: 'string', desc: <>初始状态，通常为 <code className='bg-muted rounded px-1'>queued</code></> },
-                  { name: 'created_at', type: 'int', desc: 'Unix 时间戳（秒）' },
-                ]}
-              />
-            </Section>
-
-            <Section
-              id='poll'
-              title='查询状态'
-              description='GET /v1/video/generations/:task_id · 建议轮询间隔 5 秒'
-            >
-              <h3 className='text-base font-medium'>请求示例</h3>
-              <CodeBlock lang='shell' code={CURL_POLL} />
-              <h3 className='pt-2 text-base font-medium'>状态值</h3>
-              <div className='overflow-hidden rounded-lg border'>
-                <table className='w-full text-sm'>
-                  <thead className='bg-muted'>
-                    <tr className='text-left'>
-                      <th className='px-4 py-2 font-medium'>status</th>
-                      <th className='px-4 py-2 font-medium'>含义</th>
-                      <th className='px-4 py-2 font-medium'>是否终态</th>
-                    </tr>
-                  </thead>
-                  <tbody className='divide-y text-xs'>
-                    <tr><td className='px-4 py-2 font-mono'>queued / NOT_START</td><td className='px-4 py-2'>排队中</td><td className='px-4 py-2 text-muted-foreground'>否</td></tr>
-                    <tr><td className='px-4 py-2 font-mono'>IN_PROGRESS / processing</td><td className='px-4 py-2'>生成中</td><td className='px-4 py-2 text-muted-foreground'>否</td></tr>
-                    <tr><td className='px-4 py-2 font-mono'>SUCCESS / succeeded</td><td className='px-4 py-2'>完成；<code className='bg-muted rounded px-1'>data.data.content.video_url</code> 中是视频地址</td><td className='px-4 py-2'>✅</td></tr>
-                    <tr><td className='px-4 py-2 font-mono'>FAILED / failed</td><td className='px-4 py-2'>失败；<code className='bg-muted rounded px-1'>fail_reason</code> 含原因</td><td className='px-4 py-2'>✅</td></tr>
-                  </tbody>
-                </table>
-              </div>
-              <p className='text-muted-foreground text-xs'>
-                720p / 5s 任务通常 90–120 秒完成。请勿低于 5 秒间隔轮询，否则可能触发限流。
-              </p>
-            </Section>
-
-            <Section
-              id='download'
-              title='下载视频'
-              description='GET /v1/videos/:task_id/content · 代理下载，避免暴露上游签名 URL'
-            >
-              <CodeBlock lang='shell' code={CURL_DOWNLOAD} />
-              <p className='text-muted-foreground text-sm'>
-                这个端点会从上游对象存储拉取视频流，加上鉴权后返回给你。响应 <code className='bg-muted rounded px-1'>Content-Type: video/mp4</code>，可以直接 <code className='bg-muted rounded px-1'>{'<video src=...>'}</code> 嵌入网页。
-              </p>
-              <p className='text-amber-700 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-300 rounded-md p-3 text-xs'>
-                ⚠️ <strong>视频有效期 24 小时</strong>。生成成功后请尽快下载或转存到自己的对象存储；过期后该端点会返回 502。长期保留计划见后续版本。
-              </p>
-            </Section>
-
-            <Section
-              id='full-example'
-              title='完整示例'
-              description='提交 → 轮询 → 下载，开箱即用，含错误处理。'
-            >
-              <Tabs defaultValue='python' className='border rounded-lg overflow-hidden'>
-                <TabsList className='bg-muted h-10 w-full justify-start rounded-none border-b px-2'>
-                  <TabsTrigger value='python'>Python</TabsTrigger>
-                  <TabsTrigger value='node'>Node.js</TabsTrigger>
-                </TabsList>
-                <TabsContent value='python' className='m-0'>
-                  <CodeBlock lang='python' code={PYTHON_FULL} />
-                </TabsContent>
-                <TabsContent value='node' className='m-0'>
-                  <CodeBlock lang='javascript' code={NODE_FULL} />
-                </TabsContent>
-              </Tabs>
-            </Section>
-
-            <Section id='models' title='支持的模型'>
-              <div className='overflow-hidden rounded-lg border'>
-                <table className='w-full text-sm'>
-                  <thead className='bg-muted'>
-                    <tr className='text-left'>
-                      <th className='px-4 py-2 font-medium'>Model ID</th>
-                      <th className='px-4 py-2 font-medium'>说明</th>
-                      <th className='px-4 py-2 font-medium'>能力</th>
-                      <th className='px-4 py-2 font-medium'>状态</th>
-                    </tr>
-                  </thead>
-                  <tbody className='divide-y text-xs'>
-                    <tr>
-                      <td className='px-4 py-2 font-mono'>doubao-seedance-2-0-260128</td>
-                      <td className='px-4 py-2'>Seedance 2.0 · 最高品质</td>
-                      <td className='px-4 py-2'>文生视频 / 图生视频 / 首尾帧 / 多模态参考 / 有声视频</td>
-                      <td className='px-4 py-2'>✅ 可用</td>
-                    </tr>
-                    <tr>
-                      <td className='px-4 py-2 font-mono'>doubao-seedance-2-0-fast-260128</td>
-                      <td className='px-4 py-2'>Seedance 2.0 fast · 速度优先</td>
-                      <td className='px-4 py-2'>同上（不支持 1080p）</td>
-                      <td className='px-4 py-2'>✅ 可用</td>
-                    </tr>
-                    <tr>
-                      <td className='px-4 py-2 font-mono'>pixverse-v5.5</td>
-                      <td className='px-4 py-2'>Pixverse v5.5</td>
-                      <td className='px-4 py-2 text-muted-foreground'>—</td>
-                      <td className='px-4 py-2 text-muted-foreground'>🚧 规划中</td>
-                    </tr>
-                    <tr>
-                      <td className='px-4 py-2 font-mono'>happyhorse</td>
-                      <td className='px-4 py-2'>HappyHorse</td>
-                      <td className='px-4 py-2 text-muted-foreground'>—</td>
-                      <td className='px-4 py-2 text-muted-foreground'>🚧 规划中</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </Section>
-
-            <Section id='pricing' title='定价' description='按视频条数扣费，币种 USD。'>
-              <div className='overflow-hidden rounded-lg border'>
-                <table className='w-full text-sm'>
-                  <thead className='bg-muted'>
-                    <tr className='text-left'>
-                      <th className='px-4 py-2 font-medium'>模型</th>
-                      <th className='px-4 py-2 font-medium'>规格</th>
-                      <th className='px-4 py-2 font-medium'>单价</th>
-                    </tr>
-                  </thead>
-                  <tbody className='divide-y text-xs'>
-                    <tr><td className='px-4 py-2 font-mono'>doubao-seedance-2-0-260128</td><td className='px-4 py-2'>720p / 5s</td><td className='px-4 py-2'>$0.885 / video</td></tr>
-                    <tr><td className='px-4 py-2 font-mono'>doubao-seedance-2-0-fast-260128</td><td className='px-4 py-2'>720p / 5s</td><td className='px-4 py-2'>$0.712 / video</td></tr>
-                  </tbody>
-                </table>
-              </div>
-              <p className='text-muted-foreground text-xs'>
-                当前为统一定价（基准：720p / 5s / 不含视频输入）。按 resolution / duration / 视频输入维度的精确计费正在开发中。失败任务不计费。
-              </p>
-            </Section>
-
-            <Section id='limits' title='限流与配额'>
-              <ParamTable
-                params={[
-                  { name: 'RPM', type: '600', desc: '每分钟提交请求数。超出会返回 429。' },
-                  { name: '并发任务数', type: '10', desc: '同时进行中的视频生成任务上限。超出会被排队。' },
-                  { name: '单任务超时', type: '5 分钟', desc: '通常 90–120 秒完成。超过 5 分钟自动标记 FAILED。' },
-                  { name: '账户额度', type: '$', desc: <>每次成功扣减；额度耗尽会返回 403。可在 <a href='/wallet' className='text-primary hover:underline'>钱包</a> 充值。</> },
-                ]}
-              />
-            </Section>
-
-            <Section id='errors' title='错误码'>
-              <div className='overflow-hidden rounded-lg border'>
-                <table className='w-full text-sm'>
-                  <thead className='bg-muted'>
-                    <tr className='text-left'>
-                      <th className='px-4 py-2 font-medium'>HTTP</th>
-                      <th className='px-4 py-2 font-medium'>含义</th>
-                      <th className='px-4 py-2 font-medium'>处理</th>
-                    </tr>
-                  </thead>
-                  <tbody className='divide-y text-xs'>
-                    <tr><td className='px-4 py-2 font-mono'>400</td><td className='px-4 py-2'>请求参数错误</td><td className='px-4 py-2'>检查 model/prompt 字段；查看 message 详情</td></tr>
-                    <tr><td className='px-4 py-2 font-mono'>401</td><td className='px-4 py-2'>未鉴权</td><td className='px-4 py-2'>检查 Authorization header 格式</td></tr>
-                    <tr><td className='px-4 py-2 font-mono'>403</td><td className='px-4 py-2'>额度不足或模型未授权</td><td className='px-4 py-2'>充值或检查 token 的模型范围限制</td></tr>
-                    <tr><td className='px-4 py-2 font-mono'>404</td><td className='px-4 py-2'>task_id 不存在或不属于你</td><td className='px-4 py-2'>检查 ID 拼写</td></tr>
-                    <tr><td className='px-4 py-2 font-mono'>429</td><td className='px-4 py-2'>触发限流</td><td className='px-4 py-2'>降低 RPM 或减少并发；响应 header 含 Retry-After</td></tr>
-                    <tr><td className='px-4 py-2 font-mono'>502</td><td className='px-4 py-2'>视频代理失败（通常是上游 URL 已过期）</td><td className='px-4 py-2'>24h 内重新调用，或转存视频到自己的存储</td></tr>
-                    <tr><td className='px-4 py-2 font-mono'>500</td><td className='px-4 py-2'>服务器错误</td><td className='px-4 py-2'>稍后重试；若持续，联系支持</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </Section>
-
-            <Section id='best-practices' title='最佳实践'>
-              <ul className='space-y-3 text-sm leading-relaxed'>
-                <li>
-                  <strong className='font-medium'>轮询策略</strong>：固定 5 秒间隔即可。短于 5 秒会触发限流，但也无法换来更快的结果——任务在上游侧的处理时间是固定的。建议加上指数退避：失败时倍增间隔到最多 30 秒。
-                </li>
-                <li>
-                  <strong className='font-medium'>立即下载视频</strong>：成功后第一时间 GET <code className='bg-muted rounded px-1'>/v1/videos/:task_id/content</code> 并保存到自己的对象存储或 CDN，不要依赖 24 小时窗口。
-                </li>
-                <li>
-                  <strong className='font-medium'>并发控制</strong>：当前并发上限 10。批量任务建议自己用 semaphore 限流，比无脑提交后撞 429 更友好。
-                </li>
-                <li>
-                  <strong className='font-medium'>Prompt 工程</strong>：中文不超过 500 字，包含主体 / 动作 / 镜头 / 风格 4 要素效果最好。过长的 prompt 反而会让模型忽略细节。
-                </li>
-                <li>
-                  <strong className='font-medium'>失败重试</strong>：FAILED 任务不会计费。建议判断 <code className='bg-muted rounded px-1'>fail_reason</code>：如果是内容审核类，重试也没用；其他原因可以最多重试 2 次。
-                </li>
-              </ul>
-            </Section>
-
-            <Section id='faq' title='常见问题'>
-              <div className='space-y-5'>
-                <div className='space-y-1'>
-                  <h3 className='font-medium text-sm'>视频生成需要多久？</h3>
-                  <p className='text-muted-foreground text-sm'>
-                    720p / 5s 通常 90–120 秒。1080p 或更长视频会更慢。同一时间多个任务在排队也会影响。
-                  </p>
-                </div>
-                <div className='space-y-1'>
-                  <h3 className='font-medium text-sm'>能用 OpenAI SDK 调用吗？</h3>
-                  <p className='text-muted-foreground text-sm'>
-                    视频任务是异步任务模型，不是 OpenAI 的 chat/completion 端点。SDK 调用对应的 <code className='bg-muted rounded px-1'>video.generate</code> 接口暂不兼容。请直接用 HTTP 请求或我们的官方 SDK（规划中）。
-                  </p>
-                </div>
-                <div className='space-y-1'>
-                  <h3 className='font-medium text-sm'>视频可以保存多久？</h3>
-                  <p className='text-muted-foreground text-sm'>
-                    通过 <code className='bg-muted rounded px-1'>/v1/videos/:task_id/content</code> 拉取的视频在 24 小时内可用。永久存储计划在后续版本中提供（迁移到我们自有的对象存储）。
-                  </p>
-                </div>
-                <div className='space-y-1'>
-                  <h3 className='font-medium text-sm'>如何查看消费？</h3>
-                  <p className='text-muted-foreground text-sm'>
-                    进入 <a href='/usage-logs/task' className='text-primary hover:underline'>任务日志</a> 查看每个任务的扣费；<a href='/wallet' className='text-primary hover:underline'>钱包</a> 页可看到余额变化。
-                  </p>
-                </div>
-                <div className='space-y-1'>
-                  <h3 className='font-medium text-sm'>失败的任务会扣费吗？</h3>
-                  <p className='text-muted-foreground text-sm'>
-                    不会。只有 SUCCESS 状态的任务会扣减额度。
-                  </p>
-                </div>
-                <div className='space-y-1'>
-                  <h3 className='font-medium text-sm'>支持 Webhook 回调吗？</h3>
-                  <p className='text-muted-foreground text-sm'>
-                    暂未提供。当前需要客户端轮询。Webhook 透传计划在后续版本。
-                  </p>
-                </div>
-              </div>
-            </Section>
-
-            <div className='border-t pt-8 space-y-2 text-sm'>
-              <h2 className='font-semibold'>相关资源</h2>
-              <ul className='text-muted-foreground space-y-1'>
-                <li>· <a href='/keys' className='text-primary hover:underline'>令牌管理</a> · 创建和管理 API key</li>
-                <li>· <a href='/wallet' className='text-primary hover:underline'>钱包</a> · 查看余额与充值</li>
-                <li>· <a href='/usage-logs/task' className='text-primary hover:underline'>任务日志</a> · 历史任务和扣费记录</li>
-                <li>· <a href='https://github.com/NekoAIKan/aikanhub' target='_blank' rel='noreferrer noopener' className='text-primary hover:underline'>GitHub 仓库</a></li>
-              </ul>
-            </div>
-          </article>
-
-          {/* TOC sidebar */}
-          <aside className='hidden lg:block'>
-            <div className='sticky top-20 space-y-2'>
-              <h3 className='text-muted-foreground text-xs font-medium uppercase tracking-wider'>
-                目录
-              </h3>
-              <nav className='flex flex-col gap-1.5'>
-                {TOC.map((item) => (
-                  <a
-                    key={item.id}
-                    href={`#${item.id}`}
-                    className='text-muted-foreground hover:text-foreground border-l-2 border-transparent pl-3 text-sm transition-colors hover:border-primary'
-                  >
-                    {item.label}
-                  </a>
+    <PublicLayout showMainContainer={false}>
+      <div className='docs-font'>
+        {/* Outer wrapper provides padding-top equal to the fixed PublicHeader height. */}
+        <div className='pt-16'>
+          <div className='mx-auto flex max-w-[1400px] gap-6 px-4 lg:px-6'>
+            {/* ===================== Left sidebar (page nav) ===================== */}
+            <aside className='sticky top-16 hidden h-[calc(100vh-4rem)] w-60 shrink-0 overflow-y-auto py-8 pr-2 lg:block'>
+              <nav className='space-y-5'>
+                {NAV_GROUPS.map((group) => (
+                  <div key={group.label} className='space-y-1.5'>
+                    <a
+                      href={`#${group.items[0].id}`}
+                      className='text-foreground hover:text-primary block text-xs font-semibold uppercase tracking-wider transition-colors'
+                    >
+                      {group.label}
+                    </a>
+                    <div className='flex flex-col gap-0.5'>
+                      {group.items.map((item) => {
+                        const isActive = item.id === activeId
+                        return (
+                          <a
+                            key={item.id}
+                            href={`#${item.id}`}
+                            className={`group flex items-center gap-1.5 rounded px-2 py-1 text-sm transition-colors ${
+                              isActive
+                                ? 'bg-muted text-primary font-medium'
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                            }`}
+                          >
+                            {item.method && <MethodBadge method={item.method} />}
+                            <span className='truncate'>{item.label}</span>
+                            {item.isNew && (
+                              <span className='ml-auto rounded bg-amber-100 px-1 text-[9px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'>
+                                NEW
+                              </span>
+                            )}
+                          </a>
+                        )
+                      })}
+                    </div>
+                  </div>
                 ))}
               </nav>
-            </div>
-          </aside>
+            </aside>
+
+            {/* ===================== Main content ===================== */}
+            <main className='min-w-0 flex-1 py-8'>
+              <header className='mb-10 space-y-3 border-b pb-6'>
+                <h1 className='text-3xl font-semibold tracking-tight'>{t('API Documentation')}</h1>
+                <p className='text-muted-foreground text-sm'>
+                  {t(
+                    'AIKanHub video generation API — call mainstream video models with one token, OpenAI-style async tasks.',
+                  )}
+                </p>
+              </header>
+
+              <article className='space-y-12'>
+                {/* ============================ Product basics ============================ */}
+                <Section
+                  id='overview'
+                  title={t('Introduction')}
+                  description={t(
+                    'In one sentence: use a single sk- key to drive Seedance and other mainstream video generation models.',
+                  )}
+                >
+                  <p className='text-sm leading-relaxed'>
+                    {t(
+                      'AIKanHub is a unified video generation API gateway. All supported models are called through the same set of endpoints — one token, no per-vendor signups, no SDK juggling, no fragmented invoices.',
+                    )}
+                  </p>
+                  <ul className='text-muted-foreground list-disc space-y-1 pl-6 text-sm'>
+                    <li>
+                      {t('Async task model: submit and receive a')} <K>task_id</K>,{' '}
+                      {t('then poll until it finishes.')}
+                    </li>
+                    <li>
+                      {t('OpenAI-style auth (')}
+                      <K>Authorization: Bearer sk-...</K>
+                      {t(').')}
+                    </li>
+                    <li>
+                      {t(
+                        'Videos are served from AIKanHub-signed URLs so storage links never leak to clients.',
+                      )}
+                    </li>
+                    <li>
+                      {t('Unified billing per video — see')}{' '}
+                      <a href='#pricing' className='text-primary hover:underline'>
+                        {t('Pricing')}
+                      </a>
+                      .
+                    </li>
+                  </ul>
+                </Section>
+
+                <Section
+                  id='quick-start'
+                  title={t('Quick start')}
+                  description={t('Three steps to your first video generation request.')}
+                >
+                  <ol className='space-y-5'>
+                    <li className='space-y-2'>
+                      <h3 className='font-medium'>{t('1. Create an API key')}</h3>
+                      <p className='text-muted-foreground text-sm'>
+                        {t('Sign in, open the')}{' '}
+                        <a href='/keys' className='text-primary hover:underline'>
+                          {t('Tokens')}
+                        </a>{' '}
+                        {t(
+                          'page, click "Create API key", then copy the string starting with',
+                        )}{' '}
+                        <K>sk-</K>.
+                      </p>
+                    </li>
+                    <li className='space-y-2'>
+                      <h3 className='font-medium'>{t('2. Set environment variable')}</h3>
+                      <CodeBlock
+                        lang='shell'
+                        code={`export AIKANHUB_TOKEN=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`}
+                      />
+                    </li>
+                    <li className='space-y-2'>
+                      <h3 className='font-medium'>{t('3. Submit a text-to-video task')}</h3>
+                      <CodeTabs shell={CURL_T2V} python={PY_T2V} />
+                      <p className='text-muted-foreground text-xs'>
+                        {t('A successful response includes a')} <K>task_id</K>.{' '}
+                        {t('Use it to')}{' '}
+                        <a href='#poll' className='text-primary hover:underline'>
+                          {t('check progress')}
+                        </a>
+                        ,{' '}
+                        {t('then')}{' '}
+                        <a href='#download' className='text-primary hover:underline'>
+                          {t('download the video')}
+                        </a>
+                        .{' '}
+                        {t('The full code lives in')}{' '}
+                        <a href='#full-example' className='text-primary hover:underline'>
+                          {t('End-to-end example')}
+                        </a>
+                        .
+                      </p>
+                    </li>
+                  </ol>
+                </Section>
+
+                <Section
+                  id='auth'
+                  title={t('Authentication')}
+                  description={t('All endpoints use Bearer Token authentication.')}
+                >
+                  <CodeBlock lang='shell' code={`Authorization: Bearer $AIKANHUB_TOKEN`} />
+                  <p className='text-muted-foreground text-sm'>
+                    {t(
+                      'A single token can call every supported model. Per-token model scope, quota, and concurrency limits can be configured on the',
+                    )}{' '}
+                    <a href='/keys' className='text-primary hover:underline'>
+                      {t('Tokens')}
+                    </a>{' '}
+                    {t('page.')}
+                  </p>
+                </Section>
+
+                <Section id='endpoints' title={t('Endpoint reference')}>
+                  <div className='space-y-2'>
+                    <EndpointCard
+                      method='POST'
+                      path='/v1/video/generations'
+                      description={t('Submit a video generation task; returns task_id.')}
+                    />
+                    <EndpointCard
+                      method='GET'
+                      path='/v1/video/generations/:task_id'
+                      description={t('Query task status, progress, and final video URL.')}
+                    />
+                    <EndpointCard
+                      method='GET'
+                      path='/v1/videos/:task_id/content'
+                      description={t('Download or preview the video file (valid for 24h).')}
+                    />
+                  </div>
+                </Section>
+
+                {/* ============================ Seedance ============================ */}
+                <Section
+                  id='seedance-overview'
+                  title={t('Seedance overview')}
+                  description={t(
+                    'Seedance is a high-end video generation model series. AIKanHub supports every Seedance call mode: text-to-video, image-to-video (first / first+last frame), multi-modal reference, edit video, extend video — plus audio generation and web search augmentation.',
+                  )}
+                >
+                  <Callout type='tip'>
+                    <strong>{t('Choosing a model:')}</strong>{' '}
+                    {t('use')} <K>doubao-seedance-2-0-260128</K>{' '}
+                    {t('for the highest quality;')} <K>doubao-seedance-2-0-fast-260128</K>{' '}
+                    {t(
+                      'when speed and cost matter most; the 1.x series for basic text/image-to-video only.',
+                    )}
+                  </Callout>
+                  <Callout type='info'>
+                    <strong>
+                      {t('Three mutually exclusive input scenarios')}
+                    </strong>{' '}
+                    — {t("don't mix them:")}
+                    <ul className='mt-2 list-disc space-y-1 pl-5'>
+                      <li>
+                        <strong>{t('Image-to-video · first frame')}</strong>:{' '}
+                        {t('one image, one output video.')}
+                      </li>
+                      <li>
+                        <strong>{t('Image-to-video · first/last frame')}</strong>:{' '}
+                        {t('two images (first and last).')}
+                      </li>
+                      <li>
+                        <strong>{t('Multi-modal reference')}</strong>:{' '}
+                        {t(
+                          'any combination of images (0–9), videos (0–3), audio (0–3), plus text prompt.',
+                        )}
+                      </li>
+                    </ul>
+                    {t(
+                      'Note: audio cannot be the only input — it must accompany at least one reference video or image.',
+                    )}
+                  </Callout>
+                </Section>
+
+                <Section id='models' title={t('Models & capabilities')}>
+                  <div className='overflow-x-auto rounded-lg border'>
+                    <table className='min-w-full text-xs'>
+                      <thead className='bg-muted'>
+                        <tr>
+                          <th className='sticky left-0 bg-muted px-3 py-2 text-left font-medium'>
+                            {t('Capability / spec')}
+                          </th>
+                          {SEEDANCE_MODELS.map((m) => (
+                            <th
+                              key={m.id}
+                              className='whitespace-nowrap px-3 py-2 text-left font-medium'
+                            >
+                              <div className='font-semibold'>{m.name}</div>
+                              <div className='text-muted-foreground font-mono text-[10px]'>{m.id}</div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className='divide-y'>
+                        {CAPABILITY_ROWS.map((row, i) => (
+                          <tr key={i}>
+                            <td className='sticky left-0 bg-card px-3 py-2 text-left'>{row.label}</td>
+                            {row.values.map((v, j) => (
+                              <td key={j} className='px-3 py-2 text-center'>
+                                {v}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                        {SPEC_ROWS.map((row, i) => (
+                          <tr key={`spec-${i}`} className='bg-muted/30'>
+                            <td className='sticky left-0 bg-muted/30 px-3 py-2 text-left font-medium'>
+                              {row.label}
+                            </td>
+                            {row.values.map((v, j) => (
+                              <td key={j} className='whitespace-nowrap px-3 py-2'>
+                                {v}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className='text-muted-foreground text-xs'>
+                    {t(
+                      'Output format is always mp4.',
+                    )}
+                  </p>
+                </Section>
+
+                {/* ============================ Call modes ============================ */}
+                <Section
+                  id='mode-text'
+                  title={t('Text-to-video')}
+                  description={t(
+                    'POST /v1/video/generations · text prompt only. Supported by every Seedance model.',
+                  )}
+                >
+                  <CodeTabs shell={CURL_T2V} python={PY_T2V} />
+                  <p className='text-muted-foreground text-sm'>
+                    {t('Top-level fields:')} <K>prompt</K>{' '}
+                    {t('is required;')} <K>size</K>{' '}
+                    {t('controls resolution (')}
+                    <K>480p</K>/<K>720p</K>/<K>1080p</K>
+                    {t(');')} <K>duration</K>{' '}
+                    {t('controls length in seconds. Full field list:')}{' '}
+                    <a href='#params' className='text-primary hover:underline'>
+                      {t('Full request parameters')}
+                    </a>
+                    .
+                  </p>
+                </Section>
+
+                <Section
+                  id='mode-image-first'
+                  title={t('Image-to-video · first frame')}
+                  description={t(
+                    'Pass one reference image as the first frame, with an optional text prompt.',
+                  )}
+                >
+                  <CodeTabs shell={CURL_I2V_FIRST} python={PY_I2V_FIRST} />
+                  <Callout type='info'>
+                    {t('Top-level')} <K>images</K>{' '}
+                    {t(
+                      'is sugar for the first frame — equivalent to passing a single image_url entry with role first_frame inside metadata.content. Use the full structure when you need finer control.',
+                    )}
+                  </Callout>
+                </Section>
+
+                <Section
+                  id='mode-image-firstlast'
+                  title={t('Image-to-video · first/last frame')}
+                  description={t(
+                    'Pass two images, marking each with role: first_frame / last_frame.',
+                  )}
+                >
+                  <CodeTabs shell={CURL_I2V_FIRSTLAST} python={PY_I2V_FIRSTLAST} />
+                  <p className='text-muted-foreground text-sm'>
+                    {t('Both images must declare a')} <K>role</K>{' '}
+                    {t('— specifically')} <K>first_frame</K> {t('and')} <K>last_frame</K>{' '}
+                    {t("— otherwise the model can't infer the time order.")}
+                  </p>
+                </Section>
+
+                <Section
+                  id='mode-multimodal'
+                  title={t('Multi-modal reference')}
+                  description={
+                    <>
+                      {t(
+                        'Seedance 2.0 / 2.0 fast only. Combine 0–9 reference images, 0–3 reference videos, 0–3 reference audios into a single output video.',
+                      )}
+                      <NewBadge />
+                    </>
+                  }
+                >
+                  <CodeTabs shell={CURL_MULTIMODAL} python={PY_MULTIMODAL} />
+                  <p className='text-muted-foreground text-sm'>
+                    {t('Reference images use')} <K>role: reference_image</K>,{' '}
+                    {t('videos use')} <K>role: reference_video</K>,{' '}
+                    {t('audios use')} <K>role: reference_audio</K>.
+                  </p>
+                  <Callout type='warn'>
+                    {t(
+                      'Audio cannot be passed alone — it must accompany at least one reference video or image. If you need strict first/last frame matching, prefer',
+                    )}{' '}
+                    <a href='#mode-image-firstlast' className='text-primary hover:underline'>
+                      {t('Image-to-video · first/last frame')}
+                    </a>
+                    .
+                  </Callout>
+                </Section>
+
+                <Section
+                  id='mode-edit'
+                  title={t('Edit video')}
+                  description={
+                    <>
+                      {t(
+                        'Seedance 2.0 only. Locally replace or alter elements of an existing video while preserving camera motion and composition.',
+                      )}
+                      <NewBadge />
+                    </>
+                  }
+                >
+                  <CodeTabs shell={CURL_EDIT} python={PY_EDIT} />
+                  <p className='text-muted-foreground text-sm'>
+                    {t(
+                      'Combine a reference video with reference image(s) and a prompt that describes the edit, e.g. "Replace the perfume in video1 with the cream from image1; keep camera motion intact".',
+                    )}
+                  </p>
+                </Section>
+
+                <Section
+                  id='mode-extend'
+                  title={t('Extend video')}
+                  description={
+                    <>
+                      {t(
+                        'Seedance 2.0 only. Stitch multiple reference videos into one continuous clip; the model fills in the transitions.',
+                      )}
+                      <NewBadge />
+                    </>
+                  }
+                >
+                  <CodeTabs shell={CURL_EXTEND} python={PY_EXTEND} />
+                  <p className='text-muted-foreground text-sm'>
+                    {t(
+                      'Up to three reference videos, total duration ≤ 15 s. The prompt describes the transitions or camera moves between segments.',
+                    )}
+                  </p>
+                </Section>
+
+                <Section
+                  id='mode-web-search'
+                  title={t('Web search augmented')}
+                  description={
+                    <>
+                      {t(
+                        'Seedance 2.0 only, text-to-video only. The model retrieves real-time web information before generation, improving accuracy for time-sensitive content (products, weather, news).',
+                      )}
+                      <NewBadge />
+                    </>
+                  }
+                >
+                  <CodeTabs shell={CURL_WEB_SEARCH} python={PY_WEB_SEARCH} />
+                  <p className='text-muted-foreground text-sm'>
+                    {t('Configure via')} <K>{`metadata.tools: [{"type":"web_search"}]`}</K>.{' '}
+                    {t('The response field')}{' '}
+                    <K>usage.tool_usage.web_search</K>{' '}
+                    {t(
+                      'reports how many searches were actually triggered (0 means none). This adds slight latency.',
+                    )}
+                  </p>
+                </Section>
+
+                <Section
+                  id='params'
+                  title={t('Full request parameters')}
+                  description={t('POST /v1/video/generations · top-level field reference.')}
+                >
+                  <h3 className='text-base font-medium'>{t('Top-level fields')}</h3>
+                  <ParamTable
+                    fieldLabel={t('Field')}
+                    typeLabel={t('Type')}
+                    requiredLabel={t('Required')}
+                    descLabel={t('Description')}
+                    yes={t('yes')}
+                    no={t('no')}
+                    params={[
+                      {
+                        name: 'model',
+                        type: 'string',
+                        required: true,
+                        desc: (
+                          <>
+                            {t('Model ID — see')}{' '}
+                            <a href='#models' className='text-primary hover:underline'>
+                              {t('Models & capabilities')}
+                            </a>
+                            .
+                          </>
+                        ),
+                      },
+                      {
+                        name: 'prompt',
+                        type: 'string',
+                        desc: t(
+                          'Text prompt. Chinese ≤ 500 chars / English ≤ 1000 words. Overly long prompts get partially ignored.',
+                        ),
+                      },
+                      {
+                        name: 'size',
+                        type: 'string',
+                        desc: (
+                          <>
+                            {t('Resolution:')} <K>480p</K> · <K>720p</K> · <K>1080p</K>{' '}
+                            {t('(default 720p; 2.0 does not support 1080p).')}
+                          </>
+                        ),
+                      },
+                      {
+                        name: 'duration',
+                        type: 'int',
+                        desc: (
+                          <>
+                            {t('Duration in seconds; range depends on model. Set to')} <K>-1</K>{' '}
+                            {t('to let the model decide.')}
+                          </>
+                        ),
+                      },
+                      {
+                        name: 'images',
+                        type: 'string[]',
+                        desc: t(
+                          'Sugar for image-to-video first frame; equivalent to a metadata.content entry with role first_frame.',
+                        ),
+                      },
+                      {
+                        name: 'metadata',
+                        type: 'object',
+                        desc: t('Carries non-top-level fields, see below.'),
+                      },
+                    ]}
+                  />
+
+                  <h3 className='pt-2 text-base font-medium'>{t('metadata fields')}</h3>
+                  <ParamTable
+                    fieldLabel={t('Field')}
+                    typeLabel={t('Type')}
+                    requiredLabel={t('Required')}
+                    descLabel={t('Description')}
+                    yes={t('yes')}
+                    no={t('no')}
+                    params={[
+                      {
+                        name: 'metadata.content',
+                        type: 'array',
+                        desc: (
+                          <>
+                            {t(
+                              'Content array for multi-modal / first-last / edit / extend modes. Each entry has',
+                            )}{' '}
+                            <K>{'{type, image_url|video_url|audio_url, role}'}</K>.
+                          </>
+                        ),
+                      },
+                      {
+                        name: 'metadata.ratio',
+                        type: 'string',
+                        desc: (
+                          <>
+                            {t('Aspect ratio:')} <K>16:9</K> · <K>9:16</K> · <K>1:1</K> ·{' '}
+                            <K>4:3</K> · <K>3:4</K> · <K>21:9</K> · <K>adaptive</K>{' '}
+                            {t('(default).')}
+                          </>
+                        ),
+                      },
+                      {
+                        name: 'metadata.generate_audio',
+                        type: 'boolean',
+                        desc: t(
+                          'Whether to generate a synced audio track (Seedance 2.0 / 2.0 fast only; default true).',
+                        ),
+                      },
+                      {
+                        name: 'metadata.tools',
+                        type: 'array',
+                        desc: (
+                          <>
+                            {t('Tool list. Currently:')}{' '}
+                            <K>{`[{"type":"web_search"}]`}</K>.
+                          </>
+                        ),
+                      },
+                      {
+                        name: 'metadata.seed',
+                        type: 'int',
+                        desc: t(
+                          'Random seed; the same seed + parameters produce similar outputs.',
+                        ),
+                      },
+                      {
+                        name: 'metadata.watermark',
+                        type: 'boolean',
+                        desc: t('Whether to overlay a watermark (default false).'),
+                      },
+                      {
+                        name: 'metadata.camera_fixed',
+                        type: 'boolean',
+                        desc: t('1.x models only — locks the camera position.'),
+                      },
+                      {
+                        name: 'metadata.return_last_frame',
+                        type: 'boolean',
+                        desc: t('Return a still frame from the end of the video in the response.'),
+                      },
+                    ]}
+                  />
+
+                  <h3 className='pt-2 text-base font-medium'>{t('content[].role values')}</h3>
+                  <ParamTable
+                    fieldLabel={t('Field')}
+                    typeLabel={t('Type')}
+                    requiredLabel={t('Required')}
+                    descLabel={t('Description')}
+                    yes={t('yes')}
+                    no={t('no')}
+                    params={[
+                      {
+                        name: 'first_frame',
+                        type: 'string',
+                        desc: t('First frame image (optional in single-image mode).'),
+                      },
+                      {
+                        name: 'last_frame',
+                        type: 'string',
+                        desc: t('Last frame image (required in first/last frame mode).'),
+                      },
+                      {
+                        name: 'reference_image',
+                        type: 'string',
+                        desc: t('Multi-modal reference image; every reference image uses this role.'),
+                      },
+                      {
+                        name: 'reference_video',
+                        type: 'string',
+                        desc: t('Multi-modal reference video; every video clip uses this role.'),
+                      },
+                      {
+                        name: 'reference_audio',
+                        type: 'string',
+                        desc: t('Multi-modal reference audio; every audio segment uses this role.'),
+                      },
+                    ]}
+                  />
+
+                  <h3 className='pt-2 text-base font-medium'>{t('Pixel dimensions per ratio')}</h3>
+                  <div className='overflow-hidden rounded-lg border'>
+                    <table className='w-full text-xs'>
+                      <thead className='bg-muted'>
+                        <tr className='text-left'>
+                          <th className='px-4 py-2 font-medium'>{t('Resolution')}</th>
+                          <th className='px-4 py-2 font-medium'>16:9</th>
+                          <th className='px-4 py-2 font-medium'>9:16</th>
+                          <th className='px-4 py-2 font-medium'>1:1</th>
+                          <th className='px-4 py-2 font-medium'>4:3</th>
+                          <th className='px-4 py-2 font-medium'>21:9</th>
+                        </tr>
+                      </thead>
+                      <tbody className='divide-y'>
+                        <tr>
+                          <td className='px-4 py-2 font-medium'>480p</td>
+                          <td className='px-4 py-2'>864×496</td>
+                          <td className='px-4 py-2'>496×864</td>
+                          <td className='px-4 py-2'>640×640</td>
+                          <td className='px-4 py-2'>752×560</td>
+                          <td className='px-4 py-2'>992×432</td>
+                        </tr>
+                        <tr>
+                          <td className='px-4 py-2 font-medium'>720p</td>
+                          <td className='px-4 py-2'>1280×720</td>
+                          <td className='px-4 py-2'>720×1280</td>
+                          <td className='px-4 py-2'>960×960</td>
+                          <td className='px-4 py-2'>1112×834</td>
+                          <td className='px-4 py-2'>1470×630</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <Callout type='tip'>
+                    <K>ratio: adaptive</K> {t('(default):')}{' '}
+                    {t(
+                      'the model picks the best ratio for the scene. Text-to-video infers from the prompt; first/last-frame matches the uploaded image; multi-modal follows the prompt intent (video > image).',
+                    )}
+                  </Callout>
+                </Section>
+
+                <Section id='media-limits' title={t('Input file limits')}>
+                  <h3 className='text-base font-medium'>{t('Image')}</h3>
+                  <ul className='text-muted-foreground list-disc space-y-1 pl-6 text-sm'>
+                    <li>
+                      {t('Formats:')} <K>jpeg</K> · <K>png</K> · <K>webp</K> · <K>bmp</K> · <K>tiff</K> · <K>gif</K>
+                    </li>
+                    <li>
+                      {t('Aspect ratio (W/H):')} <K>(0.4, 2.5)</K>
+                    </li>
+                    <li>
+                      {t('Side length (px):')} <K>(300, 6000)</K>
+                    </li>
+                    <li>
+                      {t(
+                        'Size: ≤ 30 MB per image; total request body ≤ 64 MB (avoid Base64 for large files).',
+                      )}
+                    </li>
+                    <li>
+                      {t(
+                        'Counts: 1 for first frame; 2 for first/last frame; 1–9 for multi-modal reference.',
+                      )}
+                    </li>
+                  </ul>
+                  <h3 className='pt-2 text-base font-medium'>{t('Video (Seedance 2.0 / 2.0 fast only)')}</h3>
+                  <ul className='text-muted-foreground list-disc space-y-1 pl-6 text-sm'>
+                    <li>
+                      {t('Formats:')} <K>mp4</K> · <K>mov</K>
+                    </li>
+                    <li>{t('Resolution: 480p / 720p')}</li>
+                    <li>
+                      {t(
+                        'Duration: [2, 15] s per clip; up to 3 clips, total ≤ 15 s.',
+                      )}
+                    </li>
+                    <li>
+                      {t(
+                        'Aspect ratio (W/H): [0.4, 2.5]; side length [300, 6000] px; pixel area [409600, 927408].',
+                      )}
+                    </li>
+                    <li>{t('Size: ≤ 50 MB per clip; FPS [24, 60].')}</li>
+                  </ul>
+                  <h3 className='pt-2 text-base font-medium'>{t('Audio (Seedance 2.0 / 2.0 fast only)')}</h3>
+                  <ul className='text-muted-foreground list-disc space-y-1 pl-6 text-sm'>
+                    <li>
+                      {t('Formats:')} <K>wav</K> · <K>mp3</K>
+                    </li>
+                    <li>
+                      {t('Duration: [2, 15] s per clip; up to 3 clips, total ≤ 15 s.')}
+                    </li>
+                    <li>{t('Size: ≤ 15 MB per clip; total request body ≤ 64 MB.')}</li>
+                    <li>
+                      {t(
+                        'Audio cannot be passed alone; it must accompany at least one reference video or image.',
+                      )}
+                    </li>
+                  </ul>
+                  <Callout type='info'>
+                    {t(
+                      'Media inputs accept either a public URL or Base64 (data:image/png;base64,...). For large files, prefer URL to avoid oversized request bodies.',
+                    )}
+                  </Callout>
+                </Section>
+
+                {/* ============================ Tasks & results ============================ */}
+                <Section
+                  id='poll'
+                  title={t('Query a task')}
+                  description={t(
+                    'GET /v1/video/generations/:task_id · recommended polling interval 5 s.',
+                  )}
+                >
+                  <h3 className='text-base font-medium'>{t('Request example')}</h3>
+                  <CodeTabs shell={CURL_POLL} python={PY_POLL} />
+                  <h3 className='pt-2 text-base font-medium'>{t('Status values')}</h3>
+                  <div className='overflow-hidden rounded-lg border'>
+                    <table className='w-full text-sm'>
+                      <thead className='bg-muted'>
+                        <tr className='text-left'>
+                          <th className='px-4 py-2 font-medium'>status</th>
+                          <th className='px-4 py-2 font-medium'>{t('Meaning')}</th>
+                          <th className='px-4 py-2 font-medium'>{t('Terminal?')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className='divide-y text-xs'>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>queued / NOT_START</td>
+                          <td className='px-4 py-2'>{t('Queued')}</td>
+                          <td className='px-4 py-2 text-muted-foreground'>{t('no')}</td>
+                        </tr>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>IN_PROGRESS / processing</td>
+                          <td className='px-4 py-2'>{t('Generating')}</td>
+                          <td className='px-4 py-2 text-muted-foreground'>{t('no')}</td>
+                        </tr>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>SUCCESS / succeeded</td>
+                          <td className='px-4 py-2'>
+                            {t('Completed; the video URL is at')}{' '}
+                            <K>data.data.content.video_url</K>.
+                          </td>
+                          <td className='px-4 py-2'>✅</td>
+                        </tr>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>FAILED / failed</td>
+                          <td className='px-4 py-2'>
+                            {t('Failed; the reason is in')} <K>fail_reason</K>.
+                          </td>
+                          <td className='px-4 py-2'>✅</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <h3 className='pt-2 text-base font-medium'>{t('Response fields')}</h3>
+                  <ParamTable
+                    fieldLabel={t('Field')}
+                    typeLabel={t('Type')}
+                    requiredLabel={t('Required')}
+                    descLabel={t('Description')}
+                    yes={t('yes')}
+                    no={t('no')}
+                    params={[
+                      { name: 'data.status', type: 'string', desc: t('Any of the status values above.') },
+                      { name: 'data.progress', type: 'string', desc: t('Like "50%"; informational only.') },
+                      {
+                        name: 'data.data.content.video_url',
+                        type: 'string',
+                        desc: t(
+                          'Video URL on success — signed link with limited validity, download promptly.',
+                        ),
+                      },
+                      {
+                        name: 'data.data.usage.completion_tokens',
+                        type: 'int',
+                        desc: t('Tokens spent on output.'),
+                      },
+                      {
+                        name: 'data.data.usage.total_tokens',
+                        type: 'int',
+                        desc: t('Total tokens for this request.'),
+                      },
+                      {
+                        name: 'data.data.usage.tool_usage.web_search',
+                        type: 'int',
+                        desc: t('Web-search invocations (returned only when tools=[web_search]).'),
+                      },
+                      {
+                        name: 'data.data.duration',
+                        type: 'int',
+                        desc: t(
+                          'Actual generated video duration in seconds — important when you submitted duration=-1.',
+                        ),
+                      },
+                      {
+                        name: 'data.data.ratio',
+                        type: 'string',
+                        desc: t('Actual aspect ratio (useful when you submitted ratio=adaptive).'),
+                      },
+                    ]}
+                  />
+                  <p className='text-muted-foreground text-xs'>
+                    {t(
+                      '720p / 5 s tasks usually finish in 90–120 s. Do not poll faster than every 5 s — you may trigger rate limits.',
+                    )}
+                  </p>
+                </Section>
+
+                <Section
+                  id='download'
+                  title={t('Download a video')}
+                  description={t(
+                    'GET /v1/videos/:task_id/content · download the generated video file.',
+                  )}
+                >
+                  <CodeTabs shell={CURL_DOWNLOAD} python={PY_DOWNLOAD} />
+                  <p className='text-muted-foreground text-sm'>
+                    {t(
+                      'This endpoint streams the video file directly. Response',
+                    )}{' '}
+                    <K>Content-Type: video/mp4</K>
+                    {t(', so you can embed directly with')}{' '}
+                    <K>{'<video src=...>'}</K>.
+                  </p>
+                  <Callout type='warn'>
+                    {t(
+                      '⚠️ Videos remain available for 24 hours. Download or re-host to your own storage immediately after success — the endpoint will return 502 after this window. Long-term storage is on the roadmap.',
+                    )}
+                  </Callout>
+                </Section>
+
+                <Section
+                  id='full-example'
+                  title={t('End-to-end example')}
+                  description={t(
+                    'Submit → poll → download. Drop-in code with error handling.',
+                  )}
+                >
+                  <Tabs defaultValue='python' className='border rounded-lg overflow-hidden'>
+                    <TabsList className='bg-muted h-10 w-full justify-start rounded-none border-b px-2'>
+                      <TabsTrigger value='python'>Python</TabsTrigger>
+                      <TabsTrigger value='node'>Node.js</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value='python' className='m-0'>
+                      <CodeBlock lang='python' code={PYTHON_FULL} />
+                    </TabsContent>
+                    <TabsContent value='node' className='m-0'>
+                      <CodeBlock lang='javascript' code={NODE_FULL} />
+                    </TabsContent>
+                  </Tabs>
+                </Section>
+
+                {/* ============================ Appendix ============================ */}
+                <Section
+                  id='pricing'
+                  title={t('Pricing')}
+                  description={t('Charged per video, in USD.')}
+                >
+                  <div className='overflow-hidden rounded-lg border'>
+                    <table className='w-full text-sm'>
+                      <thead className='bg-muted'>
+                        <tr className='text-left'>
+                          <th className='px-4 py-2 font-medium'>{t('Model')}</th>
+                          <th className='px-4 py-2 font-medium'>{t('Spec')}</th>
+                          <th className='px-4 py-2 font-medium'>{t('Unit price')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className='divide-y text-xs'>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>doubao-seedance-2-0-260128</td>
+                          <td className='px-4 py-2'>720p / 5 s</td>
+                          <td className='px-4 py-2'>$0.885 / video</td>
+                        </tr>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>doubao-seedance-2-0-fast-260128</td>
+                          <td className='px-4 py-2'>720p / 5 s</td>
+                          <td className='px-4 py-2'>$0.712 / video</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className='text-muted-foreground text-xs'>
+                    {t(
+                      'Currently flat pricing (baseline 720p / 5 s / no video input). Per-resolution / per-duration / video-input pricing is in development. Multi-modal calls that include video inputs apply a discount multiplier. Failed tasks are not billed.',
+                    )}
+                  </p>
+                </Section>
+
+                <Section id='limits' title={t('Rate limits & quotas')}>
+                  <ParamTable
+                    fieldLabel={t('Field')}
+                    typeLabel={t('Type')}
+                    requiredLabel={t('Required')}
+                    descLabel={t('Description')}
+                    yes={t('yes')}
+                    no={t('no')}
+                    params={[
+                      {
+                        name: 'RPM (online)',
+                        type: '600 / 300',
+                        desc: t(
+                          'Requests per minute. 600 for Seedance 2.x / 1.5 / 1.0 pro families; 300 for the 1.0 lite family. Excess returns 429.',
+                        ),
+                      },
+                      {
+                        name: 'Concurrency',
+                        type: '10 / 5',
+                        desc: t(
+                          '10 in-flight tasks for 2.x / 1.5 / 1.0 pro families; 5 for the 1.0 lite family. Excess gets queued.',
+                        ),
+                      },
+                      {
+                        name: 'Per-task timeout',
+                        type: '5 min',
+                        desc: t(
+                          'Typical completion 90–120 s. Tasks past 5 minutes are auto-marked FAILED.',
+                        ),
+                      },
+                      {
+                        name: 'Account balance',
+                        type: '$',
+                        desc: (
+                          <>
+                            {t(
+                              'Deducted per success; depleting it returns 403. Top up on the',
+                            )}{' '}
+                            <a href='/wallet' className='text-primary hover:underline'>
+                              {t('Wallet')}
+                            </a>{' '}
+                            {t('page.')}
+                          </>
+                        ),
+                      },
+                    ]}
+                  />
+                </Section>
+
+                <Section id='errors' title={t('Error codes')}>
+                  <div className='overflow-hidden rounded-lg border'>
+                    <table className='w-full text-sm'>
+                      <thead className='bg-muted'>
+                        <tr className='text-left'>
+                          <th className='px-4 py-2 font-medium'>HTTP</th>
+                          <th className='px-4 py-2 font-medium'>{t('Meaning')}</th>
+                          <th className='px-4 py-2 font-medium'>{t('Action')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className='divide-y text-xs'>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>400</td>
+                          <td className='px-4 py-2'>{t('Bad parameter')}</td>
+                          <td className='px-4 py-2'>{t('Check model/prompt; read the message field for detail.')}</td>
+                        </tr>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>401</td>
+                          <td className='px-4 py-2'>{t('Unauthorized')}</td>
+                          <td className='px-4 py-2'>{t('Check Authorization header format.')}</td>
+                        </tr>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>403</td>
+                          <td className='px-4 py-2'>{t('Insufficient balance or model not authorized')}</td>
+                          <td className='px-4 py-2'>{t('Top up, or check token model scope.')}</td>
+                        </tr>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>404</td>
+                          <td className='px-4 py-2'>{t('task_id not found or not owned by you')}</td>
+                          <td className='px-4 py-2'>{t('Verify the ID.')}</td>
+                        </tr>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>429</td>
+                          <td className='px-4 py-2'>{t('Rate limited')}</td>
+                          <td className='px-4 py-2'>{t('Lower RPM or concurrency; honor Retry-After header.')}</td>
+                        </tr>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>502</td>
+                          <td className='px-4 py-2'>{t('Video file unavailable (usually expired — kept for 24 h)')}</td>
+                          <td className='px-4 py-2'>{t('Retry within 24h, or migrate to your own storage.')}</td>
+                        </tr>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>500</td>
+                          <td className='px-4 py-2'>{t('Server error')}</td>
+                          <td className='px-4 py-2'>{t('Retry; if persistent, contact support.')}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </Section>
+
+                <Section id='best-practices' title={t('Best practices')}>
+                  <ul className='space-y-3 text-sm leading-relaxed'>
+                    <li>
+                      <strong className='font-medium'>{t('Polling cadence')}</strong>:{' '}
+                      {t(
+                        'a steady 5 s interval is enough. Polling faster only triggers rate limiting; processing time is fixed. Add exponential backoff: double the interval on errors, cap at 30 s.',
+                      )}
+                    </li>
+                    <li>
+                      <strong className='font-medium'>{t('Download immediately')}</strong>:{' '}
+                      {t('right after success, GET')}{' '}
+                      <K>/v1/videos/:task_id/content</K>{' '}
+                      {t(
+                        "and persist to your own object storage or CDN. Don't rely on the 24h window.",
+                      )}
+                    </li>
+                    <li>
+                      <strong className='font-medium'>{t('Concurrency control')}</strong>:{' '}
+                      {t(
+                        'cap is 10 (5 for lite). For batch jobs, use a semaphore — friendlier than firing requests until 429.',
+                      )}
+                    </li>
+                    <li>
+                      <strong className='font-medium'>{t('Prompt engineering')}</strong>:{' '}
+                      {t(
+                        'keep Chinese prompts under 500 chars. Best with all four ingredients: subject / action / camera / style. For audio generation, wrap dialogue in double quotes for cleaner voice synthesis.',
+                      )}
+                    </li>
+                    <li>
+                      <strong className='font-medium'>{t('Failure retry')}</strong>:{' '}
+                      {t(
+                        "FAILED tasks are not billed. Inspect fail_reason: content-moderation failures won't recover via retry; other reasons are worth up to 2 retries.",
+                      )}
+                    </li>
+                    <li>
+                      <strong className='font-medium'>{t('Pick the right mode')}</strong>:{' '}
+                      {t(
+                        'commit to your creative intent before choosing a mode. Strict first/last frame control → first/last frame; loose image anchors → multi-modal reference; pure text description → text-to-video.',
+                      )}
+                    </li>
+                  </ul>
+                </Section>
+
+                <Section id='faq' title={t('FAQ')}>
+                  <div className='space-y-5'>
+                    <div className='space-y-1'>
+                      <h3 className='font-medium text-sm'>{t('How long does generation take?')}</h3>
+                      <p className='text-muted-foreground text-sm'>
+                        {t(
+                          '720p / 5 s usually 90–120 s. 1080p or longer videos take more. Concurrent tasks in the queue add waiting time.',
+                        )}
+                      </p>
+                    </div>
+                    <div className='space-y-1'>
+                      <h3 className='font-medium text-sm'>{t('Can I call this with the OpenAI SDK?')}</h3>
+                      <p className='text-muted-foreground text-sm'>
+                        {t(
+                          "Video tasks are an async task model, not OpenAI's chat/completion shape. The SDK's video.generate is not yet compatible. Use raw HTTP, or our official SDK (planned).",
+                        )}
+                      </p>
+                    </div>
+                    <div className='space-y-1'>
+                      <h3 className='font-medium text-sm'>{t('How long are videos retained?')}</h3>
+                      <p className='text-muted-foreground text-sm'>
+                        {t('Videos pulled via')}{' '}
+                        <K>/v1/videos/:task_id/content</K>{' '}
+                        {t(
+                          'are available for 24 hours. Long-term storage (in our own object store) is on the roadmap.',
+                        )}
+                      </p>
+                    </div>
+                    <div className='space-y-1'>
+                      <h3 className='font-medium text-sm'>{t('How do I check usage?')}</h3>
+                      <p className='text-muted-foreground text-sm'>
+                        {t('Visit')}{' '}
+                        <a href='/usage-logs/task' className='text-primary hover:underline'>
+                          {t('Task logs')}
+                        </a>{' '}
+                        {t('for per-task billing, and')}{' '}
+                        <a href='/wallet' className='text-primary hover:underline'>
+                          {t('Wallet')}
+                        </a>{' '}
+                        {t('for balance changes.')}
+                      </p>
+                    </div>
+                    <div className='space-y-1'>
+                      <h3 className='font-medium text-sm'>{t('Are failed tasks billed?')}</h3>
+                      <p className='text-muted-foreground text-sm'>
+                        {t('No. Only SUCCESS tasks deduct balance.')}
+                      </p>
+                    </div>
+                    <div className='space-y-1'>
+                      <h3 className='font-medium text-sm'>{t('Are webhook callbacks supported?')}</h3>
+                      <p className='text-muted-foreground text-sm'>
+                        {t('Not yet — clients poll today. Webhook callbacks are on the roadmap.')}
+                      </p>
+                    </div>
+                    <div className='space-y-1'>
+                      <h3 className='font-medium text-sm'>
+                        {t('Can multi-modal reference replace first/last frame?')}
+                      </h3>
+                      <p className='text-muted-foreground text-sm'>
+                        {t(
+                          "Multi-modal can hint to the model via prompt that an image should serve as the first/last frame, but it's less strict than the explicit",
+                        )}{' '}
+                        <K>first_frame</K> / <K>last_frame</K>{' '}
+                        {t('roles. Prefer the latter when exact alignment matters.')}
+                      </p>
+                    </div>
+                  </div>
+                </Section>
+
+                <div className='border-t pt-6 space-y-2 text-sm'>
+                  <h2 className='font-semibold'>{t('Related resources')}</h2>
+                  <ul className='text-muted-foreground space-y-1'>
+                    <li>
+                      ·{' '}
+                      <a href='/keys' className='text-primary hover:underline'>
+                        {t('Tokens')}
+                      </a>{' '}
+                      · {t('Manage API keys')}
+                    </li>
+                    <li>
+                      ·{' '}
+                      <a href='/wallet' className='text-primary hover:underline'>
+                        {t('Wallet')}
+                      </a>{' '}
+                      · {t('Check balance and top up')}
+                    </li>
+                    <li>
+                      ·{' '}
+                      <a href='/usage-logs/task' className='text-primary hover:underline'>
+                        {t('Task logs')}
+                      </a>{' '}
+                      · {t('Past tasks and billing')}
+                    </li>
+                    <li>
+                      ·{' '}
+                      <a
+                        href='https://github.com/NekoAIKan/aikanhub'
+                        target='_blank'
+                        rel='noreferrer noopener'
+                        className='text-primary hover:underline'
+                      >
+                        {t('GitHub repository')}
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+              </article>
+            </main>
+
+            {/* ===================== Right TOC (current group only) ===================== */}
+            <aside className='sticky top-16 hidden h-[calc(100vh-4rem)] w-44 shrink-0 overflow-y-auto py-8 pl-2 xl:block'>
+              <div className='space-y-2'>
+                <h3 className='text-muted-foreground text-xs font-medium uppercase tracking-wider'>
+                  {activeGroup.label}
+                </h3>
+                <nav className='flex flex-col gap-1'>
+                  {activeGroup.items.map((item) => {
+                    const isActive = item.id === activeId
+                    return (
+                      <a
+                        key={item.id}
+                        href={`#${item.id}`}
+                        className={`border-l-2 pl-3 text-xs leading-relaxed transition-colors ${
+                          isActive
+                            ? 'border-primary text-foreground font-medium'
+                            : 'text-muted-foreground hover:text-foreground border-transparent hover:border-primary'
+                        }`}
+                      >
+                        {item.label}
+                      </a>
+                    )
+                  })}
+                </nav>
+              </div>
+            </aside>
+          </div>
         </div>
       </div>
     </PublicLayout>

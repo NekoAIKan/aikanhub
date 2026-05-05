@@ -1,0 +1,8 @@
+# Local-only test artefacts: assets pulled at runtime, downloaded videos,
+# Python venv, run logs.
+assets/
+out/
+.venv/
+__pycache__/
+*.log
+.env
