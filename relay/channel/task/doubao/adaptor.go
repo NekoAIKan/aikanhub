@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -113,10 +114,84 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.apiKey = info.ApiKey
 }
 
-// ValidateRequestAndSetAction parses body, validates fields and sets default action.
+// ValidateRequestAndSetAction parses body, validates fields and sets the
+// action label that will surface in the task-log UI.
+//
+// Volcano's content[] doesn't have a single "kind" field, so we infer:
+//
+//   - first_frame + last_frame  → firstTailGenerate (首尾生视频)
+//   - any video_url             → referenceGenerate (参照生视频, covers
+//                                  multi-modal / edit / extend)
+//   - any image_url             → generate (图生视频)
+//   - text only                 → textGenerate (文生视频)
+//
+// Falling back to plain "generate" mislabels every text-only and
+// multi-modal task as "图生视频" in the dashboard.
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
-	// Accept only POST /v1/video/generations as "generate" action.
-	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate)
+	return relaycommon.ValidateBasicTaskRequest(c, info, inferAction(c))
+}
+
+func inferAction(c *gin.Context) string {
+	var raw map[string]interface{}
+	if err := common.UnmarshalBodyReusable(c, &raw); err != nil {
+		return constant.TaskActionGenerate
+	}
+
+	// Top-level images[] or singular image (legacy field) imply image input.
+	hasImage := false
+	if imgs, ok := raw["images"].([]interface{}); ok && len(imgs) > 0 {
+		hasImage = true
+	}
+	if img, ok := raw["image"].(string); ok && strings.TrimSpace(img) != "" {
+		hasImage = true
+	}
+
+	hasVideo := false
+	hasFirstFrame := false
+	hasLastFrame := false
+
+	walk := func(items []interface{}) {
+		for _, item := range items {
+			m, _ := item.(map[string]interface{})
+			if m == nil {
+				continue
+			}
+			t, _ := m["type"].(string)
+			role, _ := m["role"].(string)
+			switch t {
+			case "image_url":
+				hasImage = true
+				switch role {
+				case "first_frame":
+					hasFirstFrame = true
+				case "last_frame":
+					hasLastFrame = true
+				}
+			case "video_url":
+				hasVideo = true
+			}
+		}
+	}
+
+	if content, ok := raw["content"].([]interface{}); ok {
+		walk(content)
+	}
+	if meta, ok := raw["metadata"].(map[string]interface{}); ok {
+		if content, ok := meta["content"].([]interface{}); ok {
+			walk(content)
+		}
+	}
+
+	switch {
+	case hasFirstFrame && hasLastFrame:
+		return constant.TaskActionFirstTailGenerate
+	case hasVideo:
+		return constant.TaskActionReferenceGenerate
+	case hasImage:
+		return constant.TaskActionGenerate
+	default:
+		return constant.TaskActionTextGenerate
+	}
 }
 
 // BuildRequestURL constructs the upstream URL.

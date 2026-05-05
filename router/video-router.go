@@ -41,6 +41,23 @@ func SetVideoRouter(router *gin.Engine) {
 		klingV1Router.GET("/videos/image2video/:task_id", controller.RelayTaskFetch)
 	}
 
+	// Volcengine Ark official API routes — direct mapping for the
+	// `volcenginesdkarkruntime` Python SDK (Doubao Seedance and friends).
+	// Submission is wrapped to translate request/response between Ark and
+	// the gateway's internal video task format.
+	volcArkSubmitGroup := router.Group("/api/v3/contents/generations")
+	volcArkSubmitGroup.Use(middleware.RouteTag("relay"))
+	volcArkSubmitGroup.Use(middleware.VolcArkSubmitConvert(), middleware.TokenAuth(), middleware.Distribute())
+	{
+		volcArkSubmitGroup.POST("/tasks", controller.RelayTask)
+	}
+	volcArkFetchGroup := router.Group("/api/v3/contents/generations")
+	volcArkFetchGroup.Use(middleware.RouteTag("relay"))
+	volcArkFetchGroup.Use(middleware.TokenAuth())
+	{
+		volcArkFetchGroup.GET("/tasks/:task_id", controller.VolcArkFetchTask)
+	}
+
 	// Jimeng official API routes - direct mapping to official API format
 	jimengOfficialGroup := router.Group("jimeng")
 	jimengOfficialGroup.Use(middleware.RouteTag("relay"))

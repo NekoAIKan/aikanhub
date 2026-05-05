@@ -252,3 +252,28 @@ When a fix lands a non-obvious correctness or workflow lesson — something a fu
 - A user pointed out a behavioral mistake (Rule 9, Rule 12)
 
 The rule should state the constraint, not retell the bug story. Keep it under 200 words.
+
+### Rule 17: `go build` ≠ tested — exercise relay/middleware against the live container
+
+When adding a new relay route, middleware, or controller (especially one that translates request/response shapes for an SDK), `go build` and `tsc --noEmit` only prove it compiles. Before saying "shipped", you must round-trip through the running docker container with a real bearer token:
+
+1. Rebuild the image and `up -d` (the running container holds the OLD code; tests against `localhost:3000` will look fine while exercising stale binaries).
+2. Submit at least one request per code path you added, including the negative paths (missing auth, bad input, unknown ID).
+3. Read the response with the SDK you advertise in docs — not just curl. SDKs validate response shape; raw curl will mask envelope mismatches that crash users.
+
+Skipping this caught us 3× in one session: hardcoded action labels on a new adaptor, an error envelope that the Volcano SDK couldn't parse, and a status enum gap that surfaced as `"unknown"` in the OpenAI SDK. All compile-clean. The tests under `web/default/tests/` exist for exactly this — extend them when adding endpoints, don't bypass them.
+
+### Rule 18: Task adaptors infer `action` from request content — never hardcode
+
+The dashboard "task action" column (`textGenerate` / `generate` / `firstTailGenerate` / `referenceGenerate` — see `web/default/src/features/usage-logs/constants.ts`) reads `task.Action`, which is set once during `ValidateRequestAndSetAction`. Hardcoding a single constant there mislabels every task forever — the value is persisted to the DB and old rows can't be rewritten.
+
+When adding or editing a task adaptor:
+
+- Inspect the request body (top-level `images[]`, plus `metadata.content[]` `type`/`role` for vendor-shape inputs) and pick:
+  - `firstTailGenerate` if both `first_frame` and `last_frame` images are present
+  - `referenceGenerate` if any `video_url` reference is present (covers multi-modal / edit / extend)
+  - `generate` if any image input is present
+  - `textGenerate` otherwise
+- Cover this in `web/default/tests/run.py::check_action_labels` — it submits one request per shape and asserts the stored action.
+
+See `relay/channel/task/doubao/adaptor.go::inferAction` for the canonical implementation.
