@@ -1,21 +1,23 @@
 # aikanhub 本地开发栈
 #   - app: aikanhub 后端 + 前端（本地 build）
 #   - redis: 本地缓存
-#   - postgres: 不在这里，用 Neon（在 .env.local 里配 SQL_DSN）
+#   - postgres: 本地开发数据库（不要连接生产 Neon/NDB）
 #
 # 用法：
-#   1. cp .env.local.example .env.local，填 Neon SQL_DSN
+#   1. cp .env.local.example .env.local
 #   2. docker compose -f docker-compose.local.yml --env-file .env.local up -d
 #   3. 浏览器打开 http://localhost:3000
 #
 # 停服：docker compose -f docker-compose.local.yml down
-# 重置 redis 数据：docker compose -f docker-compose.local.yml down -v
+# 重置本地数据库和 redis：docker compose -f docker-compose.local.yml down -v
 
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
     image: aikanhub:local
     container_name: aikanhub-app
     restart: unless-stopped
@@ -37,6 +39,8 @@ services:
       - STREAMING_TIMEOUT=${STREAMING_TIMEOUT:-300}
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       - aikanhub-net
@@ -62,9 +66,28 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres:
+    image: postgres:15-alpine
+    container_name: aikanhub-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aikanhub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aikanhub_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-aikanhub}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - aikanhub-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aikanhub} -d ${POSTGRES_DB:-aikanhub}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 networks:
   aikanhub-net:
     driver: bridge
 
 volumes:
   redis_data:
+  postgres_data:
