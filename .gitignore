@@ -38,4 +38,5 @@ skills-lock.json
 
 # aikanhub local dev
 .env.local
+.env.maomao
 docker-compose.local.override.yml
