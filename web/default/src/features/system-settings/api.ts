@@ -1,13 +1,24 @@
 import { api } from '@/lib/api'
 import type {
+  ConfigBundleExportResponse,
+  ConfigBundleImportResponse,
+  ConfigBundlePreviewResponse,
   DeleteLogsResponse,
   FetchUpstreamRatiosRequest,
+  InviteCampaign,
+  InviteCampaignMutationResponse,
+  InviteCampaignsResponse,
   SystemOptionsResponse,
   UpdateOptionRequest,
   UpdateOptionResponse,
   UpstreamChannelsResponse,
   UpstreamRatiosResponse,
 } from './types'
+
+const quietRequestConfig = {
+  skipErrorHandler: true,
+  skipBusinessError: true,
+} as Record<string, unknown>
 
 export async function getSystemOptions() {
   const res = await api.get<SystemOptionsResponse>('/api/option/')
@@ -44,6 +55,68 @@ export async function fetchUpstreamRatios(request: FetchUpstreamRatiosRequest) {
   const res = await api.post<UpstreamRatiosResponse>(
     '/api/ratio_sync/fetch',
     request
+  )
+  return res.data
+}
+
+export async function exportConfigBundle() {
+  const res = await api.get<ConfigBundleExportResponse>(
+    '/api/option/bundle/export',
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function previewConfigBundleImport(bundle: unknown) {
+  const res = await api.post<ConfigBundlePreviewResponse>(
+    '/api/option/bundle/import/preview',
+    { bundle },
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function importConfigBundle(bundle: unknown) {
+  const res = await api.post<ConfigBundleImportResponse>(
+    '/api/option/bundle/import/apply',
+    { bundle },
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function getInviteCampaigns() {
+  const res = await api.get<InviteCampaignsResponse>(
+    '/api/invite_campaign/',
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function createInviteCampaign(request: InviteCampaign) {
+  const res = await api.post<InviteCampaignMutationResponse>(
+    '/api/invite_campaign/',
+    request,
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function updateInviteCampaign(request: InviteCampaign) {
+  const campaignId = request.id ?? request.code
+  const res = await api.put<InviteCampaignMutationResponse>(
+    `/api/invite_campaign/${campaignId}`,
+    request,
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function deleteInviteCampaign(campaign: InviteCampaign) {
+  const campaignId = campaign.id ?? campaign.code
+  const res = await api.delete<InviteCampaignMutationResponse>(
+    `/api/invite_campaign/${campaignId}`,
+    quietRequestConfig
   )
   return res.data
 }

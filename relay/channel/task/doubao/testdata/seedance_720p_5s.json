@@ -1,0 +1,53 @@
+{
+  "name": "seedance_720p_5s",
+  "scenario": "success",
+  "source": "real_upstream_capture",
+  "sanitized": true,
+  "request_payload": {
+    "model": "doubao-seedance-2-0-fast-260128",
+    "content": [
+      {
+        "type": "text",
+        "text": "Seedance billing fixture 720p: a single blue ceramic mug on a wooden desk, slow cinematic push-in, neutral studio lighting."
+      }
+    ],
+    "resolution": "720p",
+    "ratio": "16:9",
+    "duration": 5
+  },
+  "submit_response_payload": {
+    "id": "cgt-20260505234014-mqkz4"
+  },
+  "final_response_payload": {
+    "id": "cgt-20260505234014-mqkz4",
+    "model": "doubao-seedance-2-0-fast-260128",
+    "status": "succeeded",
+    "content": {
+      "video_url": "https://example.invalid/seedance/seedance_720p_5s.mp4"
+    },
+    "resolution": "720p",
+    "duration": 5,
+    "ratio": "16:9",
+    "framespersecond": 24,
+    "usage": {
+      "completion_tokens": 108900,
+      "total_tokens": 108900
+    },
+    "created_at": 1777995614,
+    "updated_at": 1777995767
+  },
+  "billing_fields": {
+    "model": "doubao-seedance-2-0-fast-260128",
+    "resolution": "720p",
+    "duration": 5,
+    "fps": 24,
+    "completion_tokens": 108900,
+    "total_tokens": 108900
+  },
+  "video_artifact": {
+    "kind": "placeholder",
+    "path": null,
+    "url": "https://example.invalid/seedance/seedance_720p_5s.mp4",
+    "reason": "The real upstream response contained a signed, expiring video URL. It was replaced with a deterministic placeholder and not downloaded during offline fixture creation."
+  }
+}

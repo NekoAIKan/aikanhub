@@ -1,0 +1,40 @@
+{
+  "name": "seedance_failure",
+  "scenario": "submit_validation_failure",
+  "source": "real_upstream_capture",
+  "sanitized": true,
+  "request_payload": {
+    "model": "doubao-seedance-2-0-fast-260128",
+    "content": [
+      {
+        "type": "text",
+        "text": "Seedance billing fixture failure: unsupported fast-model 1080p validation check."
+      }
+    ],
+    "resolution": "1080p",
+    "ratio": "16:9",
+    "duration": 5
+  },
+  "terminal_error_response_payload": {
+    "error": {
+      "code": "InvalidParameter",
+      "message": "the parameter resolution specified in the request is not valid for model doubao-seedance-2-0-fast in t2v",
+      "param": "",
+      "type": "BadRequest"
+    }
+  },
+  "billing_fields": {
+    "model": "doubao-seedance-2-0-fast-260128",
+    "resolution": "1080p",
+    "duration": 5,
+    "fps": null,
+    "completion_tokens": null,
+    "total_tokens": null
+  },
+  "video_artifact": {
+    "kind": "none",
+    "path": null,
+    "url": null,
+    "reason": "The upstream rejected the request at submit time, so no video artifact was produced."
+  }
+}

@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	commonRelay "github.com/QuantumNous/new-api/relay/common"
+	videobilling "github.com/QuantumNous/new-api/setting/video_billing_setting"
 )
 
 type TaskStatus string
@@ -115,6 +116,11 @@ type TaskBillingContext struct {
 	OtherRatios     map[string]float64 `json:"other_ratios,omitempty"`      // 附加倍率（时长、分辨率等）
 	OriginModelName string             `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
 	PerCallBilling  bool               `json:"per_call_billing,omitempty"`  // 按次计费：跳过轮询阶段的差额结算
+	BillingMode     string             `json:"billing_mode,omitempty"`      // 计费模式（例如 formula）
+	BillingProfile  string             `json:"billing_profile,omitempty"`   // 视频计费 profile/model key
+	EstimatedTokens int                `json:"estimated_tokens,omitempty"`  // 提交时估算 token
+	EstimatedQuota  int                `json:"estimated_quota,omitempty"`   // 提交时估算额度
+	VideoParams     map[string]any     `json:"video_params,omitempty"`      // 视频计费参数快照
 }
 
 // GetUpstreamTaskID 获取上游真实 task ID（用于与 provider 通信）
@@ -358,9 +364,56 @@ func GetByTaskIds(userId int, taskIds []any) ([]*Task, error) {
 }
 
 func (Task *Task) Insert() error {
+	Task.NormalizeBillingContext()
 	var err error
 	err = DB.Create(Task).Error
 	return err
+}
+
+func (t *Task) NormalizeBillingContext() {
+	if t == nil || t.PrivateData.BillingContext == nil {
+		return
+	}
+	bc := t.PrivateData.BillingContext
+	if _, ok := videobilling.GetProfile(bc.OriginModelName); !ok {
+		return
+	}
+	if bc.BillingMode == "" {
+		bc.BillingMode = videobilling.ModeFormula
+	}
+	if bc.BillingProfile == "" {
+		bc.BillingProfile = bc.OriginModelName
+	}
+	if bc.EstimatedTokens == 0 {
+		bc.EstimatedTokens = intTaskBillingRatio(bc.OtherRatios, "video_estimated_tokens")
+	}
+	if bc.EstimatedQuota == 0 {
+		bc.EstimatedQuota = intTaskBillingRatio(bc.OtherRatios, "video_estimated_quota")
+	}
+	if bc.VideoParams == nil {
+		bc.VideoParams = map[string]any{}
+	}
+	setTaskVideoParam(bc.VideoParams, "input_seconds", intTaskBillingRatio(bc.OtherRatios, "video_input_seconds"))
+	setTaskVideoParam(bc.VideoParams, "output_seconds", intTaskBillingRatio(bc.OtherRatios, "video_output_seconds"))
+	setTaskVideoParam(bc.VideoParams, "width", intTaskBillingRatio(bc.OtherRatios, "video_width"))
+	setTaskVideoParam(bc.VideoParams, "height", intTaskBillingRatio(bc.OtherRatios, "video_height"))
+	setTaskVideoParam(bc.VideoParams, "fps", intTaskBillingRatio(bc.OtherRatios, "video_fps"))
+	if bc.OtherRatios["video_draft"] > 0 {
+		bc.VideoParams["draft"] = true
+	}
+}
+
+func intTaskBillingRatio(ratios map[string]float64, key string) int {
+	if ratios == nil {
+		return 0
+	}
+	return int(ratios[key])
+}
+
+func setTaskVideoParam(params map[string]any, key string, value int) {
+	if value > 0 {
+		params[key] = value
+	}
 }
 
 type taskSnapshot struct {

@@ -26,7 +26,7 @@ const schemaHashOptionKey = "SchemaMigrationHash"
 func migrateModels() []interface{} {
 	return []interface{}{
 		&Channel{}, &Token{}, &User{}, &PasskeyCredential{}, &Option{},
-		&Redemption{}, &Ability{}, &Log{}, &Midjourney{}, &TopUp{},
+		&Redemption{}, &InviteCampaign{}, &Ability{}, &Log{}, &Midjourney{}, &TopUp{},
 		&QuotaData{}, &Task{}, &Model{}, &Vendor{}, &PrefillGroup{},
 		&Setup{}, &TwoFA{}, &TwoFABackupCode{}, &Checkin{},
 		&SubscriptionOrder{}, &UserSubscription{}, &SubscriptionPreConsumeRecord{},

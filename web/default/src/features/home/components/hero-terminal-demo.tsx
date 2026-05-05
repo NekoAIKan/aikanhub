@@ -469,14 +469,6 @@ function StringText(props: { children: ReactNode }) {
   )
 }
 
-function NumberText(props: { children: ReactNode }) {
-  return (
-    <span className='font-medium text-violet-600 dark:text-violet-300'>
-      {props.children}
-    </span>
-  )
-}
-
 function Muted(props: { children: ReactNode }) {
   return <span className='text-foreground/55'>{props.children}</span>
 }

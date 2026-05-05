@@ -2,7 +2,6 @@ package model
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting/onboarding_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
@@ -52,6 +52,8 @@ type User struct {
 	StripeCustomer   string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
 	CreatedAt        int64          `json:"created_at" gorm:"autoCreateTime;column:created_at"`
 	LastLoginAt      int64          `json:"last_login_at" gorm:"default:0;column:last_login_at"`
+	InviteCode       string         `json:"invite_code" gorm:"-:all"`
+	OnboardingQuota  *int           `json:"-" gorm:"-:all"`
 }
 
 func (user *User) ToBaseUser() *UserBase {
@@ -81,7 +83,7 @@ func (user *User) SetAccessToken(token string) {
 func (user *User) GetSetting() dto.UserSetting {
 	setting := dto.UserSetting{}
 	if user.Setting != "" {
-		err := json.Unmarshal([]byte(user.Setting), &setting)
+		err := common.Unmarshal([]byte(user.Setting), &setting)
 		if err != nil {
 			common.SysLog("failed to unmarshal setting: " + err.Error())
 		}
@@ -90,7 +92,7 @@ func (user *User) GetSetting() dto.UserSetting {
 }
 
 func (user *User) SetSetting(setting dto.UserSetting) {
-	settingBytes, err := json.Marshal(setting)
+	settingBytes, err := common.Marshal(setting)
 	if err != nil {
 		common.SysLog("failed to marshal setting: " + err.Error())
 		return
@@ -151,7 +153,7 @@ func generateDefaultSidebarConfigForRole(userRole int) string {
 	// 普通用户不包含admin区域
 
 	// 转换为JSON字符串
-	configBytes, err := json.Marshal(defaultConfig)
+	configBytes, err := common.Marshal(defaultConfig)
 	if err != nil {
 		common.SysLog("生成默认边栏配置失败: " + err.Error())
 		return ""
@@ -378,6 +380,46 @@ func (user *User) TransferAffQuotaToQuota(quota int) error {
 	return tx.Commit().Error
 }
 
+func applyOnboardingPolicy(user *User) onboarding_setting.Policy {
+	policy := onboarding_setting.GetPolicy()
+	if user.OnboardingQuota != nil {
+		policy.NewUserQuota = *user.OnboardingQuota
+	}
+	if user.Group == "" {
+		user.Group = policy.DefaultGroup
+	}
+	user.Quota = policy.NewUserQuota
+	return policy
+}
+
+func CreateDefaultTokenForUser(user *User) error {
+	return CreateDefaultTokenForUserWithTx(DB, user)
+}
+
+func CreateDefaultTokenForUserWithTx(tx *gorm.DB, user *User) error {
+	policy := onboarding_setting.GetPolicy()
+	if !policy.GenerateDefaultToken {
+		return nil
+	}
+	key, err := common.GenerateKey()
+	if err != nil {
+		return err
+	}
+	token := Token{
+		UserId:             user.Id,
+		Name:               user.Username + "的初始令牌",
+		Key:                key,
+		CreatedTime:        common.GetTimestamp(),
+		AccessedTime:       common.GetTimestamp(),
+		ExpiredTime:        -1,
+		RemainQuota:        policy.DefaultTokenQuota,
+		UnlimitedQuota:     policy.DefaultTokenUnlimited,
+		ModelLimitsEnabled: false,
+		Group:              policy.DefaultTokenGroup,
+	}
+	return tx.Create(&token).Error
+}
+
 func (user *User) Insert(inviterId int) error {
 	var err error
 	if user.Password != "" {
@@ -386,7 +428,7 @@ func (user *User) Insert(inviterId int) error {
 			return err
 		}
 	}
-	user.Quota = common.QuotaForNewUser
+	policy := applyOnboardingPolicy(user)
 	//user.SetAccessToken(common.GetUUID())
 	user.AffCode = common.GetRandomString(4)
 
@@ -400,6 +442,9 @@ func (user *User) Insert(inviterId int) error {
 	result := DB.Create(user)
 	if result.Error != nil {
 		return result.Error
+	}
+	if err := CreateDefaultTokenForUser(user); err != nil {
+		return err
 	}
 
 	// 用户创建成功后，根据角色初始化边栏配置
@@ -417,8 +462,8 @@ func (user *User) Insert(inviterId int) error {
 		}
 	}
 
-	if common.QuotaForNewUser > 0 {
-		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
+	if policy.NewUserQuota > 0 {
+		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(policy.NewUserQuota)))
 	}
 	if inviterId != 0 {
 		if common.QuotaForInvitee > 0 {
@@ -445,7 +490,7 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 			return err
 		}
 	}
-	user.Quota = common.QuotaForNewUser
+	applyOnboardingPolicy(user)
 	user.AffCode = common.GetRandomString(4)
 
 	// 初始化用户设置
@@ -457,6 +502,9 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 	result := tx.Create(user)
 	if result.Error != nil {
 		return result.Error
+	}
+	if err := CreateDefaultTokenForUserWithTx(tx, user); err != nil {
+		return err
 	}
 
 	return nil
@@ -478,8 +526,8 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 		}
 	}
 
-	if common.QuotaForNewUser > 0 {
-		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
+	if user.Quota > 0 {
+		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(user.Quota)))
 	}
 	if inviterId != 0 {
 		if common.QuotaForInvitee > 0 {

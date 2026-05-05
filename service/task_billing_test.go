@@ -11,6 +11,8 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/config"
+	videobilling "github.com/QuantumNous/new-api/setting/video_billing_setting"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -357,6 +359,29 @@ func TestRecalculate_NegativeDelta(t *testing.T) {
 	require.NotNil(t, log)
 	assert.Equal(t, model.LogTypeRefund, log.Type)
 	assert.Equal(t, preConsumed-actualQuota, log.Quota)
+}
+
+func TestRecalculate_PersistsTaskQuota(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 13, 13, 13
+	const initQuota, preConsumed = 10000, 2000
+	const actualQuota = 3500
+	const tokenRemain = 5000
+
+	seedUser(t, userID, initQuota)
+	seedToken(t, tokenID, userID, "sk-recalc-persist", tokenRemain)
+	seedChannel(t, channelID)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	require.NoError(t, model.DB.Create(task).Error)
+
+	RecalculateTaskQuota(ctx, task, actualQuota, "adaptor adjustment")
+
+	var stored model.Task
+	require.NoError(t, model.DB.Select("quota").Where("id = ?", task.ID).First(&stored).Error)
+	assert.Equal(t, actualQuota, stored.Quota)
 }
 
 func TestRecalculate_ZeroDelta(t *testing.T) {
@@ -713,4 +738,59 @@ func TestSettle_NonPerCall_AdaptorAdjustWorks(t *testing.T) {
 	log := getLastLog(t)
 	require.NotNil(t, log)
 	assert.Equal(t, model.LogTypeRefund, log.Type)
+}
+
+func TestTaskInsert_PersistsVideoBillingContextFields(t *testing.T) {
+	truncate(t)
+	profiles := map[string]videobilling.VideoBillingProfile{
+		"doubao-seedance-context-test": {
+			Mode:                    videobilling.ModeFormula,
+			UnitPrice:               1,
+			FallbackFPS:             24,
+			FallbackWidth:           1280,
+			FallbackHeight:          720,
+			FallbackDurationSeconds: 5,
+			UseUpstreamUsage:        true,
+			ConservativeMultiplier:  1.25,
+			DraftMultiplier:         0.5,
+		},
+	}
+	profilesJSON, err := common.Marshal(profiles)
+	require.NoError(t, err)
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"video_billing_setting.profiles": string(profilesJSON),
+	}))
+
+	task := makeTask(40, 40, 1234, 0, BillingSourceWallet, 0)
+	task.Properties.OriginModelName = "doubao-seedance-context-test"
+	task.PrivateData.BillingContext.OriginModelName = "doubao-seedance-context-test"
+	task.PrivateData.BillingContext.GroupRatio = 1
+	task.PrivateData.BillingContext.PerCallBilling = false
+	task.PrivateData.BillingContext.OtherRatios = map[string]float64{
+		"video_input_seconds":    10,
+		"video_output_seconds":   5,
+		"video_width":            1280,
+		"video_height":           720,
+		"video_fps":              24,
+		"video_estimated_tokens": 324000,
+		"video_estimated_quota":  202500,
+		"video_draft":            1,
+	}
+
+	require.NoError(t, task.Insert())
+
+	var reloaded model.Task
+	require.NoError(t, model.DB.First(&reloaded, task.ID).Error)
+	require.NotNil(t, reloaded.PrivateData.BillingContext)
+	bc := reloaded.PrivateData.BillingContext
+	require.Equal(t, videobilling.ModeFormula, bc.BillingMode)
+	require.Equal(t, "doubao-seedance-context-test", bc.BillingProfile)
+	require.Equal(t, 324000, bc.EstimatedTokens)
+	require.Equal(t, 202500, bc.EstimatedQuota)
+	require.EqualValues(t, 10, bc.VideoParams["input_seconds"])
+	require.EqualValues(t, 5, bc.VideoParams["output_seconds"])
+	require.EqualValues(t, 1280, bc.VideoParams["width"])
+	require.EqualValues(t, 720, bc.VideoParams["height"])
+	require.EqualValues(t, 24, bc.VideoParams["fps"])
+	require.Equal(t, true, bc.VideoParams["draft"])
 }
