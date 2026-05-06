@@ -240,7 +240,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	}
 
 	// 10. 返回 OtherRatios 给下游（header 必须在 DoResponse 写 body 之前设置）
-	otherRatios := info.PriceData.OtherRatios
+	otherRatios := publicTaskOtherRatios(info.PriceData.OtherRatios)
 	if otherRatios == nil {
 		otherRatios = map[string]float64{}
 	}
@@ -281,6 +281,7 @@ func applyVideoProfileBilling(c *gin.Context, info *relaycommon.RelayInfo, profi
 	groupRatioInfo := helper.HandleGroupRatio(c, info)
 	input := taskdoubao.ExtractRequestBillingInput(req, profile, groupRatioInfo.GroupRatio)
 	result := service.CalculateVideoBilling(profile, input, true)
+	c.Set(service.ContextKeyVideoBillingResult, result)
 
 	info.PriceData = types.PriceData{
 		ModelPrice:     -1,
@@ -288,19 +289,37 @@ func applyVideoProfileBilling(c *gin.Context, info *relaycommon.RelayInfo, profi
 		Quota:          result.Quota,
 		GroupRatioInfo: groupRatioInfo,
 		OtherRatios: map[string]float64{
-			"video_input_seconds":    float64(result.InputSeconds),
-			"video_output_seconds":   float64(result.OutputSeconds),
-			"video_width":            float64(result.Width),
-			"video_height":           float64(result.Height),
-			"video_fps":              float64(result.FPS),
-			"video_estimated_tokens": float64(result.Tokens),
-			"video_estimated_quota":  float64(result.Quota),
+			"video_input_seconds":     float64(result.InputSeconds),
+			"video_output_seconds":    float64(result.OutputSeconds),
+			"video_width":             float64(result.Width),
+			"video_height":            float64(result.Height),
+			"video_fps":               float64(result.FPS),
+			"video_estimated_tokens":  float64(result.Tokens),
+			"video_estimated_quota":   float64(result.Quota),
+			"video_retail_unit_price": result.RetailUnitPrice,
 		},
 	}
 	if input.Draft {
 		info.PriceData.OtherRatios["video_draft"] = 1
 	}
+	if result.HasReferenceMedia {
+		info.PriceData.OtherRatios["video_has_reference_media"] = 1
+	}
 	return nil
+}
+
+func publicTaskOtherRatios(ratios map[string]float64) map[string]float64 {
+	if len(ratios) == 0 {
+		return ratios
+	}
+	public := make(map[string]float64, len(ratios))
+	for key, value := range ratios {
+		if strings.HasPrefix(key, "video_") {
+			continue
+		}
+		public[key] = value
+	}
+	return public
 }
 
 // recalcQuotaFromRatios 根据 adjustedRatios 重新计算 quota。

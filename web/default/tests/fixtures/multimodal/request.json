@@ -1,0 +1,40 @@
+{
+  "model": "doubao-seedance-2-0-260128",
+  "content": [
+    {
+      "type": "text",
+      "text": "POV beverage commercial in the style of video1, scored with audio1"
+    },
+    {
+      "type": "image_url",
+      "image_url": {
+        "url": "https://picsum.photos/seed/aikanhub-ref1/800/600"
+      },
+      "role": "reference_image"
+    },
+    {
+      "type": "image_url",
+      "image_url": {
+        "url": "https://picsum.photos/seed/aikanhub-ref2/800/600"
+      },
+      "role": "reference_image"
+    },
+    {
+      "type": "video_url",
+      "video_url": {
+        "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4"
+      },
+      "role": "reference_video"
+    },
+    {
+      "type": "audio_url",
+      "audio_url": {
+        "url": "https://www.kozco.com/tech/piano2.wav"
+      },
+      "role": "reference_audio"
+    }
+  ],
+  "duration": 5,
+  "ratio": "16:9",
+  "generate_audio": true
+}

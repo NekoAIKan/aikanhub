@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/config"
 	videobilling "github.com/QuantumNous/new-api/setting/video_billing_setting"
 	"github.com/stretchr/testify/require"
 )
@@ -115,6 +116,7 @@ func TestVideoBillingCalculatorFormulaAndQuota(t *testing.T) {
 }
 
 func TestVideoBillingCalculatorUsesFallbacks(t *testing.T) {
+	resetProfitSettingForVideoBillingTest(t)
 	profile := videobilling.VideoBillingProfile{
 		Mode:                    videobilling.ModeFormula,
 		UnitPrice:               1,
@@ -127,4 +129,89 @@ func TestVideoBillingCalculatorUsesFallbacks(t *testing.T) {
 
 	got := CalculateVideoBilling(profile, VideoBillingInput{GroupRatio: 1}, false)
 	require.Equal(t, 108000, got.Tokens)
+}
+
+func TestVideoBillingUnitPriceResolution(t *testing.T) {
+	resetProfitSettingForVideoBillingTest(t)
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"profit_setting.default_markup_percent":           "30",
+		"profit_setting.upstream_cost_per_million_tokens": "1",
+		"profit_setting.apply_to_default_video_profiles":  "true",
+	}))
+
+	base := videobilling.VideoBillingProfile{
+		Mode:                    videobilling.ModeFormula,
+		FallbackFPS:             24,
+		FallbackWidth:           1280,
+		FallbackHeight:          720,
+		FallbackDurationSeconds: 5,
+		ConservativeMultiplier:  1.25,
+	}
+
+	explicit := base
+	explicit.UnitPrice = 9
+	gotExplicit := CalculateVideoBilling(explicit, VideoBillingInput{GroupRatio: 1}, false)
+	require.Equal(t, 9.0, gotExplicit.RetailUnitPrice)
+	require.Equal(t, 1.0, gotExplicit.UpstreamUnitCost)
+	require.Equal(t, 9.0*108000, gotExplicit.RawCost)
+
+	derived := base
+	derived.UnitPrice = 0
+	gotDerived := CalculateVideoBilling(derived, VideoBillingInput{GroupRatio: 1}, false)
+	require.InDelta(t, 1.3, gotDerived.RetailUnitPrice, 0.000001)
+	require.Equal(t, 1.0, gotDerived.UpstreamUnitCost)
+	require.Equal(t, 30.0, gotDerived.MarkupPercent)
+	require.InDelta(t, 140400.0, gotDerived.RawCost, 0.000001)
+
+	resetProfitSettingForVideoBillingTest(t)
+	gotLegacy := CalculateVideoBilling(derived, VideoBillingInput{GroupRatio: 1}, false)
+	require.Equal(t, 1.0, gotLegacy.RetailUnitPrice)
+	require.Zero(t, gotLegacy.UpstreamUnitCost)
+	require.Equal(t, 108000.0, gotLegacy.RawCost)
+}
+
+func TestVideoBillingReferencePrechargeUsesHigherMultiplier(t *testing.T) {
+	resetProfitSettingForVideoBillingTest(t)
+	profile := videobilling.VideoBillingProfile{
+		Mode:                            videobilling.ModeFormula,
+		UnitPrice:                       1,
+		FallbackFPS:                     24,
+		FallbackWidth:                   1280,
+		FallbackHeight:                  720,
+		FallbackDurationSeconds:         5,
+		UseUpstreamUsage:                true,
+		ConservativeMultiplier:          1.25,
+		ReferenceConservativeMultiplier: 2,
+	}
+
+	plain720 := CalculateVideoBilling(profile, VideoBillingInput{
+		OutputSeconds: 5, Width: 1280, Height: 720, FPS: 24, GroupRatio: 1,
+	}, true)
+	require.Equal(t, 67500, plain720.Quota)
+
+	plain1080 := CalculateVideoBilling(profile, VideoBillingInput{
+		OutputSeconds: 5, Width: 1920, Height: 1080, FPS: 24, GroupRatio: 1,
+	}, true)
+	require.Equal(t, 151875, plain1080.Quota)
+
+	referencePrecharge := CalculateVideoBilling(profile, VideoBillingInput{
+		InputSeconds: 5, OutputSeconds: 5, Width: 1280, Height: 720, FPS: 24, GroupRatio: 1, HasReferenceMedia: true,
+	}, true)
+	require.Equal(t, 216000, referencePrecharge.Quota)
+	require.GreaterOrEqual(t, referencePrecharge.Quota, 162450)
+
+	extendPrecharge := CalculateVideoBilling(profile, VideoBillingInput{
+		InputSeconds: 8, OutputSeconds: 8, Width: 1280, Height: 720, FPS: 24, GroupRatio: 1, HasReferenceMedia: true,
+	}, true)
+	require.Equal(t, 345600, extendPrecharge.Quota)
+	require.GreaterOrEqual(t, extendPrecharge.Quota, 194850)
+}
+
+func resetProfitSettingForVideoBillingTest(t *testing.T) {
+	t.Helper()
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"profit_setting.default_markup_percent":           "0",
+		"profit_setting.upstream_cost_per_million_tokens": "0",
+		"profit_setting.apply_to_default_video_profiles":  "true",
+	}))
 }

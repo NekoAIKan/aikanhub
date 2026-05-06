@@ -1,0 +1,12 @@
+{
+  "model": "doubao-seedance-2-0-fast-260128",
+  "content": [
+    {
+      "type": "text",
+      "text": "Seedance billing fixture failure: unsupported fast-model 1080p validation check."
+    }
+  ],
+  "duration": 5,
+  "ratio": "16:9",
+  "resolution": "1080p"
+}

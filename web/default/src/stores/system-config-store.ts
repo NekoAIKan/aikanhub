@@ -4,6 +4,17 @@ import { DEFAULT_SYSTEM_NAME, DEFAULT_LOGO } from '@/lib/constants'
 
 export type CurrencyDisplayType = 'USD' | 'CNY' | 'TOKENS' | 'CUSTOM'
 
+export interface CreditDisplayConfig {
+  /** Whether ordinary quota values should be shown as packaged credits */
+  enabled: boolean
+  /** User-facing unit label, for example "Credits" */
+  label: string
+  /** Number of quota units represented by one credit */
+  quotaPerCredit: number
+  /** Decimal places shown for credit amounts */
+  precision: number
+}
+
 export interface CurrencyConfig {
   /** Whether to render quota values as currency instead of raw units */
   displayInCurrency: boolean
@@ -17,6 +28,8 @@ export interface CurrencyConfig {
   customCurrencySymbol: string
   /** Exchange rate from USD to the custom currency (used when type === CUSTOM) */
   customCurrencyExchangeRate: number
+  /** User-facing credit presentation for ordinary quota values */
+  creditDisplay: CreditDisplayConfig
 }
 
 export interface SystemConfig {
@@ -35,6 +48,12 @@ export const DEFAULT_CURRENCY_CONFIG: CurrencyConfig = {
   usdExchangeRate: 1,
   customCurrencySymbol: '¤',
   customCurrencyExchangeRate: 1,
+  creditDisplay: {
+    enabled: true,
+    label: 'Credits',
+    quotaPerCredit: 5000,
+    precision: 2,
+  },
 }
 
 interface SystemConfigState {
@@ -68,6 +87,10 @@ export const useSystemConfigStore = create<SystemConfigState>()(
             currency: {
               ...state.config.currency,
               ...(newConfig.currency ?? {}),
+              creditDisplay: {
+                ...state.config.currency.creditDisplay,
+                ...(newConfig.currency?.creditDisplay ?? {}),
+              },
             },
           },
         })),

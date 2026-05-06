@@ -104,12 +104,13 @@ func setupLogin(user *model.User, c *gin.Context) {
 		"message": "",
 		"success": true,
 		"data": map[string]any{
-			"id":           user.Id,
-			"username":     user.Username,
-			"display_name": user.DisplayName,
-			"role":         user.Role,
-			"status":       user.Status,
-			"group":        user.Group,
+			"id":                      user.Id,
+			"username":                user.Username,
+			"display_name":            user.DisplayName,
+			"role":                    user.Role,
+			"status":                  user.Status,
+			"group":                   user.Group,
+			"billing_visibility_mode": service.GetBillingVisibilityMode(user.Role, user.Group),
 		},
 	})
 }
@@ -240,6 +241,7 @@ func GetAllUsers(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	annotateUserBillingVisibility(users)
 
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(users)
@@ -257,6 +259,7 @@ func SearchUsers(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	annotateUserBillingVisibility(users)
 
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(users)
@@ -280,6 +283,7 @@ func GetUser(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionSameLevel)
 		return
 	}
+	annotateUserBillingVisibility([]*model.User{user})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -391,31 +395,32 @@ func GetSelf(c *gin.Context) {
 
 	// 构建响应数据，包含用户信息和权限
 	responseData := map[string]interface{}{
-		"id":                user.Id,
-		"username":          user.Username,
-		"display_name":      user.DisplayName,
-		"role":              user.Role,
-		"status":            user.Status,
-		"email":             user.Email,
-		"github_id":         user.GitHubId,
-		"discord_id":        user.DiscordId,
-		"oidc_id":           user.OidcId,
-		"wechat_id":         user.WeChatId,
-		"telegram_id":       user.TelegramId,
-		"group":             user.Group,
-		"quota":             user.Quota,
-		"used_quota":        user.UsedQuota,
-		"request_count":     user.RequestCount,
-		"aff_code":          user.AffCode,
-		"aff_count":         user.AffCount,
-		"aff_quota":         user.AffQuota,
-		"aff_history_quota": user.AffHistoryQuota,
-		"inviter_id":        user.InviterId,
-		"linux_do_id":       user.LinuxDOId,
-		"setting":           user.Setting,
-		"stripe_customer":   user.StripeCustomer,
-		"sidebar_modules":   userSetting.SidebarModules, // 正确提取sidebar_modules字段
-		"permissions":       permissions,                // 新增权限字段
+		"id":                      user.Id,
+		"username":                user.Username,
+		"display_name":            user.DisplayName,
+		"role":                    user.Role,
+		"status":                  user.Status,
+		"email":                   user.Email,
+		"github_id":               user.GitHubId,
+		"discord_id":              user.DiscordId,
+		"oidc_id":                 user.OidcId,
+		"wechat_id":               user.WeChatId,
+		"telegram_id":             user.TelegramId,
+		"group":                   user.Group,
+		"billing_visibility_mode": service.GetBillingVisibilityMode(userRole, user.Group),
+		"quota":                   user.Quota,
+		"used_quota":              user.UsedQuota,
+		"request_count":           user.RequestCount,
+		"aff_code":                user.AffCode,
+		"aff_count":               user.AffCount,
+		"aff_quota":               user.AffQuota,
+		"aff_history_quota":       user.AffHistoryQuota,
+		"inviter_id":              user.InviterId,
+		"linux_do_id":             user.LinuxDOId,
+		"setting":                 user.Setting,
+		"stripe_customer":         user.StripeCustomer,
+		"sidebar_modules":         userSetting.SidebarModules, // 正确提取sidebar_modules字段
+		"permissions":             permissions,                // 新增权限字段
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -424,6 +429,15 @@ func GetSelf(c *gin.Context) {
 		"data":    responseData,
 	})
 	return
+}
+
+func annotateUserBillingVisibility(users []*model.User) {
+	for _, user := range users {
+		if user == nil {
+			continue
+		}
+		user.BillingVisibilityMode = service.GetBillingVisibilityMode(user.Role, user.Group)
+	}
 }
 
 // 计算用户权限的辅助函数

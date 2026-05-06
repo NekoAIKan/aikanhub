@@ -14,15 +14,16 @@ import (
 
 func testProfile() videobilling.VideoBillingProfile {
 	return videobilling.VideoBillingProfile{
-		Mode:                    videobilling.ModeFormula,
-		UnitPrice:               1,
-		FallbackFPS:             24,
-		FallbackWidth:           1280,
-		FallbackHeight:          720,
-		FallbackDurationSeconds: 5,
-		UseUpstreamUsage:        true,
-		ConservativeMultiplier:  1.25,
-		DraftMultiplier:         0.5,
+		Mode:                            videobilling.ModeFormula,
+		UnitPrice:                       1,
+		FallbackFPS:                     24,
+		FallbackWidth:                   1280,
+		FallbackHeight:                  720,
+		FallbackDurationSeconds:         5,
+		UseUpstreamUsage:                true,
+		ConservativeMultiplier:          1.25,
+		ReferenceConservativeMultiplier: 2,
+		DraftMultiplier:                 0.5,
 		ResolutionAliases: map[string]videobilling.VideoResolution{
 			"720p":     {Width: 1280, Height: 720},
 			"1080p":    {Width: 1920, Height: 1080},
@@ -66,7 +67,7 @@ func TestExtractRequestBillingInput(t *testing.T) {
 					},
 				},
 			},
-			want: service.VideoBillingInput{InputSeconds: 7, OutputSeconds: 7, Width: 1280, Height: 720, FPS: 24, GroupRatio: 1, Draft: true},
+			want: service.VideoBillingInput{InputSeconds: 7, OutputSeconds: 7, Width: 1280, Height: 720, FPS: 24, GroupRatio: 1, Draft: true, HasReferenceMedia: true},
 		},
 		{
 			name: "metadata duration generate audio is ignored",
@@ -86,6 +87,44 @@ func TestExtractRequestBillingInput(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestExtractRequestBillingInputMarksReferenceMedia(t *testing.T) {
+	got := ExtractRequestBillingInput(relaycommon.TaskSubmitReq{
+		Duration: 5,
+		Metadata: map[string]any{
+			"content": []any{
+				map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://example.com/in.png"}},
+				map[string]any{"type": "video_url", "video_url": map[string]any{"url": "https://example.com/in.mp4"}},
+			},
+			"resolution": "720p",
+		},
+	}, testProfile(), 1)
+
+	require.True(t, got.HasReferenceMedia)
+	precharge := service.CalculateVideoBilling(testProfile(), got, true)
+	require.GreaterOrEqual(t, precharge.Quota, 216000)
+	require.GreaterOrEqual(t, precharge.Quota, 162450)
+}
+
+func TestExtractRequestBillingInputKeepsPlainPrechargeLegacyValues(t *testing.T) {
+	plain720 := ExtractRequestBillingInput(relaycommon.TaskSubmitReq{
+		Duration: 5,
+		Metadata: map[string]any{
+			"resolution": "720p",
+		},
+	}, testProfile(), 1)
+	require.False(t, plain720.HasReferenceMedia)
+	require.Equal(t, 67500, service.CalculateVideoBilling(testProfile(), plain720, true).Quota)
+
+	plain1080 := ExtractRequestBillingInput(relaycommon.TaskSubmitReq{
+		Duration: 5,
+		Metadata: map[string]any{
+			"resolution": "1080p",
+		},
+	}, testProfile(), 1)
+	require.False(t, plain1080.HasReferenceMedia)
+	require.Equal(t, 151875, service.CalculateVideoBilling(testProfile(), plain1080, true).Quota)
 }
 
 func TestExtractResponseBillingInput(t *testing.T) {

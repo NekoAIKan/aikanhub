@@ -1,0 +1,20 @@
+{
+  "case": "text_1080p_5s",
+  "expected": "succeeded",
+  "actual_status": "succeeded",
+  "task_id": "cgt-20260506113918-4q88c",
+  "billing_fields": {
+    "model": "doubao-seedance-2-0-260128",
+    "resolution": "1080p",
+    "duration": 5,
+    "fps": 24,
+    "completion_tokens": 245025,
+    "total_tokens": 245025
+  },
+  "video_artifact": {
+    "kind": "binary",
+    "path": "video.mp4",
+    "bytes": 2846239
+  },
+  "poll_count": 47
+}

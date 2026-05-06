@@ -13,6 +13,7 @@ export interface AuthUser {
   role: number
   status?: number
   group?: string
+  billing_visibility_mode?: string
   quota?: number
   used_quota?: number
   request_count?: number

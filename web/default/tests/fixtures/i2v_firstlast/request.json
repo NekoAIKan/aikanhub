@@ -1,0 +1,25 @@
+{
+  "model": "doubao-seedance-2-0-fast-260128",
+  "content": [
+    {
+      "type": "text",
+      "text": "Smooth transition from first frame to last frame"
+    },
+    {
+      "type": "image_url",
+      "image_url": {
+        "url": "https://picsum.photos/seed/aikanhub-first/800/600"
+      },
+      "role": "first_frame"
+    },
+    {
+      "type": "image_url",
+      "image_url": {
+        "url": "https://picsum.photos/seed/aikanhub-last/800/600"
+      },
+      "role": "last_frame"
+    }
+  ],
+  "duration": 5,
+  "ratio": "16:9"
+}

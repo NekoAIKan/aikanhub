@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery } from '@tanstack/react-query'
@@ -7,6 +7,13 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
+import {
+  billingVisibilitySettingsFromOptionRows,
+  getBillingVisibilityDescriptionKey,
+  getBillingVisibilityLabelKey,
+  resolveBillingVisibilityMode,
+} from '@/lib/billing-visibility'
+import { BillingVisibilityBadge } from '@/components/billing-visibility-badge'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -38,6 +45,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { createUser, updateUser, getUser, getGroups } from '../api'
 import { BINDING_FIELDS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
+import { useSystemOptions } from '../../system-settings/hooks/use-system-options'
 import {
   userFormSchema,
   type UserFormValues,
@@ -72,6 +80,11 @@ export function UsersMutateDrawer({
     queryFn: getGroups,
     staleTime: 5 * 60 * 1000,
   })
+  const { data: systemOptionsData } = useSystemOptions()
+  const billingVisibility = useMemo(
+    () => billingVisibilitySettingsFromOptionRows(systemOptionsData?.data),
+    [systemOptionsData?.data]
+  )
 
   const groups = groupsData?.data || []
 
@@ -100,6 +113,17 @@ export function UsersMutateDrawer({
   const tokensOnly = currencyMeta.kind === 'tokens'
 
   const currentQuotaRaw = form.watch('quota_dollars') || 0
+  const selectedGroup = form.watch('group')
+  const selectedBillingMode = resolveBillingVisibilityMode({
+    role: currentRow?.role,
+    group: selectedGroup,
+    defaultMode: billingVisibility.defaultMode,
+    groupModes: billingVisibility.groupModes,
+    explicitMode:
+      selectedGroup === currentRow?.group
+        ? currentRow?.billing_visibility_mode
+        : undefined,
+  })
 
   const onSubmit = async (data: UserFormValues) => {
     setIsSubmitting(true)
@@ -299,6 +323,32 @@ export function UsersMutateDrawer({
                           </SelectContent>
                         </Select>
                         <FormMessage />
+                        <div className='rounded-md border p-3'>
+                          <div className='mb-2 flex items-center justify-between gap-3'>
+                            <span className='text-sm font-medium'>
+                              {t('Billing visibility')}
+                            </span>
+                            <BillingVisibilityBadge
+                              mode={selectedBillingMode}
+                            />
+                          </div>
+                          <p className='text-muted-foreground text-xs'>
+                            {t(
+                              getBillingVisibilityLabelKey(selectedBillingMode)
+                            )}
+                            {' - '}
+                            {t(
+                              getBillingVisibilityDescriptionKey(
+                                selectedBillingMode
+                              )
+                            )}
+                          </p>
+                          <p className='text-muted-foreground mt-2 text-xs'>
+                            {t(
+                              'Use invited, b2b, or enterprise groups for detailed customer billing evidence.'
+                            )}
+                          </p>
+                        </div>
                       </FormItem>
                     )}
                   />

@@ -103,6 +103,9 @@ export type GeneralSettings = {
   'credit_display_setting.precision': number
   'profit_setting.default_markup_percent': number
   'profit_setting.upstream_cost_per_million_tokens': number
+  'profit_setting.apply_to_default_video_profiles': boolean
+  'billing_visibility_setting.default_mode': string
+  'billing_visibility_setting.group_modes': string
   'video_billing_setting.profiles': string
   'onboarding_setting.new_user_quota': number
   'onboarding_setting.default_group': string

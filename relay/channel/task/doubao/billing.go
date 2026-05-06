@@ -22,18 +22,25 @@ func ExtractRequestBillingInput(req relaycommon.TaskSubmitReq, profile videobill
 		intFromMap(req.Metadata, "input_duration"),
 		intFromMap(req.Metadata, "input_video_duration"),
 	)
-	if inputSeconds <= 0 && metadataHasVideoInput(req.Metadata) {
-		inputSeconds = outputSeconds
+	hasReferenceMedia := strings.TrimSpace(req.InputReference) != "" ||
+		metadataHasVideoInput(req.Metadata) ||
+		contentHasVideoInput(req.Content)
+	if inputSeconds <= 0 && hasReferenceMedia {
+		inputSeconds = firstPositiveInt(outputSeconds, profile.FallbackDurationSeconds)
+	}
+	if inputSeconds > 0 {
+		hasReferenceMedia = true
 	}
 
 	return service.VideoBillingInput{
-		InputSeconds:  inputSeconds,
-		OutputSeconds: outputSeconds,
-		Width:         width,
-		Height:        height,
-		FPS:           fps,
-		GroupRatio:    groupRatio,
-		Draft:         draft,
+		InputSeconds:      inputSeconds,
+		OutputSeconds:     outputSeconds,
+		Width:             width,
+		Height:            height,
+		FPS:               fps,
+		GroupRatio:        groupRatio,
+		Draft:             draft,
+		HasReferenceMedia: hasReferenceMedia,
 	}
 }
 
@@ -70,6 +77,9 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 	if !ok {
 		return 0
 	}
+	if bc.RetailUnitPrice > 0 {
+		profile.UnitPrice = bc.RetailUnitPrice
+	}
 	groupRatio := bc.GroupRatio
 	if groupRatio <= 0 {
 		groupRatio = 1
@@ -98,6 +108,7 @@ func videoBillingInputFromContext(params map[string]any, groupRatio float64) ser
 		GroupRatio:          groupRatio,
 		Draft:               boolFromMap(params, "draft"),
 		UpstreamTotalTokens: intFromMap(params, "upstream_total_tokens"),
+		HasReferenceMedia:   boolFromMap(params, "has_reference_media"),
 	}
 }
 
@@ -116,6 +127,9 @@ func mergeVideoBillingInput(base, override service.VideoBillingInput) service.Vi
 	}
 	if override.UpstreamTotalTokens > 0 {
 		base.UpstreamTotalTokens = override.UpstreamTotalTokens
+	}
+	if override.HasReferenceMedia {
+		base.HasReferenceMedia = true
 	}
 	if base.GroupRatio <= 0 {
 		base.GroupRatio = override.GroupRatio
@@ -159,15 +173,28 @@ func metadataHasVideoInput(metadata map[string]any) bool {
 	if _, ok := metadata["video_url"]; ok {
 		return true
 	}
-	content, ok := metadata["content"].([]any)
-	if !ok {
-		return false
-	}
-	for _, item := range content {
-		itemMap, ok := item.(map[string]any)
-		if !ok {
-			continue
+	switch content := metadata["content"].(type) {
+	case []any:
+		for _, item := range content {
+			itemMap, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if itemMap["type"] == "video_url" {
+				return true
+			}
+			if _, ok := itemMap["video_url"]; ok {
+				return true
+			}
 		}
+	case []map[string]any:
+		return contentHasVideoInput(content)
+	}
+	return false
+}
+
+func contentHasVideoInput(content []map[string]any) bool {
+	for _, itemMap := range content {
 		if itemMap["type"] == "video_url" {
 			return true
 		}

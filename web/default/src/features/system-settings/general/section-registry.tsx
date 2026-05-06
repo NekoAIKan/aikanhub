@@ -1,4 +1,5 @@
 import type { GeneralSettings } from '../types'
+import { parseBillingVisibilitySettings } from '@/lib/billing-visibility'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ChannelAffinitySection } from './channel-affinity'
 import { CheckinSettingsSection } from './checkin-settings-section'
@@ -80,6 +81,16 @@ const GENERAL_SECTIONS = [
               settings['profit_setting.default_markup_percent'],
             upstream_cost_per_million_tokens:
               settings['profit_setting.upstream_cost_per_million_tokens'],
+            apply_to_default_video_profiles:
+              settings['profit_setting.apply_to_default_video_profiles'],
+          },
+          billing_visibility_setting: {
+            default_mode: settings['billing_visibility_setting.default_mode'] as
+              | 'credits'
+              | 'summary'
+              | 'detailed'
+              | 'internal',
+            group_modes: settings['billing_visibility_setting.group_modes'],
           },
           video_billing_setting: {
             profiles: settings['video_billing_setting.profiles'],
@@ -118,7 +129,14 @@ const GENERAL_SECTIONS = [
     id: 'invite-campaigns',
     titleKey: 'Campaign Invites',
     descriptionKey: 'Create and manage campaign invite codes',
-    build: () => <InviteCampaignsSection />,
+    build: (settings: GeneralSettings) => (
+      <InviteCampaignsSection
+        billingVisibility={parseBillingVisibilitySettings({
+          defaultMode: settings['billing_visibility_setting.default_mode'],
+          groupModes: settings['billing_visibility_setting.group_modes'],
+        })}
+      />
+    ),
   },
   {
     id: 'config-bundles',

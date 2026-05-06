@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,8 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/config"
 	videobilling "github.com/QuantumNous/new-api/setting/video_billing_setting"
+	"github.com/QuantumNous/new-api/types"
+	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -776,6 +779,13 @@ func TestTaskInsert_PersistsVideoBillingContextFields(t *testing.T) {
 		"video_estimated_quota":  202500,
 		"video_draft":            1,
 	}
+	task.PrivateData.BillingContext.BillingBasis = VideoBillingBasisFormula
+	task.PrivateData.BillingContext.RetailUnitPrice = 1.3
+	task.PrivateData.BillingContext.UpstreamUnitCost = 1
+	task.PrivateData.BillingContext.MarkupPercent = 30
+	task.PrivateData.BillingContext.PricingVersion = "video_formula:v1:abc123"
+	task.PrivateData.BillingContext.PricingHash = "abc123"
+	task.PrivateData.BillingContext.HasReferenceMedia = true
 
 	require.NoError(t, task.Insert())
 
@@ -793,4 +803,99 @@ func TestTaskInsert_PersistsVideoBillingContextFields(t *testing.T) {
 	require.EqualValues(t, 720, bc.VideoParams["height"])
 	require.EqualValues(t, 24, bc.VideoParams["fps"])
 	require.Equal(t, true, bc.VideoParams["draft"])
+	require.Equal(t, VideoBillingBasisFormula, bc.BillingBasis)
+	require.Equal(t, 1.3, bc.RetailUnitPrice)
+	require.Equal(t, 1.0, bc.UpstreamUnitCost)
+	require.Equal(t, 30.0, bc.MarkupPercent)
+	require.Equal(t, "video_formula:v1:abc123", bc.PricingVersion)
+	require.Equal(t, "abc123", bc.PricingHash)
+	require.True(t, bc.HasReferenceMedia)
+}
+
+func TestTaskBillingOtherPersistsVideoPricingAuditFields(t *testing.T) {
+	task := makeTask(41, 41, 54450, 0, BillingSourceWallet, 0)
+	task.PrivateData.BillingContext = &model.TaskBillingContext{
+		ModelPrice:        -1,
+		GroupRatio:        1,
+		BillingMode:       videobilling.ModeFormula,
+		BillingProfile:    "doubao-seedance-2-0-fast-260128",
+		BillingBasis:      VideoBillingBasisUpstreamUsage,
+		OriginModelName:   "doubao-seedance-2-0-fast-260128",
+		EstimatedTokens:   108900,
+		EstimatedQuota:    67500,
+		RetailUnitPrice:   1,
+		UpstreamUnitCost:  0.8,
+		MarkupPercent:     25,
+		PricingVersion:    "video_formula:v1:testhash",
+		PricingHash:       "testhash",
+		HasReferenceMedia: false,
+		VideoParams: map[string]any{
+			"output_seconds": 5,
+			"width":          1280,
+			"height":         720,
+			"fps":            24,
+		},
+	}
+
+	other := taskBillingOther(task)
+	require.Equal(t, videobilling.ModeFormula, other["billing_mode"])
+	require.Equal(t, "doubao-seedance-2-0-fast-260128", other["billing_profile"])
+	require.Equal(t, VideoBillingBasisUpstreamUsage, other["billing_basis"])
+	require.Equal(t, 108900, other["estimated_tokens"])
+	require.Equal(t, 67500, other["estimated_quota"])
+	require.Equal(t, 1.0, other["retail_unit_price"])
+	require.Equal(t, 0.8, other["upstream_unit_cost"])
+	require.Equal(t, 25.0, other["markup_percent"])
+	require.Equal(t, "video_formula:v1:testhash", other["pricing_version"])
+	require.Equal(t, "testhash", other["pricing_hash"])
+	require.Equal(t, false, other["has_reference_media"])
+}
+
+func TestLogTaskConsumptionOmitsVideoAliasFieldsFromContent(t *testing.T) {
+	truncate(t)
+	userID := 42
+	channelID := 42
+	seedUser(t, userID, 500000)
+	seedChannel(t, channelID)
+
+	c, _ := gin.CreateTestContext(nil)
+	req, err := http.NewRequest(http.MethodPost, "/api/v3/contents/generations/tasks", nil)
+	require.NoError(t, err)
+	c.Request = req
+	c.Set("token_name", "fixture-token")
+
+	info := &relaycommon.RelayInfo{
+		UserId:          userID,
+		OriginModelName: "doubao-seedance-2-0-fast-260128",
+		UsingGroup:      "default",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelId: channelID,
+		},
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{
+			Action: "textGenerate",
+		},
+		PriceData: types.PriceData{
+			ModelPrice: -1,
+			Quota:      54450,
+			GroupRatioInfo: types.GroupRatioInfo{
+				GroupRatio: 1,
+			},
+			OtherRatios: map[string]float64{
+				"video_estimated_tokens":   108900,
+				"video_retail_unit_price":  1,
+				"video_upstream_unit_cost": 0.8,
+				"video_markup_percent":     25,
+				"seconds":                  5,
+			},
+		},
+	}
+
+	LogTaskConsumption(c, info)
+
+	log := getLastLog(t)
+	require.NotNil(t, log)
+	require.NotContains(t, log.Content, "video_")
+	require.NotContains(t, strings.ToLower(log.Content), "upstream")
+	require.NotContains(t, strings.ToLower(log.Content), "markup")
+	require.Contains(t, log.Content, "seconds")
 }
