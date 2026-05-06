@@ -2,6 +2,10 @@ import type { GeneralSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ChannelAffinitySection } from './channel-affinity'
 import { CheckinSettingsSection } from './checkin-settings-section'
+import { ConfigBundlesSection } from './config-bundles-section'
+import { CreditsSettingsSection } from './credits-settings-section'
+import { InviteCampaignsSection } from './invite-campaigns-section'
+import { OnboardingSettingsSection } from './onboarding-settings-section'
 import { PricingSection } from './pricing-section'
 import { QuotaSettingsSection } from './quota-settings-section'
 import { SystemBehaviorSection } from './system-behavior-section'
@@ -55,6 +59,72 @@ const GENERAL_SECTIONS = [
         }}
       />
     ),
+  },
+  {
+    id: 'credits-profit',
+    titleKey: 'Credits & Profit',
+    descriptionKey: 'Configure credit display and profit preview inputs',
+    build: (settings: GeneralSettings) => (
+      <CreditsSettingsSection
+        quotaPerUnit={settings.QuotaPerUnit}
+        defaultValues={{
+          credit_display_setting: {
+            enabled: settings['credit_display_setting.enabled'],
+            label: settings['credit_display_setting.label'],
+            quota_per_credit:
+              settings['credit_display_setting.quota_per_credit'],
+            precision: settings['credit_display_setting.precision'],
+          },
+          profit_setting: {
+            default_markup_percent:
+              settings['profit_setting.default_markup_percent'],
+            upstream_cost_per_million_tokens:
+              settings['profit_setting.upstream_cost_per_million_tokens'],
+          },
+          video_billing_setting: {
+            profiles: settings['video_billing_setting.profiles'],
+          },
+        }}
+      />
+    ),
+  },
+  {
+    id: 'onboarding',
+    titleKey: 'Onboarding',
+    descriptionKey: 'Configure new user quotas, groups, and starter tokens',
+    build: (settings: GeneralSettings) => (
+      <OnboardingSettingsSection
+        defaultValues={{
+          QuotaForNewUser: settings.QuotaForNewUser,
+          QuotaForInviter: settings.QuotaForInviter,
+          QuotaForInvitee: settings.QuotaForInvitee,
+          onboarding_setting: {
+            new_user_quota: settings['onboarding_setting.new_user_quota'],
+            default_group: settings['onboarding_setting.default_group'],
+            default_token_enabled:
+              settings['onboarding_setting.default_token_enabled'] > 0,
+            default_token_group:
+              settings['onboarding_setting.default_token_group'],
+            default_token_quota:
+              settings['onboarding_setting.default_token_quota'],
+            default_token_unlimited:
+              settings['onboarding_setting.default_token_unlimited'],
+          },
+        }}
+      />
+    ),
+  },
+  {
+    id: 'invite-campaigns',
+    titleKey: 'Campaign Invites',
+    descriptionKey: 'Create and manage campaign invite codes',
+    build: () => <InviteCampaignsSection />,
+  },
+  {
+    id: 'config-bundles',
+    titleKey: 'Config Bundles',
+    descriptionKey: 'Export, preview, and import configuration bundles',
+    build: () => <ConfigBundlesSection />,
   },
   {
     id: 'pricing',

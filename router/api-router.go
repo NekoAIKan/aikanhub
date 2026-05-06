@@ -176,8 +176,20 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.PUT("/", controller.UpdateOption)
 			optionRoute.GET("/channel_affinity_cache", controller.GetChannelAffinityCacheStats)
 			optionRoute.DELETE("/channel_affinity_cache", controller.ClearChannelAffinityCache)
+			optionRoute.GET("/bundle/export", controller.ExportOptionBundle)
+			optionRoute.POST("/bundle/import/preview", controller.PreviewOptionBundleImport)
+			optionRoute.POST("/bundle/import/apply", controller.ApplyOptionBundleImport)
 			optionRoute.POST("/rest_model_ratio", controller.ResetModelRatio)
 			optionRoute.POST("/migrate_console_setting", controller.MigrateConsoleSetting) // 用于迁移检测的旧键，下个版本会删除
+		}
+		inviteCampaignRoute := apiRouter.Group("/invite_campaign")
+		inviteCampaignRoute.Use(middleware.AdminAuth())
+		{
+			inviteCampaignRoute.GET("/", controller.GetAllInviteCampaigns)
+			inviteCampaignRoute.GET("/:id", controller.GetInviteCampaign)
+			inviteCampaignRoute.POST("/", controller.AddInviteCampaign)
+			inviteCampaignRoute.PUT("/:id", controller.UpdateInviteCampaign)
+			inviteCampaignRoute.DELETE("/:id", controller.DeleteInviteCampaign)
 		}
 
 		// Custom OAuth provider management (root only)

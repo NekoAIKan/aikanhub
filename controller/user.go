@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,12 +15,10 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting"
-
-	"github.com/QuantumNous/new-api/constant"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type LoginRequest struct {
@@ -35,7 +32,7 @@ func Login(c *gin.Context) {
 		return
 	}
 	var loginRequest LoginRequest
-	err := json.NewDecoder(c.Request.Body).Decode(&loginRequest)
+	err := common.DecodeJson(c.Request.Body, &loginRequest)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -134,6 +131,28 @@ func Logout(c *gin.Context) {
 	})
 }
 
+func applyRegistrationInvitePolicy(tx *gorm.DB, user *model.User, inviteCode string, allowAffiliateFallback bool) (int, error) {
+	inviteCode = strings.TrimSpace(inviteCode)
+	if inviteCode == "" {
+		return 0, nil
+	}
+	campaign, err := model.ConsumeInviteCampaignCodeWithTx(tx, inviteCode, common.GetTimestamp())
+	if err == nil {
+		if campaign.Quota >= 0 {
+			user.OnboardingQuota = &campaign.Quota
+		}
+		if campaign.Group != "" {
+			user.Group = campaign.Group
+		}
+		return 0, nil
+	}
+	if !allowAffiliateFallback || !errors.Is(err, model.ErrInviteCampaignNotFound) {
+		return 0, err
+	}
+	inviterId, _ := model.GetUserIdByAffCode(inviteCode)
+	return inviterId, nil
+}
+
 func Register(c *gin.Context) {
 	if !common.RegisterEnabled {
 		common.ApiErrorI18n(c, i18n.MsgUserRegisterDisabled)
@@ -144,7 +163,7 @@ func Register(c *gin.Context) {
 		return
 	}
 	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
+	err := common.DecodeJson(c.Request.Body, &user)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -173,57 +192,39 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserExists)
 		return
 	}
-	affCode := user.AffCode // this code is the inviter's code, not the user's own code
-	inviterId, _ := model.GetUserIdByAffCode(affCode)
+	inviteCode := strings.TrimSpace(user.InviteCode)
+	allowAffiliateFallback := false
+	if inviteCode == "" {
+		inviteCode = strings.TrimSpace(user.AffCode) // this code is the inviter's code, not the user's own code
+		allowAffiliateFallback = true
+	}
+	inviterId := 0
 	cleanUser := model.User{
 		Username:    user.Username,
 		Password:    user.Password,
 		DisplayName: user.Username,
-		InviterId:   inviterId,
 		Role:        common.RoleCommonUser, // 明确设置角色为普通用户
 	}
 	if common.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
 	}
-	if err := cleanUser.Insert(inviterId); err != nil {
+	err = model.DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		inviterId, err = applyRegistrationInvitePolicy(tx, &cleanUser, inviteCode, allowAffiliateFallback)
+		if err != nil {
+			return err
+		}
+		cleanUser.InviterId = inviterId
+		if err := cleanUser.InsertWithTx(tx, inviterId); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-
-	// 获取插入后的用户ID
-	var insertedUser model.User
-	if err := model.DB.Where("username = ?", cleanUser.Username).First(&insertedUser).Error; err != nil {
-		common.ApiErrorI18n(c, i18n.MsgUserRegisterFailed)
-		return
-	}
-	// 生成默认令牌
-	if constant.GenerateDefaultToken {
-		key, err := common.GenerateKey()
-		if err != nil {
-			common.ApiErrorI18n(c, i18n.MsgUserDefaultTokenFailed)
-			common.SysLog("failed to generate token key: " + err.Error())
-			return
-		}
-		// 生成默认令牌
-		token := model.Token{
-			UserId:             insertedUser.Id, // 使用插入后的用户ID
-			Name:               cleanUser.Username + "的初始令牌",
-			Key:                key,
-			CreatedTime:        common.GetTimestamp(),
-			AccessedTime:       common.GetTimestamp(),
-			ExpiredTime:        -1,     // 永不过期
-			RemainQuota:        500000, // 示例额度
-			UnlimitedQuota:     true,
-			ModelLimitsEnabled: false,
-		}
-		if setting.DefaultUseAutoGroup {
-			token.Group = "auto"
-		}
-		if err := token.Insert(); err != nil {
-			common.ApiErrorI18n(c, i18n.MsgCreateDefaultTokenErr)
-			return
-		}
-	}
+	cleanUser.FinalizeOAuthUserCreation(inviterId)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -506,7 +507,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 	// 普通用户不包含admin区域
 
 	// 转换为JSON字符串
-	configBytes, err := json.Marshal(defaultConfig)
+	configBytes, err := common.Marshal(defaultConfig)
 	if err != nil {
 		common.SysLog("生成默认边栏配置失败: " + err.Error())
 		return ""
@@ -544,7 +545,7 @@ func GetUserModels(c *gin.Context) {
 
 func UpdateUser(c *gin.Context) {
 	var updatedUser model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&updatedUser)
+	err := common.DecodeJson(c.Request.Body, &updatedUser)
 	if err != nil || updatedUser.Id == 0 {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -625,7 +626,7 @@ func AdminClearUserBinding(c *gin.Context) {
 
 func UpdateSelf(c *gin.Context) {
 	var requestData map[string]interface{}
-	err := json.NewDecoder(c.Request.Body).Decode(&requestData)
+	err := common.DecodeJson(c.Request.Body, &requestData)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -689,12 +690,12 @@ func UpdateSelf(c *gin.Context) {
 
 	// 原有的用户信息更新逻辑
 	var user model.User
-	requestDataBytes, err := json.Marshal(requestData)
+	requestDataBytes, err := common.Marshal(requestData)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
-	err = json.Unmarshal(requestDataBytes, &user)
+	err = common.Unmarshal(requestDataBytes, &user)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -804,7 +805,7 @@ func DeleteSelf(c *gin.Context) {
 
 func CreateUser(c *gin.Context) {
 	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
+	err := common.DecodeJson(c.Request.Body, &user)
 	user.Username = strings.TrimSpace(user.Username)
 	if err != nil || user.Username == "" || user.Password == "" {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
@@ -851,7 +852,7 @@ type ManageRequest struct {
 // ManageUser Only admin user can do this
 func ManageUser(c *gin.Context) {
 	var req ManageRequest
-	err := json.NewDecoder(c.Request.Body).Decode(&req)
+	err := common.DecodeJson(c.Request.Body, &req)
 
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)

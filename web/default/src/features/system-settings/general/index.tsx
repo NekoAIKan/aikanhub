@@ -26,6 +26,19 @@ const defaultGeneralSettings: GeneralSettings = {
   TopUpLink: '',
   'general_setting.docs_link': '',
   'quota_setting.enable_free_model_pre_consume': true,
+  'credit_display_setting.enabled': true,
+  'credit_display_setting.label': 'Credits',
+  'credit_display_setting.quota_per_credit': 500000,
+  'credit_display_setting.precision': 2,
+  'profit_setting.default_markup_percent': 30,
+  'profit_setting.upstream_cost_per_million_tokens': 0,
+  'video_billing_setting.profiles': '{}',
+  'onboarding_setting.new_user_quota': 0,
+  'onboarding_setting.default_group': 'default',
+  'onboarding_setting.default_token_enabled': -1,
+  'onboarding_setting.default_token_group': '',
+  'onboarding_setting.default_token_quota': 500000,
+  'onboarding_setting.default_token_unlimited': true,
   QuotaPerUnit: 500000,
   USDExchangeRate: 7,
   'general_setting.quota_display_type': 'USD',
@@ -69,6 +82,10 @@ export function GeneralSettings() {
   const activeSection = (params?.section ?? GENERAL_DEFAULT_SECTION) as
     | 'system-info'
     | 'quota'
+    | 'credits-profit'
+    | 'onboarding'
+    | 'invite-campaigns'
+    | 'config-bundles'
     | 'pricing'
     | 'checkin'
     | 'behavior'

@@ -125,6 +125,21 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 			other["model_ratio"] = bc.ModelRatio
 		}
 		other["group_ratio"] = bc.GroupRatio
+		if bc.BillingMode != "" {
+			other["billing_mode"] = bc.BillingMode
+		}
+		if bc.BillingProfile != "" {
+			other["billing_profile"] = bc.BillingProfile
+		}
+		if bc.EstimatedTokens > 0 {
+			other["estimated_tokens"] = bc.EstimatedTokens
+		}
+		if bc.EstimatedQuota > 0 {
+			other["estimated_quota"] = bc.EstimatedQuota
+		}
+		if len(bc.VideoParams) > 0 {
+			other["video_params"] = bc.VideoParams
+		}
 		if len(bc.OtherRatios) > 0 {
 			for k, v := range bc.OtherRatios {
 				other[k] = v
@@ -215,6 +230,11 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 	taskAdjustTokenQuota(ctx, task, quotaDelta)
 
 	task.Quota = actualQuota
+	if task.ID > 0 {
+		if err := model.DB.Model(&model.Task{}).Where("id = ?", task.ID).Update("quota", actualQuota).Error; err != nil {
+			logger.LogError(ctx, fmt.Sprintf("差额结算任务额度持久化失败 task %s: %s", task.TaskID, err.Error()))
+		}
+	}
 
 	var logType int
 	var logQuota int

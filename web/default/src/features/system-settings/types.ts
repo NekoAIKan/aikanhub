@@ -21,6 +21,58 @@ export type UpdateOptionResponse = {
   message: string
 }
 
+export type ConfigBundleExportResponse = {
+  success: boolean
+  message: string
+  data?: unknown
+}
+
+export type ConfigBundlePreviewResponse = {
+  success: boolean
+  message: string
+  data?: unknown
+}
+
+export type ConfigBundleImportResponse = {
+  success: boolean
+  message: string
+  data?: unknown
+}
+
+export type InviteCampaign = {
+  id?: number | string
+  code?: string
+  name?: string
+  description?: string
+  group?: string
+  quota?: number
+  usage_limit?: number
+  status?: number
+  start_time?: number
+  end_time?: number
+  created_time?: number
+  updated_time?: number
+  max_uses?: number
+  used_count?: number
+  enabled?: boolean
+  starts_at?: string
+  expires_at?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export type InviteCampaignsResponse = {
+  success: boolean
+  message: string
+  data?: InviteCampaign[] | { items?: InviteCampaign[] }
+}
+
+export type InviteCampaignMutationResponse = {
+  success: boolean
+  message: string
+  data?: InviteCampaign
+}
+
 export type DeleteLogsResponse = {
   success: boolean
   message: string
@@ -45,6 +97,19 @@ export type GeneralSettings = {
   TopUpLink: string
   'general_setting.docs_link': string
   'quota_setting.enable_free_model_pre_consume': boolean
+  'credit_display_setting.enabled': boolean
+  'credit_display_setting.label': string
+  'credit_display_setting.quota_per_credit': number
+  'credit_display_setting.precision': number
+  'profit_setting.default_markup_percent': number
+  'profit_setting.upstream_cost_per_million_tokens': number
+  'video_billing_setting.profiles': string
+  'onboarding_setting.new_user_quota': number
+  'onboarding_setting.default_group': string
+  'onboarding_setting.default_token_enabled': number
+  'onboarding_setting.default_token_group': string
+  'onboarding_setting.default_token_quota': number
+  'onboarding_setting.default_token_unlimited': boolean
   QuotaPerUnit: number
   USDExchangeRate: number
   'general_setting.quota_display_type': string
