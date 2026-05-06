@@ -69,7 +69,7 @@ export function Features(_props: FeaturesProps) {
           {['text', 'image', 'video', 'audio'].map((m) => (
             <div
               key={m}
-              className='border-emerald-500/20 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400 rounded border px-2 py-1 text-[10px] font-medium'
+              className='rounded border border-emerald-500/20 bg-emerald-500/5 px-2 py-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-400'
             >
               {m}
             </div>
@@ -88,7 +88,7 @@ export function Features(_props: FeaturesProps) {
       icon: <Layers className='size-4 text-violet-400' />,
       visual: (
         <div className='mt-4 flex items-center justify-center gap-2'>
-          <div className='border-violet-500/30 bg-violet-500/10 flex size-10 items-center justify-center rounded border text-[10px] font-medium text-violet-700 dark:text-violet-400'>
+          <div className='flex size-10 items-center justify-center rounded border border-violet-500/30 bg-violet-500/10 text-[10px] font-medium text-violet-700 dark:text-violet-400'>
             first
           </div>
           <div className='text-muted-foreground/40 text-[10px]'>→</div>
@@ -96,7 +96,7 @@ export function Features(_props: FeaturesProps) {
             ···
           </div>
           <div className='text-muted-foreground/40 text-[10px]'>→</div>
-          <div className='border-violet-500/30 bg-violet-500/10 flex size-10 items-center justify-center rounded border text-[10px] font-medium text-violet-700 dark:text-violet-400'>
+          <div className='flex size-10 items-center justify-center rounded border border-violet-500/30 bg-violet-500/10 text-[10px] font-medium text-violet-700 dark:text-violet-400'>
             last
           </div>
         </div>
@@ -116,7 +116,7 @@ export function Features(_props: FeaturesProps) {
           {[3, 7, 10, 5, 8, 11, 4, 9, 6, 12, 5, 8].map((h, i) => (
             <div
               key={i}
-              className='from-amber-500/40 to-amber-500/10 w-1.5 rounded-full bg-gradient-to-t'
+              className='w-1.5 rounded-full bg-gradient-to-t from-amber-500/40 to-amber-500/10'
               style={{ height: `${h * 2.5}px` }}
             />
           ))}

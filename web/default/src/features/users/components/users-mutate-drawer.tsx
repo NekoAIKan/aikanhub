@@ -5,15 +5,14 @@ import { useQuery } from '@tanstack/react-query'
 import { Pencil } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
-import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
 import {
   billingVisibilitySettingsFromOptionRows,
   getBillingVisibilityDescriptionKey,
   getBillingVisibilityLabelKey,
   resolveBillingVisibilityMode,
 } from '@/lib/billing-visibility'
-import { BillingVisibilityBadge } from '@/components/billing-visibility-badge'
+import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
+import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -43,9 +42,10 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
+import { BillingVisibilityBadge } from '@/components/billing-visibility-badge'
+import { useSystemOptions } from '../../system-settings/hooks/use-system-options'
 import { createUser, updateUser, getUser, getGroups } from '../api'
 import { BINDING_FIELDS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
-import { useSystemOptions } from '../../system-settings/hooks/use-system-options'
 import {
   userFormSchema,
   type UserFormValues,

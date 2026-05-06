@@ -5,7 +5,9 @@ import { CopyButton } from '@/components/copy-button'
 import { PublicLayout } from '@/components/layout'
 
 const ENDPOINT_BASE =
-  typeof window !== 'undefined' ? window.location.origin : 'https://your.kittyvibe.com'
+  typeof window !== 'undefined'
+    ? window.location.origin
+    : 'https://your.kittyvibe.com'
 
 // ============================================================================
 // Code samples (literal — code stays in English; example prompts kept in
@@ -433,13 +435,13 @@ console.log("saved to out.mp4");`
 function CodeBlock({ code, lang }: { code: string; lang: string }) {
   return (
     <div className='relative'>
-      <div className='bg-muted text-muted-foreground border-b px-4 py-2 text-xs font-medium uppercase tracking-wider'>
+      <div className='bg-muted text-muted-foreground border-b px-4 py-2 text-xs font-medium tracking-wider uppercase'>
         {lang}
       </div>
       <pre className='bg-card overflow-x-auto p-4 text-sm leading-relaxed'>
         <code>{code}</code>
       </pre>
-      <div className='absolute right-2 top-10'>
+      <div className='absolute top-10 right-2'>
         <CopyButton value={code} variant='ghost' size='sm' />
       </div>
     </div>
@@ -478,7 +480,9 @@ function Section({
     <section id={id} className='scroll-mt-24 space-y-4'>
       <div className='space-y-1'>
         <h2 className='text-2xl font-semibold tracking-tight'>{title}</h2>
-        {description && <div className='text-muted-foreground text-sm'>{description}</div>}
+        {description && (
+          <div className='text-muted-foreground text-sm'>{description}</div>
+        )}
       </div>
       {children}
     </section>
@@ -499,14 +503,14 @@ function EndpointCard({
       ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
       : 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
   return (
-    <div className='border bg-card flex items-start gap-3 rounded-md p-3'>
+    <div className='bg-card flex items-start gap-3 rounded-md border p-3'>
       <span
-        className={`shrink-0 rounded px-2 py-0.5 text-xs font-mono font-semibold ${methodColor}`}
+        className={`shrink-0 rounded px-2 py-0.5 font-mono text-xs font-semibold ${methodColor}`}
       >
         {method}
       </span>
       <div className='space-y-1'>
-        <code className='text-sm font-mono'>{path}</code>
+        <code className='font-mono text-sm'>{path}</code>
         <p className='text-muted-foreground text-xs'>{description}</p>
       </div>
     </div>
@@ -542,9 +546,9 @@ function ParamTable({
       <table className='w-full text-sm'>
         <thead className='bg-muted'>
           <tr className='text-left'>
-            <th className='px-4 py-2 font-medium w-44'>{fieldLabel}</th>
-            <th className='px-4 py-2 font-medium w-28'>{typeLabel}</th>
-            <th className='px-4 py-2 font-medium w-20'>{requiredLabel}</th>
+            <th className='w-44 px-4 py-2 font-medium'>{fieldLabel}</th>
+            <th className='w-28 px-4 py-2 font-medium'>{typeLabel}</th>
+            <th className='w-20 px-4 py-2 font-medium'>{requiredLabel}</th>
             <th className='px-4 py-2 font-medium'>{descLabel}</th>
           </tr>
         </thead>
@@ -555,7 +559,9 @@ function ParamTable({
               <td className='px-4 py-2 text-xs'>{p.type}</td>
               <td className='px-4 py-2 text-xs'>
                 {p.required ? (
-                  <span className='font-medium text-red-600 dark:text-red-400'>{yes}</span>
+                  <span className='font-medium text-red-600 dark:text-red-400'>
+                    {yes}
+                  </span>
                 ) : (
                   <span className='text-muted-foreground'>{no}</span>
                 )}
@@ -575,7 +581,9 @@ function MethodBadge({ method }: { method: 'GET' | 'POST' }) {
       ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
       : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
   return (
-    <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold ${color}`}>
+    <span
+      className={`inline-block rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold ${color}`}
+    >
       {method}
     </span>
   )
@@ -602,7 +610,9 @@ function Callout({
     tip: 'bg-emerald-50 text-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-200',
   }
   return (
-    <div className={`rounded-md p-3 text-xs leading-relaxed ${styles[type]}`}>{children}</div>
+    <div className={`rounded-md p-3 text-xs leading-relaxed ${styles[type]}`}>
+      {children}
+    </div>
   )
 }
 
@@ -615,10 +625,10 @@ function K({ children }: { children: React.ReactNode }) {
 // ============================================================================
 
 const SEEDANCE_MODELS = [
-  { id: 'doubao-seedance-2-0-260128',          name: 'Seedance 2.0' },
-  { id: 'doubao-seedance-2-0-fast-260128',     name: 'Seedance 2.0 fast' },
-  { id: 'doubao-seedance-1-5-pro-251215',      name: 'Seedance 1.5 pro' },
-  { id: 'doubao-seedance-1-0-pro-250528',      name: 'Seedance 1.0 pro' },
+  { id: 'doubao-seedance-2-0-260128', name: 'Seedance 2.0' },
+  { id: 'doubao-seedance-2-0-fast-260128', name: 'Seedance 2.0 fast' },
+  { id: 'doubao-seedance-1-5-pro-251215', name: 'Seedance 1.5 pro' },
+  { id: 'doubao-seedance-1-0-pro-250528', name: 'Seedance 1.0 pro' },
   { id: 'doubao-seedance-1-0-pro-fast-251015', name: 'Seedance 1.0 pro fast' },
   { id: 'doubao-seedance-1-0-lite-i2v-250428', name: 'Seedance 1.0 lite i2v' },
   { id: 'doubao-seedance-1-0-lite-t2v-250428', name: 'Seedance 1.0 lite t2v' },
@@ -679,7 +689,7 @@ function useActiveSection(sectionIds: string[]): string | null {
           if (best) setActive(best)
         }
       },
-      { rootMargin: '-80px 0px -50% 0px', threshold: [0, 0.25, 0.5, 1] },
+      { rootMargin: '-80px 0px -50% 0px', threshold: [0, 0.25, 0.5, 1] }
     )
 
     elements.forEach((el) => observer.observe(el))
@@ -698,7 +708,12 @@ export function Docs() {
 
   const NAV_GROUPS: Array<{
     label: string
-    items: Array<{ id: string; label: string; method?: 'GET' | 'POST'; isNew?: boolean }>
+    items: Array<{
+      id: string
+      label: string
+      method?: 'GET' | 'POST'
+      isNew?: boolean
+    }>
   }> = useMemo(
     () => [
       {
@@ -716,12 +731,40 @@ export function Docs() {
           { id: 'seedance-overview', label: t('Seedance overview') },
           { id: 'models', label: t('Models & capabilities') },
           { id: 'mode-text', label: t('Text-to-video'), method: 'POST' },
-          { id: 'mode-image-first', label: t('Image-to-video · first frame'), method: 'POST' },
-          { id: 'mode-image-firstlast', label: t('Image-to-video · first/last frame'), method: 'POST' },
-          { id: 'mode-multimodal', label: t('Multi-modal reference'), method: 'POST', isNew: true },
-          { id: 'mode-edit', label: t('Edit video'), method: 'POST', isNew: true },
-          { id: 'mode-extend', label: t('Extend video'), method: 'POST', isNew: true },
-          { id: 'mode-web-search', label: t('Web search augmented'), method: 'POST', isNew: true },
+          {
+            id: 'mode-image-first',
+            label: t('Image-to-video · first frame'),
+            method: 'POST',
+          },
+          {
+            id: 'mode-image-firstlast',
+            label: t('Image-to-video · first/last frame'),
+            method: 'POST',
+          },
+          {
+            id: 'mode-multimodal',
+            label: t('Multi-modal reference'),
+            method: 'POST',
+            isNew: true,
+          },
+          {
+            id: 'mode-edit',
+            label: t('Edit video'),
+            method: 'POST',
+            isNew: true,
+          },
+          {
+            id: 'mode-extend',
+            label: t('Extend video'),
+            method: 'POST',
+            isNew: true,
+          },
+          {
+            id: 'mode-web-search',
+            label: t('Web search augmented'),
+            method: 'POST',
+            isNew: true,
+          },
           { id: 'params', label: t('Full request parameters') },
           { id: 'media-limits', label: t('Input file limits') },
         ],
@@ -745,27 +788,82 @@ export function Docs() {
         ],
       },
     ],
-    [t],
+    [t]
   )
 
-  const allIds = useMemo(() => NAV_GROUPS.flatMap((g) => g.items.map((i) => i.id)), [NAV_GROUPS])
+  const allIds = useMemo(
+    () => NAV_GROUPS.flatMap((g) => g.items.map((i) => i.id)),
+    [NAV_GROUPS]
+  )
   const activeId = useActiveSection(allIds)
   const activeGroup =
-    NAV_GROUPS.find((g) => g.items.some((i) => i.id === activeId)) ?? NAV_GROUPS[0]
+    NAV_GROUPS.find((g) => g.items.some((i) => i.id === activeId)) ??
+    NAV_GROUPS[0]
 
   // ---- Capability matrix rows (built inside component so labels can use t()) ----
   const CAPABILITY_ROWS: Array<{ label: React.ReactNode; values: Cap[] }> = [
-    { label: t('Text to video'),                              values: [Y, Y, Y, Y, Y, N, Y] },
-    { label: t('Image to video · first frame'),                values: [Y, Y, Y, Y, Y, Y, N] },
-    { label: t('Image to video · first/last frame'),           values: [Y, Y, Y, Y, N, Y, N] },
-    { label: <>{t('Multi-modal · image reference')}<NewBadge /></>, values: [Y, Y, N, N, N, Y, N] },
-    { label: <>{t('Multi-modal · video reference')}<NewBadge /></>, values: [Y, Y, N, N, N, N, N] },
-    { label: <>{t('Multi-modal · combined reference')}<NewBadge /></>, values: [Y, Y, N, N, N, N, N] },
-    { label: <>{t('Edit video')}<NewBadge /></>,              values: [Y, N, N, N, N, N, N] },
-    { label: <>{t('Extend video')}<NewBadge /></>,            values: [Y, N, N, N, N, N, N] },
-    { label: t('Audio generation'),                            values: [Y, Y, N, N, N, N, N] },
-    { label: <>{t('Web search augmented')}<NewBadge /></>,    values: [Y, N, N, N, N, N, N] },
-    { label: t('Returns last frame'),                          values: [Y, Y, Y, Y, Y, Y, Y] },
+    { label: t('Text to video'), values: [Y, Y, Y, Y, Y, N, Y] },
+    { label: t('Image to video · first frame'), values: [Y, Y, Y, Y, Y, Y, N] },
+    {
+      label: t('Image to video · first/last frame'),
+      values: [Y, Y, Y, Y, N, Y, N],
+    },
+    {
+      label: (
+        <>
+          {t('Multi-modal · image reference')}
+          <NewBadge />
+        </>
+      ),
+      values: [Y, Y, N, N, N, Y, N],
+    },
+    {
+      label: (
+        <>
+          {t('Multi-modal · video reference')}
+          <NewBadge />
+        </>
+      ),
+      values: [Y, Y, N, N, N, N, N],
+    },
+    {
+      label: (
+        <>
+          {t('Multi-modal · combined reference')}
+          <NewBadge />
+        </>
+      ),
+      values: [Y, Y, N, N, N, N, N],
+    },
+    {
+      label: (
+        <>
+          {t('Edit video')}
+          <NewBadge />
+        </>
+      ),
+      values: [Y, N, N, N, N, N, N],
+    },
+    {
+      label: (
+        <>
+          {t('Extend video')}
+          <NewBadge />
+        </>
+      ),
+      values: [Y, N, N, N, N, N, N],
+    },
+    { label: t('Audio generation'), values: [Y, Y, N, N, N, N, N] },
+    {
+      label: (
+        <>
+          {t('Web search augmented')}
+          <NewBadge />
+        </>
+      ),
+      values: [Y, N, N, N, N, N, N],
+    },
+    { label: t('Returns last frame'), values: [Y, Y, Y, Y, Y, Y, Y] },
   ]
 
   const SPEC_ROWS: Array<{ label: string; values: string[] }> = [
@@ -820,7 +918,7 @@ export function Docs() {
                   <div key={group.label} className='space-y-1.5'>
                     <a
                       href={`#${group.items[0].id}`}
-                      className='text-foreground hover:text-primary block text-xs font-semibold uppercase tracking-wider transition-colors'
+                      className='text-foreground hover:text-primary block text-xs font-semibold tracking-wider uppercase transition-colors'
                     >
                       {group.label}
                     </a>
@@ -837,7 +935,9 @@ export function Docs() {
                                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                             }`}
                           >
-                            {item.method && <MethodBadge method={item.method} />}
+                            {item.method && (
+                              <MethodBadge method={item.method} />
+                            )}
                             <span className='truncate'>{item.label}</span>
                             {item.isNew && (
                               <span className='ml-auto rounded bg-amber-100 px-1 text-[9px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'>
@@ -856,10 +956,12 @@ export function Docs() {
             {/* ===================== Main content ===================== */}
             <main className='min-w-0 flex-1 py-8'>
               <header className='mb-10 space-y-3 border-b pb-6'>
-                <h1 className='text-3xl font-semibold tracking-tight'>{t('API Documentation')}</h1>
+                <h1 className='text-3xl font-semibold tracking-tight'>
+                  {t('API Documentation')}
+                </h1>
                 <p className='text-muted-foreground text-sm'>
                   {t(
-                    'kittyvibe video generation API — call mainstream video models with one token, OpenAI-style async tasks.',
+                    'kittyvibe video generation API — call mainstream video models with one token, OpenAI-style async tasks.'
                   )}
                 </p>
               </header>
@@ -870,18 +972,18 @@ export function Docs() {
                   id='overview'
                   title={t('Introduction')}
                   description={t(
-                    'In one sentence: use a single sk- key to drive Seedance and other mainstream video generation models.',
+                    'In one sentence: use a single sk- key to drive Seedance and other mainstream video generation models.'
                   )}
                 >
                   <p className='text-sm leading-relaxed'>
                     {t(
-                      'kittyvibe is a unified video generation API gateway. All supported models are called through the same set of endpoints — one token, no per-vendor signups, no SDK juggling, no fragmented invoices.',
+                      'kittyvibe is a unified video generation API gateway. All supported models are called through the same set of endpoints — one token, no per-vendor signups, no SDK juggling, no fragmented invoices.'
                     )}
                   </p>
                   <ul className='text-muted-foreground list-disc space-y-1 pl-6 text-sm'>
                     <li>
-                      {t('Async task model: submit and receive a')} <K>task_id</K>,{' '}
-                      {t('then poll until it finishes.')}
+                      {t('Async task model: submit and receive a')}{' '}
+                      <K>task_id</K>, {t('then poll until it finishes.')}
                     </li>
                     <li>
                       {t('OpenAI-style auth (')}
@@ -890,12 +992,15 @@ export function Docs() {
                     </li>
                     <li>
                       {t(
-                        'Videos are served from kittyvibe-signed URLs so storage links never leak to clients.',
+                        'Videos are served from kittyvibe-signed URLs so storage links never leak to clients.'
                       )}
                     </li>
                     <li>
                       {t('Unified billing per video — see')}{' '}
-                      <a href='#pricing' className='text-primary hover:underline'>
+                      <a
+                        href='#pricing'
+                        className='text-primary hover:underline'
+                      >
                         {t('Pricing')}
                       </a>
                       .
@@ -906,46 +1011,64 @@ export function Docs() {
                 <Section
                   id='quick-start'
                   title={t('Quick start')}
-                  description={t('Three steps to your first video generation request.')}
+                  description={t(
+                    'Three steps to your first video generation request.'
+                  )}
                 >
                   <ol className='space-y-5'>
                     <li className='space-y-2'>
-                      <h3 className='font-medium'>{t('1. Create an API key')}</h3>
+                      <h3 className='font-medium'>
+                        {t('1. Create an API key')}
+                      </h3>
                       <p className='text-muted-foreground text-sm'>
                         {t('Sign in, open the')}{' '}
-                        <a href='/keys' className='text-primary hover:underline'>
+                        <a
+                          href='/keys'
+                          className='text-primary hover:underline'
+                        >
                           {t('Tokens')}
                         </a>{' '}
                         {t(
-                          'page, click "Create API key", then copy the string starting with',
+                          'page, click "Create API key", then copy the string starting with'
                         )}{' '}
                         <K>sk-</K>.
                       </p>
                     </li>
                     <li className='space-y-2'>
-                      <h3 className='font-medium'>{t('2. Set environment variable')}</h3>
+                      <h3 className='font-medium'>
+                        {t('2. Set environment variable')}
+                      </h3>
                       <CodeBlock
                         lang='shell'
                         code={`export AIKANHUB_TOKEN=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`}
                       />
                     </li>
                     <li className='space-y-2'>
-                      <h3 className='font-medium'>{t('3. Submit a text-to-video task')}</h3>
+                      <h3 className='font-medium'>
+                        {t('3. Submit a text-to-video task')}
+                      </h3>
                       <CodeTabs shell={CURL_T2V} python={PY_T2V} />
                       <p className='text-muted-foreground text-xs'>
                         {t('A successful response includes a')} <K>task_id</K>.{' '}
                         {t('Use it to')}{' '}
-                        <a href='#poll' className='text-primary hover:underline'>
+                        <a
+                          href='#poll'
+                          className='text-primary hover:underline'
+                        >
                           {t('check progress')}
                         </a>
-                        ,{' '}
-                        {t('then')}{' '}
-                        <a href='#download' className='text-primary hover:underline'>
+                        , {t('then')}{' '}
+                        <a
+                          href='#download'
+                          className='text-primary hover:underline'
+                        >
                           {t('download the video')}
                         </a>
-                        .{' '}
-                        {t('The full code lives in')}{' '}
-                        <a href='#full-example' className='text-primary hover:underline'>
+                        . {t('The full code lives in')}{' '}
+                        <a
+                          href='#full-example'
+                          className='text-primary hover:underline'
+                        >
                           {t('End-to-end example')}
                         </a>
                         .
@@ -957,12 +1080,17 @@ export function Docs() {
                 <Section
                   id='auth'
                   title={t('Authentication')}
-                  description={t('All endpoints use Bearer Token authentication.')}
+                  description={t(
+                    'All endpoints use Bearer Token authentication.'
+                  )}
                 >
-                  <CodeBlock lang='shell' code={`Authorization: Bearer $AIKANHUB_TOKEN`} />
+                  <CodeBlock
+                    lang='shell'
+                    code={`Authorization: Bearer $AIKANHUB_TOKEN`}
+                  />
                   <p className='text-muted-foreground text-sm'>
                     {t(
-                      'A single token can call every supported model. Per-token model scope, quota, and concurrency limits can be configured on the',
+                      'A single token can call every supported model. Per-token model scope, quota, and concurrency limits can be configured on the'
                     )}{' '}
                     <a href='/keys' className='text-primary hover:underline'>
                       {t('Tokens')}
@@ -976,17 +1104,23 @@ export function Docs() {
                     <EndpointCard
                       method='POST'
                       path='/v1/video/generations'
-                      description={t('Submit a video generation task; returns task_id.')}
+                      description={t(
+                        'Submit a video generation task; returns task_id.'
+                      )}
                     />
                     <EndpointCard
                       method='GET'
                       path='/v1/video/generations/:task_id'
-                      description={t('Query task status, progress, and final video URL.')}
+                      description={t(
+                        'Query task status, progress, and final video URL.'
+                      )}
                     />
                     <EndpointCard
                       method='GET'
                       path='/v1/videos/:task_id/content'
-                      description={t('Download or preview the video file (valid for 24h).')}
+                      description={t(
+                        'Download or preview the video file (valid for 24h).'
+                      )}
                     />
                   </div>
                 </Section>
@@ -996,15 +1130,16 @@ export function Docs() {
                   id='seedance-overview'
                   title={t('Seedance overview')}
                   description={t(
-                    'Seedance is a high-end video generation model series. kittyvibe supports every Seedance call mode: text-to-video, image-to-video (first / first+last frame), multi-modal reference, edit video, extend video — plus audio generation and web search augmentation.',
+                    'Seedance is a high-end video generation model series. kittyvibe supports every Seedance call mode: text-to-video, image-to-video (first / first+last frame), multi-modal reference, edit video, extend video — plus audio generation and web search augmentation.'
                   )}
                 >
                   <Callout type='tip'>
-                    <strong>{t('Choosing a model:')}</strong>{' '}
-                    {t('use')} <K>doubao-seedance-2-0-260128</K>{' '}
-                    {t('for the highest quality;')} <K>doubao-seedance-2-0-fast-260128</K>{' '}
+                    <strong>{t('Choosing a model:')}</strong> {t('use')}{' '}
+                    <K>doubao-seedance-2-0-260128</K>{' '}
+                    {t('for the highest quality;')}{' '}
+                    <K>doubao-seedance-2-0-fast-260128</K>{' '}
                     {t(
-                      'when speed and cost matter most; the 1.x series for basic text/image-to-video only.',
+                      'when speed and cost matter most; the 1.x series for basic text/image-to-video only.'
                     )}
                   </Callout>
                   <Callout type='info'>
@@ -1018,18 +1153,20 @@ export function Docs() {
                         {t('one image, one output video.')}
                       </li>
                       <li>
-                        <strong>{t('Image-to-video · first/last frame')}</strong>:{' '}
-                        {t('two images (first and last).')}
+                        <strong>
+                          {t('Image-to-video · first/last frame')}
+                        </strong>
+                        : {t('two images (first and last).')}
                       </li>
                       <li>
                         <strong>{t('Multi-modal reference')}</strong>:{' '}
                         {t(
-                          'any combination of images (0–9), videos (0–3), audio (0–3), plus text prompt.',
+                          'any combination of images (0–9), videos (0–3), audio (0–3), plus text prompt.'
                         )}
                       </li>
                     </ul>
                     {t(
-                      'Note: audio cannot be the only input — it must accompany at least one reference video or image.',
+                      'Note: audio cannot be the only input — it must accompany at least one reference video or image.'
                     )}
                   </Callout>
                 </Section>
@@ -1039,16 +1176,18 @@ export function Docs() {
                     <table className='min-w-full text-xs'>
                       <thead className='bg-muted'>
                         <tr>
-                          <th className='sticky left-0 bg-muted px-3 py-2 text-left font-medium'>
+                          <th className='bg-muted sticky left-0 px-3 py-2 text-left font-medium'>
                             {t('Capability / spec')}
                           </th>
                           {SEEDANCE_MODELS.map((m) => (
                             <th
                               key={m.id}
-                              className='whitespace-nowrap px-3 py-2 text-left font-medium'
+                              className='px-3 py-2 text-left font-medium whitespace-nowrap'
                             >
                               <div className='font-semibold'>{m.name}</div>
-                              <div className='text-muted-foreground font-mono text-[10px]'>{m.id}</div>
+                              <div className='text-muted-foreground font-mono text-[10px]'>
+                                {m.id}
+                              </div>
                             </th>
                           ))}
                         </tr>
@@ -1056,7 +1195,9 @@ export function Docs() {
                       <tbody className='divide-y'>
                         {CAPABILITY_ROWS.map((row, i) => (
                           <tr key={i}>
-                            <td className='sticky left-0 bg-card px-3 py-2 text-left'>{row.label}</td>
+                            <td className='bg-card sticky left-0 px-3 py-2 text-left'>
+                              {row.label}
+                            </td>
                             {row.values.map((v, j) => (
                               <td key={j} className='px-3 py-2 text-center'>
                                 {v}
@@ -1066,11 +1207,14 @@ export function Docs() {
                         ))}
                         {SPEC_ROWS.map((row, i) => (
                           <tr key={`spec-${i}`} className='bg-muted/30'>
-                            <td className='sticky left-0 bg-muted/30 px-3 py-2 text-left font-medium'>
+                            <td className='bg-muted/30 sticky left-0 px-3 py-2 text-left font-medium'>
                               {row.label}
                             </td>
                             {row.values.map((v, j) => (
-                              <td key={j} className='whitespace-nowrap px-3 py-2'>
+                              <td
+                                key={j}
+                                className='px-3 py-2 whitespace-nowrap'
+                              >
                                 {v}
                               </td>
                             ))}
@@ -1080,9 +1224,7 @@ export function Docs() {
                     </table>
                   </div>
                   <p className='text-muted-foreground text-xs'>
-                    {t(
-                      'Output format is always mp4.',
-                    )}
+                    {t('Output format is always mp4.')}
                   </p>
                 </Section>
 
@@ -1091,14 +1233,13 @@ export function Docs() {
                   id='mode-text'
                   title={t('Text-to-video')}
                   description={t(
-                    'POST /v1/video/generations · text prompt only. Supported by every Seedance model.',
+                    'POST /v1/video/generations · text prompt only. Supported by every Seedance model.'
                   )}
                 >
                   <CodeTabs shell={CURL_T2V} python={PY_T2V} />
                   <p className='text-muted-foreground text-sm'>
-                    {t('Top-level fields:')} <K>prompt</K>{' '}
-                    {t('is required;')} <K>size</K>{' '}
-                    {t('controls resolution (')}
+                    {t('Top-level fields:')} <K>prompt</K> {t('is required;')}{' '}
+                    <K>size</K> {t('controls resolution (')}
                     <K>480p</K>/<K>720p</K>/<K>1080p</K>
                     {t(');')} <K>duration</K>{' '}
                     {t('controls length in seconds. Full field list:')}{' '}
@@ -1113,14 +1254,14 @@ export function Docs() {
                   id='mode-image-first'
                   title={t('Image-to-video · first frame')}
                   description={t(
-                    'Pass one reference image as the first frame, with an optional text prompt.',
+                    'Pass one reference image as the first frame, with an optional text prompt.'
                   )}
                 >
                   <CodeTabs shell={CURL_I2V_FIRST} python={PY_I2V_FIRST} />
                   <Callout type='info'>
                     {t('Top-level')} <K>images</K>{' '}
                     {t(
-                      'is sugar for the first frame — equivalent to passing a single image_url entry with role first_frame inside metadata.content. Use the full structure when you need finer control.',
+                      'is sugar for the first frame — equivalent to passing a single image_url entry with role first_frame inside metadata.content. Use the full structure when you need finer control.'
                     )}
                   </Callout>
                 </Section>
@@ -1129,13 +1270,17 @@ export function Docs() {
                   id='mode-image-firstlast'
                   title={t('Image-to-video · first/last frame')}
                   description={t(
-                    'Pass two images, marking each with role: first_frame / last_frame.',
+                    'Pass two images, marking each with role: first_frame / last_frame.'
                   )}
                 >
-                  <CodeTabs shell={CURL_I2V_FIRSTLAST} python={PY_I2V_FIRSTLAST} />
+                  <CodeTabs
+                    shell={CURL_I2V_FIRSTLAST}
+                    python={PY_I2V_FIRSTLAST}
+                  />
                   <p className='text-muted-foreground text-sm'>
                     {t('Both images must declare a')} <K>role</K>{' '}
-                    {t('— specifically')} <K>first_frame</K> {t('and')} <K>last_frame</K>{' '}
+                    {t('— specifically')} <K>first_frame</K> {t('and')}{' '}
+                    <K>last_frame</K>{' '}
                     {t("— otherwise the model can't infer the time order.")}
                   </p>
                 </Section>
@@ -1146,7 +1291,7 @@ export function Docs() {
                   description={
                     <>
                       {t(
-                        'Seedance 2.0 / 2.0 fast only. Combine 0–9 reference images, 0–3 reference videos, 0–3 reference audios into a single output video.',
+                        'Seedance 2.0 / 2.0 fast only. Combine 0–9 reference images, 0–3 reference videos, 0–3 reference audios into a single output video.'
                       )}
                       <NewBadge />
                     </>
@@ -1160,9 +1305,12 @@ export function Docs() {
                   </p>
                   <Callout type='warn'>
                     {t(
-                      'Audio cannot be passed alone — it must accompany at least one reference video or image. If you need strict first/last frame matching, prefer',
+                      'Audio cannot be passed alone — it must accompany at least one reference video or image. If you need strict first/last frame matching, prefer'
                     )}{' '}
-                    <a href='#mode-image-firstlast' className='text-primary hover:underline'>
+                    <a
+                      href='#mode-image-firstlast'
+                      className='text-primary hover:underline'
+                    >
                       {t('Image-to-video · first/last frame')}
                     </a>
                     .
@@ -1175,7 +1323,7 @@ export function Docs() {
                   description={
                     <>
                       {t(
-                        'Seedance 2.0 only. Locally replace or alter elements of an existing video while preserving camera motion and composition.',
+                        'Seedance 2.0 only. Locally replace or alter elements of an existing video while preserving camera motion and composition.'
                       )}
                       <NewBadge />
                     </>
@@ -1184,7 +1332,7 @@ export function Docs() {
                   <CodeTabs shell={CURL_EDIT} python={PY_EDIT} />
                   <p className='text-muted-foreground text-sm'>
                     {t(
-                      'Combine a reference video with reference image(s) and a prompt that describes the edit, e.g. "Replace the perfume in video1 with the cream from image1; keep camera motion intact".',
+                      'Combine a reference video with reference image(s) and a prompt that describes the edit, e.g. "Replace the perfume in video1 with the cream from image1; keep camera motion intact".'
                     )}
                   </p>
                 </Section>
@@ -1195,7 +1343,7 @@ export function Docs() {
                   description={
                     <>
                       {t(
-                        'Seedance 2.0 only. Stitch multiple reference videos into one continuous clip; the model fills in the transitions.',
+                        'Seedance 2.0 only. Stitch multiple reference videos into one continuous clip; the model fills in the transitions.'
                       )}
                       <NewBadge />
                     </>
@@ -1204,7 +1352,7 @@ export function Docs() {
                   <CodeTabs shell={CURL_EXTEND} python={PY_EXTEND} />
                   <p className='text-muted-foreground text-sm'>
                     {t(
-                      'Up to three reference videos, total duration ≤ 15 s. The prompt describes the transitions or camera moves between segments.',
+                      'Up to three reference videos, total duration ≤ 15 s. The prompt describes the transitions or camera moves between segments.'
                     )}
                   </p>
                 </Section>
@@ -1215,7 +1363,7 @@ export function Docs() {
                   description={
                     <>
                       {t(
-                        'Seedance 2.0 only, text-to-video only. The model retrieves real-time web information before generation, improving accuracy for time-sensitive content (products, weather, news).',
+                        'Seedance 2.0 only, text-to-video only. The model retrieves real-time web information before generation, improving accuracy for time-sensitive content (products, weather, news).'
                       )}
                       <NewBadge />
                     </>
@@ -1223,11 +1371,11 @@ export function Docs() {
                 >
                   <CodeTabs shell={CURL_WEB_SEARCH} python={PY_WEB_SEARCH} />
                   <p className='text-muted-foreground text-sm'>
-                    {t('Configure via')} <K>{`metadata.tools: [{"type":"web_search"}]`}</K>.{' '}
-                    {t('The response field')}{' '}
-                    <K>usage.tool_usage.web_search</K>{' '}
+                    {t('Configure via')}{' '}
+                    <K>{`metadata.tools: [{"type":"web_search"}]`}</K>.{' '}
+                    {t('The response field')} <K>usage.tool_usage.web_search</K>{' '}
                     {t(
-                      'reports how many searches were actually triggered (0 means none). This adds slight latency.',
+                      'reports how many searches were actually triggered (0 means none). This adds slight latency.'
                     )}
                   </p>
                 </Section>
@@ -1235,9 +1383,13 @@ export function Docs() {
                 <Section
                   id='params'
                   title={t('Full request parameters')}
-                  description={t('POST /v1/video/generations · top-level field reference.')}
+                  description={t(
+                    'POST /v1/video/generations · top-level field reference.'
+                  )}
                 >
-                  <h3 className='text-base font-medium'>{t('Top-level fields')}</h3>
+                  <h3 className='text-base font-medium'>
+                    {t('Top-level fields')}
+                  </h3>
                   <ParamTable
                     fieldLabel={t('Field')}
                     typeLabel={t('Type')}
@@ -1253,7 +1405,10 @@ export function Docs() {
                         desc: (
                           <>
                             {t('Model ID — see')}{' '}
-                            <a href='#models' className='text-primary hover:underline'>
+                            <a
+                              href='#models'
+                              className='text-primary hover:underline'
+                            >
                               {t('Models & capabilities')}
                             </a>
                             .
@@ -1264,7 +1419,7 @@ export function Docs() {
                         name: 'prompt',
                         type: 'string',
                         desc: t(
-                          'Text prompt. Chinese ≤ 500 chars / English ≤ 1000 words. Overly long prompts get partially ignored.',
+                          'Text prompt. Chinese ≤ 500 chars / English ≤ 1000 words. Overly long prompts get partially ignored.'
                         ),
                       },
                       {
@@ -1272,7 +1427,8 @@ export function Docs() {
                         type: 'string',
                         desc: (
                           <>
-                            {t('Resolution:')} <K>480p</K> · <K>720p</K> · <K>1080p</K>{' '}
+                            {t('Resolution:')} <K>480p</K> · <K>720p</K> ·{' '}
+                            <K>1080p</K>{' '}
                             {t('(default 720p; 2.0 does not support 1080p).')}
                           </>
                         ),
@@ -1282,8 +1438,10 @@ export function Docs() {
                         type: 'int',
                         desc: (
                           <>
-                            {t('Duration in seconds; range depends on model. Set to')} <K>-1</K>{' '}
-                            {t('to let the model decide.')}
+                            {t(
+                              'Duration in seconds; range depends on model. Set to'
+                            )}{' '}
+                            <K>-1</K> {t('to let the model decide.')}
                           </>
                         ),
                       },
@@ -1291,7 +1449,7 @@ export function Docs() {
                         name: 'images',
                         type: 'string[]',
                         desc: t(
-                          'Sugar for image-to-video first frame; equivalent to a metadata.content entry with role first_frame.',
+                          'Sugar for image-to-video first frame; equivalent to a metadata.content entry with role first_frame.'
                         ),
                       },
                       {
@@ -1302,7 +1460,9 @@ export function Docs() {
                     ]}
                   />
 
-                  <h3 className='pt-2 text-base font-medium'>{t('metadata fields')}</h3>
+                  <h3 className='pt-2 text-base font-medium'>
+                    {t('metadata fields')}
+                  </h3>
                   <ParamTable
                     fieldLabel={t('Field')}
                     typeLabel={t('Type')}
@@ -1317,9 +1477,12 @@ export function Docs() {
                         desc: (
                           <>
                             {t(
-                              'Content array for multi-modal / first-last / edit / extend modes. Each entry has',
+                              'Content array for multi-modal / first-last / edit / extend modes. Each entry has'
                             )}{' '}
-                            <K>{'{type, image_url|video_url|audio_url, role}'}</K>.
+                            <K>
+                              {'{type, image_url|video_url|audio_url, role}'}
+                            </K>
+                            .
                           </>
                         ),
                       },
@@ -1328,9 +1491,9 @@ export function Docs() {
                         type: 'string',
                         desc: (
                           <>
-                            {t('Aspect ratio:')} <K>16:9</K> · <K>9:16</K> · <K>1:1</K> ·{' '}
-                            <K>4:3</K> · <K>3:4</K> · <K>21:9</K> · <K>adaptive</K>{' '}
-                            {t('(default).')}
+                            {t('Aspect ratio:')} <K>16:9</K> · <K>9:16</K> ·{' '}
+                            <K>1:1</K> · <K>4:3</K> · <K>3:4</K> · <K>21:9</K> ·{' '}
+                            <K>adaptive</K> {t('(default).')}
                           </>
                         ),
                       },
@@ -1338,7 +1501,7 @@ export function Docs() {
                         name: 'metadata.generate_audio',
                         type: 'boolean',
                         desc: t(
-                          'Whether to generate a synced audio track (Seedance 2.0 / 2.0 fast only; default true).',
+                          'Whether to generate a synced audio track (Seedance 2.0 / 2.0 fast only; default true).'
                         ),
                       },
                       {
@@ -1355,13 +1518,15 @@ export function Docs() {
                         name: 'metadata.seed',
                         type: 'int',
                         desc: t(
-                          'Random seed; the same seed + parameters produce similar outputs.',
+                          'Random seed; the same seed + parameters produce similar outputs.'
                         ),
                       },
                       {
                         name: 'metadata.watermark',
                         type: 'boolean',
-                        desc: t('Whether to overlay a watermark (default false).'),
+                        desc: t(
+                          'Whether to overlay a watermark (default false).'
+                        ),
                       },
                       {
                         name: 'metadata.camera_fixed',
@@ -1371,12 +1536,16 @@ export function Docs() {
                       {
                         name: 'metadata.return_last_frame',
                         type: 'boolean',
-                        desc: t('Return a still frame from the end of the video in the response.'),
+                        desc: t(
+                          'Return a still frame from the end of the video in the response.'
+                        ),
                       },
                     ]}
                   />
 
-                  <h3 className='pt-2 text-base font-medium'>{t('content[].role values')}</h3>
+                  <h3 className='pt-2 text-base font-medium'>
+                    {t('content[].role values')}
+                  </h3>
                   <ParamTable
                     fieldLabel={t('Field')}
                     typeLabel={t('Type')}
@@ -1388,37 +1557,51 @@ export function Docs() {
                       {
                         name: 'first_frame',
                         type: 'string',
-                        desc: t('First frame image (optional in single-image mode).'),
+                        desc: t(
+                          'First frame image (optional in single-image mode).'
+                        ),
                       },
                       {
                         name: 'last_frame',
                         type: 'string',
-                        desc: t('Last frame image (required in first/last frame mode).'),
+                        desc: t(
+                          'Last frame image (required in first/last frame mode).'
+                        ),
                       },
                       {
                         name: 'reference_image',
                         type: 'string',
-                        desc: t('Multi-modal reference image; every reference image uses this role.'),
+                        desc: t(
+                          'Multi-modal reference image; every reference image uses this role.'
+                        ),
                       },
                       {
                         name: 'reference_video',
                         type: 'string',
-                        desc: t('Multi-modal reference video; every video clip uses this role.'),
+                        desc: t(
+                          'Multi-modal reference video; every video clip uses this role.'
+                        ),
                       },
                       {
                         name: 'reference_audio',
                         type: 'string',
-                        desc: t('Multi-modal reference audio; every audio segment uses this role.'),
+                        desc: t(
+                          'Multi-modal reference audio; every audio segment uses this role.'
+                        ),
                       },
                     ]}
                   />
 
-                  <h3 className='pt-2 text-base font-medium'>{t('Pixel dimensions per ratio')}</h3>
+                  <h3 className='pt-2 text-base font-medium'>
+                    {t('Pixel dimensions per ratio')}
+                  </h3>
                   <div className='overflow-hidden rounded-lg border'>
                     <table className='w-full text-xs'>
                       <thead className='bg-muted'>
                         <tr className='text-left'>
-                          <th className='px-4 py-2 font-medium'>{t('Resolution')}</th>
+                          <th className='px-4 py-2 font-medium'>
+                            {t('Resolution')}
+                          </th>
                           <th className='px-4 py-2 font-medium'>16:9</th>
                           <th className='px-4 py-2 font-medium'>9:16</th>
                           <th className='px-4 py-2 font-medium'>1:1</th>
@@ -1449,7 +1632,7 @@ export function Docs() {
                   <Callout type='tip'>
                     <K>ratio: adaptive</K> {t('(default):')}{' '}
                     {t(
-                      'the model picks the best ratio for the scene. Text-to-video infers from the prompt; first/last-frame matches the uploaded image; multi-modal follows the prompt intent (video > image).',
+                      'the model picks the best ratio for the scene. Text-to-video infers from the prompt; first/last-frame matches the uploaded image; multi-modal follows the prompt intent (video > image).'
                     )}
                   </Callout>
                 </Section>
@@ -1458,7 +1641,8 @@ export function Docs() {
                   <h3 className='text-base font-medium'>{t('Image')}</h3>
                   <ul className='text-muted-foreground list-disc space-y-1 pl-6 text-sm'>
                     <li>
-                      {t('Formats:')} <K>jpeg</K> · <K>png</K> · <K>webp</K> · <K>bmp</K> · <K>tiff</K> · <K>gif</K>
+                      {t('Formats:')} <K>jpeg</K> · <K>png</K> · <K>webp</K> ·{' '}
+                      <K>bmp</K> · <K>tiff</K> · <K>gif</K>
                     </li>
                     <li>
                       {t('Aspect ratio (W/H):')} <K>(0.4, 2.5)</K>
@@ -1468,16 +1652,18 @@ export function Docs() {
                     </li>
                     <li>
                       {t(
-                        'Size: ≤ 30 MB per image; total request body ≤ 64 MB (avoid Base64 for large files).',
+                        'Size: ≤ 30 MB per image; total request body ≤ 64 MB (avoid Base64 for large files).'
                       )}
                     </li>
                     <li>
                       {t(
-                        'Counts: 1 for first frame; 2 for first/last frame; 1–9 for multi-modal reference.',
+                        'Counts: 1 for first frame; 2 for first/last frame; 1–9 for multi-modal reference.'
                       )}
                     </li>
                   </ul>
-                  <h3 className='pt-2 text-base font-medium'>{t('Video (Seedance 2.0 / 2.0 fast only)')}</h3>
+                  <h3 className='pt-2 text-base font-medium'>
+                    {t('Video (Seedance 2.0 / 2.0 fast only)')}
+                  </h3>
                   <ul className='text-muted-foreground list-disc space-y-1 pl-6 text-sm'>
                     <li>
                       {t('Formats:')} <K>mp4</K> · <K>mov</K>
@@ -1485,34 +1671,40 @@ export function Docs() {
                     <li>{t('Resolution: 480p / 720p')}</li>
                     <li>
                       {t(
-                        'Duration: [2, 15] s per clip; up to 3 clips, total ≤ 15 s.',
+                        'Duration: [2, 15] s per clip; up to 3 clips, total ≤ 15 s.'
                       )}
                     </li>
                     <li>
                       {t(
-                        'Aspect ratio (W/H): [0.4, 2.5]; side length [300, 6000] px; pixel area [409600, 927408].',
+                        'Aspect ratio (W/H): [0.4, 2.5]; side length [300, 6000] px; pixel area [409600, 927408].'
                       )}
                     </li>
                     <li>{t('Size: ≤ 50 MB per clip; FPS [24, 60].')}</li>
                   </ul>
-                  <h3 className='pt-2 text-base font-medium'>{t('Audio (Seedance 2.0 / 2.0 fast only)')}</h3>
+                  <h3 className='pt-2 text-base font-medium'>
+                    {t('Audio (Seedance 2.0 / 2.0 fast only)')}
+                  </h3>
                   <ul className='text-muted-foreground list-disc space-y-1 pl-6 text-sm'>
                     <li>
                       {t('Formats:')} <K>wav</K> · <K>mp3</K>
                     </li>
                     <li>
-                      {t('Duration: [2, 15] s per clip; up to 3 clips, total ≤ 15 s.')}
+                      {t(
+                        'Duration: [2, 15] s per clip; up to 3 clips, total ≤ 15 s.'
+                      )}
                     </li>
-                    <li>{t('Size: ≤ 15 MB per clip; total request body ≤ 64 MB.')}</li>
+                    <li>
+                      {t('Size: ≤ 15 MB per clip; total request body ≤ 64 MB.')}
+                    </li>
                     <li>
                       {t(
-                        'Audio cannot be passed alone; it must accompany at least one reference video or image.',
+                        'Audio cannot be passed alone; it must accompany at least one reference video or image.'
                       )}
                     </li>
                   </ul>
                   <Callout type='info'>
                     {t(
-                      'Media inputs accept either a public URL or Base64 (data:image/png;base64,...). For large files, prefer URL to avoid oversized request bodies.',
+                      'Media inputs accept either a public URL or Base64 (data:image/png;base64,...). For large files, prefer URL to avoid oversized request bodies.'
                     )}
                   </Callout>
                 </Section>
@@ -1522,34 +1714,52 @@ export function Docs() {
                   id='poll'
                   title={t('Query a task')}
                   description={t(
-                    'GET /v1/video/generations/:task_id · recommended polling interval 5 s.',
+                    'GET /v1/video/generations/:task_id · recommended polling interval 5 s.'
                   )}
                 >
-                  <h3 className='text-base font-medium'>{t('Request example')}</h3>
+                  <h3 className='text-base font-medium'>
+                    {t('Request example')}
+                  </h3>
                   <CodeTabs shell={CURL_POLL} python={PY_POLL} />
-                  <h3 className='pt-2 text-base font-medium'>{t('Status values')}</h3>
+                  <h3 className='pt-2 text-base font-medium'>
+                    {t('Status values')}
+                  </h3>
                   <div className='overflow-hidden rounded-lg border'>
                     <table className='w-full text-sm'>
                       <thead className='bg-muted'>
                         <tr className='text-left'>
                           <th className='px-4 py-2 font-medium'>status</th>
-                          <th className='px-4 py-2 font-medium'>{t('Meaning')}</th>
-                          <th className='px-4 py-2 font-medium'>{t('Terminal?')}</th>
+                          <th className='px-4 py-2 font-medium'>
+                            {t('Meaning')}
+                          </th>
+                          <th className='px-4 py-2 font-medium'>
+                            {t('Terminal?')}
+                          </th>
                         </tr>
                       </thead>
                       <tbody className='divide-y text-xs'>
                         <tr>
-                          <td className='px-4 py-2 font-mono'>queued / NOT_START</td>
+                          <td className='px-4 py-2 font-mono'>
+                            queued / NOT_START
+                          </td>
                           <td className='px-4 py-2'>{t('Queued')}</td>
-                          <td className='px-4 py-2 text-muted-foreground'>{t('no')}</td>
+                          <td className='text-muted-foreground px-4 py-2'>
+                            {t('no')}
+                          </td>
                         </tr>
                         <tr>
-                          <td className='px-4 py-2 font-mono'>IN_PROGRESS / processing</td>
+                          <td className='px-4 py-2 font-mono'>
+                            IN_PROGRESS / processing
+                          </td>
                           <td className='px-4 py-2'>{t('Generating')}</td>
-                          <td className='px-4 py-2 text-muted-foreground'>{t('no')}</td>
+                          <td className='text-muted-foreground px-4 py-2'>
+                            {t('no')}
+                          </td>
                         </tr>
                         <tr>
-                          <td className='px-4 py-2 font-mono'>SUCCESS / succeeded</td>
+                          <td className='px-4 py-2 font-mono'>
+                            SUCCESS / succeeded
+                          </td>
                           <td className='px-4 py-2'>
                             {t('Completed; the video URL is at')}{' '}
                             <K>data.data.content.video_url</K>.
@@ -1557,7 +1767,9 @@ export function Docs() {
                           <td className='px-4 py-2'>✅</td>
                         </tr>
                         <tr>
-                          <td className='px-4 py-2 font-mono'>FAILED / failed</td>
+                          <td className='px-4 py-2 font-mono'>
+                            FAILED / failed
+                          </td>
                           <td className='px-4 py-2'>
                             {t('Failed; the reason is in')} <K>fail_reason</K>.
                           </td>
@@ -1566,7 +1778,9 @@ export function Docs() {
                       </tbody>
                     </table>
                   </div>
-                  <h3 className='pt-2 text-base font-medium'>{t('Response fields')}</h3>
+                  <h3 className='pt-2 text-base font-medium'>
+                    {t('Response fields')}
+                  </h3>
                   <ParamTable
                     fieldLabel={t('Field')}
                     typeLabel={t('Type')}
@@ -1575,13 +1789,21 @@ export function Docs() {
                     yes={t('yes')}
                     no={t('no')}
                     params={[
-                      { name: 'data.status', type: 'string', desc: t('Any of the status values above.') },
-                      { name: 'data.progress', type: 'string', desc: t('Like "50%"; informational only.') },
+                      {
+                        name: 'data.status',
+                        type: 'string',
+                        desc: t('Any of the status values above.'),
+                      },
+                      {
+                        name: 'data.progress',
+                        type: 'string',
+                        desc: t('Like "50%"; informational only.'),
+                      },
                       {
                         name: 'data.data.content.video_url',
                         type: 'string',
                         desc: t(
-                          'Video URL on success — signed link with limited validity, download promptly.',
+                          'Video URL on success — signed link with limited validity, download promptly.'
                         ),
                       },
                       {
@@ -1597,25 +1819,29 @@ export function Docs() {
                       {
                         name: 'data.data.usage.tool_usage.web_search',
                         type: 'int',
-                        desc: t('Web-search invocations (returned only when tools=[web_search]).'),
+                        desc: t(
+                          'Web-search invocations (returned only when tools=[web_search]).'
+                        ),
                       },
                       {
                         name: 'data.data.duration',
                         type: 'int',
                         desc: t(
-                          'Actual generated video duration in seconds — important when you submitted duration=-1.',
+                          'Actual generated video duration in seconds — important when you submitted duration=-1.'
                         ),
                       },
                       {
                         name: 'data.data.ratio',
                         type: 'string',
-                        desc: t('Actual aspect ratio (useful when you submitted ratio=adaptive).'),
+                        desc: t(
+                          'Actual aspect ratio (useful when you submitted ratio=adaptive).'
+                        ),
                       },
                     ]}
                   />
                   <p className='text-muted-foreground text-xs'>
                     {t(
-                      '720p / 5 s tasks usually finish in 90–120 s. Do not poll faster than every 5 s — you may trigger rate limits.',
+                      '720p / 5 s tasks usually finish in 90–120 s. Do not poll faster than every 5 s — you may trigger rate limits.'
                     )}
                   </p>
                 </Section>
@@ -1624,13 +1850,13 @@ export function Docs() {
                   id='download'
                   title={t('Download a video')}
                   description={t(
-                    'GET /v1/videos/:task_id/content · download the generated video file.',
+                    'GET /v1/videos/:task_id/content · download the generated video file.'
                   )}
                 >
                   <CodeTabs shell={CURL_DOWNLOAD} python={PY_DOWNLOAD} />
                   <p className='text-muted-foreground text-sm'>
                     {t(
-                      'This endpoint streams the video file directly. Response',
+                      'This endpoint streams the video file directly. Response'
                     )}{' '}
                     <K>Content-Type: video/mp4</K>
                     {t(', so you can embed directly with')}{' '}
@@ -1638,7 +1864,7 @@ export function Docs() {
                   </p>
                   <Callout type='warn'>
                     {t(
-                      '⚠️ Videos remain available for 24 hours. Download or re-host to your own storage immediately after success — the endpoint will return 502 after this window. Long-term storage is on the roadmap.',
+                      '⚠️ Videos remain available for 24 hours. Download or re-host to your own storage immediately after success — the endpoint will return 502 after this window. Long-term storage is on the roadmap.'
                     )}
                   </Callout>
                 </Section>
@@ -1647,10 +1873,13 @@ export function Docs() {
                   id='full-example'
                   title={t('End-to-end example')}
                   description={t(
-                    'Submit → poll → download. Drop-in code with error handling.',
+                    'Submit → poll → download. Drop-in code with error handling.'
                   )}
                 >
-                  <Tabs defaultValue='python' className='border rounded-lg overflow-hidden'>
+                  <Tabs
+                    defaultValue='python'
+                    className='overflow-hidden rounded-lg border'
+                  >
                     <TabsList className='bg-muted h-10 w-full justify-start rounded-none border-b px-2'>
                       <TabsTrigger value='python'>Python</TabsTrigger>
                       <TabsTrigger value='node'>Node.js</TabsTrigger>
@@ -1674,19 +1903,27 @@ export function Docs() {
                     <table className='w-full text-sm'>
                       <thead className='bg-muted'>
                         <tr className='text-left'>
-                          <th className='px-4 py-2 font-medium'>{t('Model')}</th>
+                          <th className='px-4 py-2 font-medium'>
+                            {t('Model')}
+                          </th>
                           <th className='px-4 py-2 font-medium'>{t('Spec')}</th>
-                          <th className='px-4 py-2 font-medium'>{t('Unit price')}</th>
+                          <th className='px-4 py-2 font-medium'>
+                            {t('Unit price')}
+                          </th>
                         </tr>
                       </thead>
                       <tbody className='divide-y text-xs'>
                         <tr>
-                          <td className='px-4 py-2 font-mono'>doubao-seedance-2-0-260128</td>
+                          <td className='px-4 py-2 font-mono'>
+                            doubao-seedance-2-0-260128
+                          </td>
                           <td className='px-4 py-2'>720p / 5 s</td>
                           <td className='px-4 py-2'>$0.885 / video</td>
                         </tr>
                         <tr>
-                          <td className='px-4 py-2 font-mono'>doubao-seedance-2-0-fast-260128</td>
+                          <td className='px-4 py-2 font-mono'>
+                            doubao-seedance-2-0-fast-260128
+                          </td>
                           <td className='px-4 py-2'>720p / 5 s</td>
                           <td className='px-4 py-2'>$0.712 / video</td>
                         </tr>
@@ -1695,7 +1932,7 @@ export function Docs() {
                   </div>
                   <p className='text-muted-foreground text-xs'>
                     {t(
-                      'Currently flat pricing (baseline 720p / 5 s / no video input). Per-resolution / per-duration / video-input pricing is in development. Multi-modal calls that include video inputs apply a discount multiplier. Failed tasks are not billed.',
+                      'Currently flat pricing (baseline 720p / 5 s / no video input). Per-resolution / per-duration / video-input pricing is in development. Multi-modal calls that include video inputs apply a discount multiplier. Failed tasks are not billed.'
                     )}
                   </p>
                 </Section>
@@ -1713,21 +1950,21 @@ export function Docs() {
                         name: 'RPM (online)',
                         type: '600 / 300',
                         desc: t(
-                          'Requests per minute. 600 for Seedance 2.x / 1.5 / 1.0 pro families; 300 for the 1.0 lite family. Excess returns 429.',
+                          'Requests per minute. 600 for Seedance 2.x / 1.5 / 1.0 pro families; 300 for the 1.0 lite family. Excess returns 429.'
                         ),
                       },
                       {
                         name: 'Concurrency',
                         type: '10 / 5',
                         desc: t(
-                          '10 in-flight tasks for 2.x / 1.5 / 1.0 pro families; 5 for the 1.0 lite family. Excess gets queued.',
+                          '10 in-flight tasks for 2.x / 1.5 / 1.0 pro families; 5 for the 1.0 lite family. Excess gets queued.'
                         ),
                       },
                       {
                         name: 'Per-task timeout',
                         type: '5 min',
                         desc: t(
-                          'Typical completion 90–120 s. Tasks past 5 minutes are auto-marked FAILED.',
+                          'Typical completion 90–120 s. Tasks past 5 minutes are auto-marked FAILED.'
                         ),
                       },
                       {
@@ -1736,9 +1973,12 @@ export function Docs() {
                         desc: (
                           <>
                             {t(
-                              'Deducted per success; depleting it returns 403. Top up on the',
+                              'Deducted per success; depleting it returns 403. Top up on the'
                             )}{' '}
-                            <a href='/wallet' className='text-primary hover:underline'>
+                            <a
+                              href='/wallet'
+                              className='text-primary hover:underline'
+                            >
                               {t('Wallet')}
                             </a>{' '}
                             {t('page.')}
@@ -1755,45 +1995,75 @@ export function Docs() {
                       <thead className='bg-muted'>
                         <tr className='text-left'>
                           <th className='px-4 py-2 font-medium'>HTTP</th>
-                          <th className='px-4 py-2 font-medium'>{t('Meaning')}</th>
-                          <th className='px-4 py-2 font-medium'>{t('Action')}</th>
+                          <th className='px-4 py-2 font-medium'>
+                            {t('Meaning')}
+                          </th>
+                          <th className='px-4 py-2 font-medium'>
+                            {t('Action')}
+                          </th>
                         </tr>
                       </thead>
                       <tbody className='divide-y text-xs'>
                         <tr>
                           <td className='px-4 py-2 font-mono'>400</td>
                           <td className='px-4 py-2'>{t('Bad parameter')}</td>
-                          <td className='px-4 py-2'>{t('Check model/prompt; read the message field for detail.')}</td>
+                          <td className='px-4 py-2'>
+                            {t(
+                              'Check model/prompt; read the message field for detail.'
+                            )}
+                          </td>
                         </tr>
                         <tr>
                           <td className='px-4 py-2 font-mono'>401</td>
                           <td className='px-4 py-2'>{t('Unauthorized')}</td>
-                          <td className='px-4 py-2'>{t('Check Authorization header format.')}</td>
+                          <td className='px-4 py-2'>
+                            {t('Check Authorization header format.')}
+                          </td>
                         </tr>
                         <tr>
                           <td className='px-4 py-2 font-mono'>403</td>
-                          <td className='px-4 py-2'>{t('Insufficient balance or model not authorized')}</td>
-                          <td className='px-4 py-2'>{t('Top up, or check token model scope.')}</td>
+                          <td className='px-4 py-2'>
+                            {t('Insufficient balance or model not authorized')}
+                          </td>
+                          <td className='px-4 py-2'>
+                            {t('Top up, or check token model scope.')}
+                          </td>
                         </tr>
                         <tr>
                           <td className='px-4 py-2 font-mono'>404</td>
-                          <td className='px-4 py-2'>{t('task_id not found or not owned by you')}</td>
+                          <td className='px-4 py-2'>
+                            {t('task_id not found or not owned by you')}
+                          </td>
                           <td className='px-4 py-2'>{t('Verify the ID.')}</td>
                         </tr>
                         <tr>
                           <td className='px-4 py-2 font-mono'>429</td>
                           <td className='px-4 py-2'>{t('Rate limited')}</td>
-                          <td className='px-4 py-2'>{t('Lower RPM or concurrency; honor Retry-After header.')}</td>
+                          <td className='px-4 py-2'>
+                            {t(
+                              'Lower RPM or concurrency; honor Retry-After header.'
+                            )}
+                          </td>
                         </tr>
                         <tr>
                           <td className='px-4 py-2 font-mono'>502</td>
-                          <td className='px-4 py-2'>{t('Video file unavailable (usually expired — kept for 24 h)')}</td>
-                          <td className='px-4 py-2'>{t('Retry within 24h, or migrate to your own storage.')}</td>
+                          <td className='px-4 py-2'>
+                            {t(
+                              'Video file unavailable (usually expired — kept for 24 h)'
+                            )}
+                          </td>
+                          <td className='px-4 py-2'>
+                            {t(
+                              'Retry within 24h, or migrate to your own storage.'
+                            )}
+                          </td>
                         </tr>
                         <tr>
                           <td className='px-4 py-2 font-mono'>500</td>
                           <td className='px-4 py-2'>{t('Server error')}</td>
-                          <td className='px-4 py-2'>{t('Retry; if persistent, contact support.')}</td>
+                          <td className='px-4 py-2'>
+                            {t('Retry; if persistent, contact support.')}
+                          </td>
                         </tr>
                       </tbody>
                     </table>
@@ -1803,41 +2073,58 @@ export function Docs() {
                 <Section id='best-practices' title={t('Best practices')}>
                   <ul className='space-y-3 text-sm leading-relaxed'>
                     <li>
-                      <strong className='font-medium'>{t('Polling cadence')}</strong>:{' '}
+                      <strong className='font-medium'>
+                        {t('Polling cadence')}
+                      </strong>
+                      :{' '}
                       {t(
-                        'a steady 5 s interval is enough. Polling faster only triggers rate limiting; processing time is fixed. Add exponential backoff: double the interval on errors, cap at 30 s.',
+                        'a steady 5 s interval is enough. Polling faster only triggers rate limiting; processing time is fixed. Add exponential backoff: double the interval on errors, cap at 30 s.'
                       )}
                     </li>
                     <li>
-                      <strong className='font-medium'>{t('Download immediately')}</strong>:{' '}
-                      {t('right after success, GET')}{' '}
+                      <strong className='font-medium'>
+                        {t('Download immediately')}
+                      </strong>
+                      : {t('right after success, GET')}{' '}
                       <K>/v1/videos/:task_id/content</K>{' '}
                       {t(
-                        "and persist to your own object storage or CDN. Don't rely on the 24h window.",
+                        "and persist to your own object storage or CDN. Don't rely on the 24h window."
                       )}
                     </li>
                     <li>
-                      <strong className='font-medium'>{t('Concurrency control')}</strong>:{' '}
+                      <strong className='font-medium'>
+                        {t('Concurrency control')}
+                      </strong>
+                      :{' '}
                       {t(
-                        'cap is 10 (5 for lite). For batch jobs, use a semaphore — friendlier than firing requests until 429.',
+                        'cap is 10 (5 for lite). For batch jobs, use a semaphore — friendlier than firing requests until 429.'
                       )}
                     </li>
                     <li>
-                      <strong className='font-medium'>{t('Prompt engineering')}</strong>:{' '}
+                      <strong className='font-medium'>
+                        {t('Prompt engineering')}
+                      </strong>
+                      :{' '}
                       {t(
-                        'keep Chinese prompts under 500 chars. Best with all four ingredients: subject / action / camera / style. For audio generation, wrap dialogue in double quotes for cleaner voice synthesis.',
+                        'keep Chinese prompts under 500 chars. Best with all four ingredients: subject / action / camera / style. For audio generation, wrap dialogue in double quotes for cleaner voice synthesis.'
                       )}
                     </li>
                     <li>
-                      <strong className='font-medium'>{t('Failure retry')}</strong>:{' '}
+                      <strong className='font-medium'>
+                        {t('Failure retry')}
+                      </strong>
+                      :{' '}
                       {t(
-                        "FAILED tasks are not billed. Inspect fail_reason: content-moderation failures won't recover via retry; other reasons are worth up to 2 retries.",
+                        "FAILED tasks are not billed. Inspect fail_reason: content-moderation failures won't recover via retry; other reasons are worth up to 2 retries."
                       )}
                     </li>
                     <li>
-                      <strong className='font-medium'>{t('Pick the right mode')}</strong>:{' '}
+                      <strong className='font-medium'>
+                        {t('Pick the right mode')}
+                      </strong>
+                      :{' '}
                       {t(
-                        'commit to your creative intent before choosing a mode. Strict first/last frame control → first/last frame; loose image anchors → multi-modal reference; pure text description → text-to-video.',
+                        'commit to your creative intent before choosing a mode. Strict first/last frame control → first/last frame; loose image anchors → multi-modal reference; pure text description → text-to-video.'
                       )}
                     </li>
                   </ul>
@@ -1846,73 +2133,97 @@ export function Docs() {
                 <Section id='faq' title={t('FAQ')}>
                   <div className='space-y-5'>
                     <div className='space-y-1'>
-                      <h3 className='font-medium text-sm'>{t('How long does generation take?')}</h3>
+                      <h3 className='text-sm font-medium'>
+                        {t('How long does generation take?')}
+                      </h3>
                       <p className='text-muted-foreground text-sm'>
                         {t(
-                          '720p / 5 s usually 90–120 s. 1080p or longer videos take more. Concurrent tasks in the queue add waiting time.',
+                          '720p / 5 s usually 90–120 s. 1080p or longer videos take more. Concurrent tasks in the queue add waiting time.'
                         )}
                       </p>
                     </div>
                     <div className='space-y-1'>
-                      <h3 className='font-medium text-sm'>{t('Can I call this with the OpenAI SDK?')}</h3>
+                      <h3 className='text-sm font-medium'>
+                        {t('Can I call this with the OpenAI SDK?')}
+                      </h3>
                       <p className='text-muted-foreground text-sm'>
                         {t(
-                          "Video tasks are an async task model, not OpenAI's chat/completion shape. The SDK's video.generate is not yet compatible. Use raw HTTP, or our official SDK (planned).",
+                          "Video tasks are an async task model, not OpenAI's chat/completion shape. The SDK's video.generate is not yet compatible. Use raw HTTP, or our official SDK (planned)."
                         )}
                       </p>
                     </div>
                     <div className='space-y-1'>
-                      <h3 className='font-medium text-sm'>{t('How long are videos retained?')}</h3>
+                      <h3 className='text-sm font-medium'>
+                        {t('How long are videos retained?')}
+                      </h3>
                       <p className='text-muted-foreground text-sm'>
                         {t('Videos pulled via')}{' '}
                         <K>/v1/videos/:task_id/content</K>{' '}
                         {t(
-                          'are available for 24 hours. Long-term storage (in our own object store) is on the roadmap.',
+                          'are available for 24 hours. Long-term storage (in our own object store) is on the roadmap.'
                         )}
                       </p>
                     </div>
                     <div className='space-y-1'>
-                      <h3 className='font-medium text-sm'>{t('How do I check usage?')}</h3>
+                      <h3 className='text-sm font-medium'>
+                        {t('How do I check usage?')}
+                      </h3>
                       <p className='text-muted-foreground text-sm'>
                         {t('Visit')}{' '}
-                        <a href='/usage-logs/task' className='text-primary hover:underline'>
+                        <a
+                          href='/usage-logs/task'
+                          className='text-primary hover:underline'
+                        >
                           {t('Task logs')}
                         </a>{' '}
                         {t('for per-task billing, and')}{' '}
-                        <a href='/wallet' className='text-primary hover:underline'>
+                        <a
+                          href='/wallet'
+                          className='text-primary hover:underline'
+                        >
                           {t('Wallet')}
                         </a>{' '}
                         {t('for balance changes.')}
                       </p>
                     </div>
                     <div className='space-y-1'>
-                      <h3 className='font-medium text-sm'>{t('Are failed tasks billed?')}</h3>
+                      <h3 className='text-sm font-medium'>
+                        {t('Are failed tasks billed?')}
+                      </h3>
                       <p className='text-muted-foreground text-sm'>
                         {t('No. Only SUCCESS tasks deduct balance.')}
                       </p>
                     </div>
                     <div className='space-y-1'>
-                      <h3 className='font-medium text-sm'>{t('Are webhook callbacks supported?')}</h3>
-                      <p className='text-muted-foreground text-sm'>
-                        {t('Not yet — clients poll today. Webhook callbacks are on the roadmap.')}
-                      </p>
-                    </div>
-                    <div className='space-y-1'>
-                      <h3 className='font-medium text-sm'>
-                        {t('Can multi-modal reference replace first/last frame?')}
+                      <h3 className='text-sm font-medium'>
+                        {t('Are webhook callbacks supported?')}
                       </h3>
                       <p className='text-muted-foreground text-sm'>
                         {t(
-                          "Multi-modal can hint to the model via prompt that an image should serve as the first/last frame, but it's less strict than the explicit",
+                          'Not yet — clients poll today. Webhook callbacks are on the roadmap.'
+                        )}
+                      </p>
+                    </div>
+                    <div className='space-y-1'>
+                      <h3 className='text-sm font-medium'>
+                        {t(
+                          'Can multi-modal reference replace first/last frame?'
+                        )}
+                      </h3>
+                      <p className='text-muted-foreground text-sm'>
+                        {t(
+                          "Multi-modal can hint to the model via prompt that an image should serve as the first/last frame, but it's less strict than the explicit"
                         )}{' '}
                         <K>first_frame</K> / <K>last_frame</K>{' '}
-                        {t('roles. Prefer the latter when exact alignment matters.')}
+                        {t(
+                          'roles. Prefer the latter when exact alignment matters.'
+                        )}
                       </p>
                     </div>
                   </div>
                 </Section>
 
-                <div className='border-t pt-6 space-y-2 text-sm'>
+                <div className='space-y-2 border-t pt-6 text-sm'>
                   <h2 className='font-semibold'>{t('Related resources')}</h2>
                   <ul className='text-muted-foreground space-y-1'>
                     <li>
@@ -1924,14 +2235,20 @@ export function Docs() {
                     </li>
                     <li>
                       ·{' '}
-                      <a href='/wallet' className='text-primary hover:underline'>
+                      <a
+                        href='/wallet'
+                        className='text-primary hover:underline'
+                      >
                         {t('Wallet')}
                       </a>{' '}
                       · {t('Check balance and top up')}
                     </li>
                     <li>
                       ·{' '}
-                      <a href='/usage-logs/task' className='text-primary hover:underline'>
+                      <a
+                        href='/usage-logs/task'
+                        className='text-primary hover:underline'
+                      >
                         {t('Task logs')}
                       </a>{' '}
                       · {t('Past tasks and billing')}
@@ -1955,7 +2272,7 @@ export function Docs() {
             {/* ===================== Right TOC (current group only) ===================== */}
             <aside className='sticky top-16 hidden h-[calc(100vh-4rem)] w-44 shrink-0 overflow-y-auto py-8 pl-2 xl:block'>
               <div className='space-y-2'>
-                <h3 className='text-muted-foreground text-xs font-medium uppercase tracking-wider'>
+                <h3 className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
                   {activeGroup.label}
                 </h3>
                 <nav className='flex flex-col gap-1'>
@@ -1968,7 +2285,7 @@ export function Docs() {
                         className={`border-l-2 pl-3 text-xs leading-relaxed transition-colors ${
                           isActive
                             ? 'border-primary text-foreground font-medium'
-                            : 'text-muted-foreground hover:text-foreground border-transparent hover:border-primary'
+                            : 'text-muted-foreground hover:text-foreground hover:border-primary border-transparent'
                         }`}
                       >
                         {item.label}

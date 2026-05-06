@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
-import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import { useQueryClient, useIsFetching } from '@tanstack/react-query'
+import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import { Loader2, RotateCcw, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useIsAdmin } from '@/hooks/use-admin'
@@ -62,9 +62,13 @@ export function TaskLogsFilterBar(props: TaskLogsFilterBarProps) {
   useEffect(() => {
     const { start, end } = getDefaultTimeRange()
     const baseFilters = {
-      startTime: searchParams.startTime ? new Date(searchParams.startTime) : start,
+      startTime: searchParams.startTime
+        ? new Date(searchParams.startTime)
+        : start,
       endTime: searchParams.endTime ? new Date(searchParams.endTime) : end,
-      ...(searchParams.channel ? { channel: String(searchParams.channel) } : {}),
+      ...(searchParams.channel
+        ? { channel: String(searchParams.channel) }
+        : {}),
     }
     const next: TaskLogsFilters =
       props.logCategory === 'drawing'

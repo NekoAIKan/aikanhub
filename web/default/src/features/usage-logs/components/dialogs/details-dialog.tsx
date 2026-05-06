@@ -30,7 +30,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
 import type { UsageLog } from '../../data/schema'
-import { BillingBreakdownView } from '../billing-breakdown'
 import {
   parseLogOther,
   getParamOverrideActionLabel,
@@ -48,6 +47,7 @@ import {
   isTimingLogType,
 } from '../../lib/utils'
 import type { LogOtherData } from '../../types'
+import { BillingBreakdownView } from '../billing-breakdown'
 
 function timingTextColorClass(
   variant: 'success' | 'warning' | 'danger'
@@ -70,7 +70,7 @@ function DetailRow(props: {
       </span>
       <span
         className={cn(
-          'min-w-0 max-w-full text-xs break-all sm:break-words',
+          'max-w-full min-w-0 text-xs break-all sm:break-words',
           props.mono && 'font-mono',
           props.muted && 'text-muted-foreground'
         )}
@@ -503,7 +503,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
         </DialogHeader>
 
         <ScrollArea className='max-h-[70vh] min-w-0 overflow-hidden pr-2 max-sm:max-h-[calc(100dvh-7rem)] sm:pr-4'>
-          <div className='w-full min-w-0 max-w-full space-y-2.5 overflow-hidden py-1 sm:space-y-3'>
+          <div className='w-full max-w-full min-w-0 space-y-2.5 overflow-hidden py-1 sm:space-y-3'>
             {/* Overview section - key identifiers */}
             <div className='min-w-0 space-y-1'>
               {props.log.request_id && (
