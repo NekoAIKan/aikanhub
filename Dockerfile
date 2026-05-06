@@ -2,10 +2,7 @@
 #
 # AIKanHub multi-stage build.
 #
-# We dropped the upstream's builder-classic stage entirely: GetTheme() is
-# hardcoded to "default" so the classic frontend is never served. The Go
-# binary still has `//go:embed web/classic/dist/index.html` directives, so
-# we stub them with empty files in builder2 — saves ~4 min per first build.
+# The image builds the default frontend and embeds it into the Go binary.
 
 FROM oven/bun:1@sha256:0733e50325078969732ebe3b15ce4c4be5082f18c4ac1a0f0ca4839c2e4e42a7 AS builder
 

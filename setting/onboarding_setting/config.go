@@ -1,6 +1,8 @@
 package onboarding_setting
 
 import (
+	"strings"
+
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/setting"
@@ -10,21 +12,27 @@ import (
 const legacyDefaultTokenEnabled = -1
 
 type OnboardingSetting struct {
-	NewUserQuota          int    `json:"new_user_quota"`
-	DefaultGroup          string `json:"default_group"`
-	DefaultTokenEnabled   int    `json:"default_token_enabled"`
-	DefaultTokenQuota     int    `json:"default_token_quota"`
-	DefaultTokenGroup     string `json:"default_token_group"`
-	DefaultTokenUnlimited bool   `json:"default_token_unlimited"`
+	NewUserQuota              int    `json:"new_user_quota"`
+	DefaultGroup              string `json:"default_group"`
+	DefaultTokenEnabled       int    `json:"default_token_enabled"`
+	DefaultTokenQuota         int    `json:"default_token_quota"`
+	DefaultTokenGroup         string `json:"default_token_group"`
+	DefaultTokenUnlimited     bool   `json:"default_token_unlimited"`
+	RequireInviteCampaignCode bool   `json:"require_invite_campaign_code"`
+	DefaultTokenExpireDays    int    `json:"default_token_expire_days"`
+	DefaultTokenModelLimits   string `json:"default_token_model_limits"`
 }
 
 type Policy struct {
-	NewUserQuota          int
-	DefaultGroup          string
-	GenerateDefaultToken  bool
-	DefaultTokenQuota     int
-	DefaultTokenGroup     string
-	DefaultTokenUnlimited bool
+	NewUserQuota              int
+	DefaultGroup              string
+	GenerateDefaultToken      bool
+	DefaultTokenQuota         int
+	DefaultTokenGroup         string
+	DefaultTokenUnlimited     bool
+	RequireInviteCampaignCode bool
+	DefaultTokenExpireDays    int
+	DefaultTokenModelLimits   string
 }
 
 var onboardingSetting OnboardingSetting
@@ -70,12 +78,20 @@ func GetPolicy() Policy {
 		defaultTokenGroup = "auto"
 	}
 
+	defaultTokenExpireDays := onboardingSetting.DefaultTokenExpireDays
+	if defaultTokenExpireDays < 0 {
+		defaultTokenExpireDays = 0
+	}
+
 	return Policy{
-		NewUserQuota:          newUserQuota,
-		DefaultGroup:          defaultGroup,
-		GenerateDefaultToken:  generateDefaultToken,
-		DefaultTokenQuota:     defaultTokenQuota,
-		DefaultTokenGroup:     defaultTokenGroup,
-		DefaultTokenUnlimited: onboardingSetting.DefaultTokenUnlimited,
+		NewUserQuota:              newUserQuota,
+		DefaultGroup:              defaultGroup,
+		GenerateDefaultToken:      generateDefaultToken,
+		DefaultTokenQuota:         defaultTokenQuota,
+		DefaultTokenGroup:         defaultTokenGroup,
+		DefaultTokenUnlimited:     onboardingSetting.DefaultTokenUnlimited,
+		RequireInviteCampaignCode: onboardingSetting.RequireInviteCampaignCode,
+		DefaultTokenExpireDays:    defaultTokenExpireDays,
+		DefaultTokenModelLimits:   strings.TrimSpace(onboardingSetting.DefaultTokenModelLimits),
 	}
 }

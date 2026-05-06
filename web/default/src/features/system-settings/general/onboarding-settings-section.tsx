@@ -31,6 +31,9 @@ const onboardingSchema = z.object({
     default_token_group: z.string(),
     default_token_quota: z.coerce.number().min(0),
     default_token_unlimited: z.boolean(),
+    require_invite_campaign_code: z.boolean(),
+    default_token_expire_days: z.coerce.number().min(0),
+    default_token_model_limits: z.string(),
   }),
 })
 
@@ -248,9 +251,79 @@ export function OnboardingSettingsSection({
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name='onboarding_setting.default_token_expire_days'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Starter token expiry days')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min='0'
+                      value={field.value as number}
+                      onChange={(e) => field.onChange(e.target.valueAsNumber)}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      ref={field.ref}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t('Use 0 to keep starter tokens from expiring.')}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='onboarding_setting.default_token_model_limits'
+              render={({ field }) => (
+                <FormItem className='md:col-span-2'>
+                  <FormLabel>{t('Starter token model limits')}</FormLabel>
+                  <FormControl>
+                    <Input placeholder='gpt-4o,gpt-4o-mini' {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Comma-separated model IDs for starter tokens. Leave empty for no token-level model limit.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
 
           <div className='grid gap-4 md:grid-cols-2'>
+            <FormField
+              control={form.control}
+              name='onboarding_setting.require_invite_campaign_code'
+              render={({ field }) => (
+                <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
+                  <div className='space-y-0.5'>
+                    <FormLabel className='text-base'>
+                      {t('Require campaign invite code')}
+                    </FormLabel>
+                    <FormDescription>
+                      {t(
+                        'New password and OAuth registrations must provide an active campaign invite code.'
+                      )}
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={updateOption.isPending}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
             <FormField
               control={form.control}
               name='onboarding_setting.default_token_enabled'

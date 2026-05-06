@@ -1,5 +1,5 @@
-import type { GeneralSettings } from '../types'
 import { parseBillingVisibilitySettings } from '@/lib/billing-visibility'
+import type { GeneralSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ChannelAffinitySection } from './channel-affinity'
 import { CheckinSettingsSection } from './checkin-settings-section'
@@ -20,9 +20,6 @@ const GENERAL_SECTIONS = [
     build: (settings: GeneralSettings) => (
       <SystemInfoSection
         defaultValues={{
-          theme: {
-            frontend: settings['theme.frontend'] as 'default' | 'classic',
-          },
           Notice: settings.Notice,
           SystemName: settings.SystemName,
           Logo: settings.Logo,
@@ -85,11 +82,9 @@ const GENERAL_SECTIONS = [
               settings['profit_setting.apply_to_default_video_profiles'],
           },
           billing_visibility_setting: {
-            default_mode: settings['billing_visibility_setting.default_mode'] as
-              | 'credits'
-              | 'summary'
-              | 'detailed'
-              | 'internal',
+            default_mode: settings[
+              'billing_visibility_setting.default_mode'
+            ] as 'credits' | 'summary' | 'detailed' | 'internal',
             group_modes: settings['billing_visibility_setting.group_modes'],
           },
           video_billing_setting: {
@@ -120,6 +115,12 @@ const GENERAL_SECTIONS = [
               settings['onboarding_setting.default_token_quota'],
             default_token_unlimited:
               settings['onboarding_setting.default_token_unlimited'],
+            require_invite_campaign_code:
+              settings['onboarding_setting.require_invite_campaign_code'],
+            default_token_expire_days:
+              settings['onboarding_setting.default_token_expire_days'],
+            default_token_model_limits:
+              settings['onboarding_setting.default_token_model_limits'],
           },
         }}
       />

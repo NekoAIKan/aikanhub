@@ -406,19 +406,54 @@ func CreateDefaultTokenForUserWithTx(tx *gorm.DB, user *User) error {
 	if err != nil {
 		return err
 	}
+	now := common.GetTimestamp()
+	expiredTime := int64(-1)
+	if policy.DefaultTokenExpireDays > 0 {
+		expiredTime = now + int64(policy.DefaultTokenExpireDays)*86400
+	}
+	modelLimits := strings.TrimSpace(policy.DefaultTokenModelLimits)
 	token := Token{
 		UserId:             user.Id,
 		Name:               user.Username + "的初始令牌",
 		Key:                key,
-		CreatedTime:        common.GetTimestamp(),
-		AccessedTime:       common.GetTimestamp(),
-		ExpiredTime:        -1,
+		CreatedTime:        now,
+		AccessedTime:       now,
+		ExpiredTime:        expiredTime,
 		RemainQuota:        policy.DefaultTokenQuota,
 		UnlimitedQuota:     policy.DefaultTokenUnlimited,
-		ModelLimitsEnabled: false,
+		ModelLimitsEnabled: modelLimits != "",
+		ModelLimits:        modelLimits,
 		Group:              policy.DefaultTokenGroup,
 	}
 	return tx.Create(&token).Error
+}
+
+func recordDefaultTokenPolicyLog(userId int, policy onboarding_setting.Policy) {
+	if !policy.GenerateDefaultToken {
+		RecordLog(userId, LogTypeSystem, "初始令牌策略: 未创建")
+		return
+	}
+	expiry := "永不过期"
+	if policy.DefaultTokenExpireDays > 0 {
+		expiry = fmt.Sprintf("%d 天", policy.DefaultTokenExpireDays)
+	}
+	group := policy.DefaultTokenGroup
+	if group == "" {
+		group = "default"
+	}
+	modelLimits := strings.TrimSpace(policy.DefaultTokenModelLimits)
+	if modelLimits == "" {
+		modelLimits = "未限制"
+	}
+	RecordLog(userId, LogTypeSystem, fmt.Sprintf(
+		"初始令牌策略: 已创建，quota=%d，额度 %s，unlimited=%t，到期 %s，分组 %s，模型限制 %s",
+		policy.DefaultTokenQuota,
+		logger.LogQuota(policy.DefaultTokenQuota),
+		policy.DefaultTokenUnlimited,
+		expiry,
+		group,
+		modelLimits,
+	))
 }
 
 func (user *User) Insert(inviterId int) error {
@@ -466,6 +501,7 @@ func (user *User) Insert(inviterId int) error {
 	if policy.NewUserQuota > 0 {
 		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(policy.NewUserQuota)))
 	}
+	recordDefaultTokenPolicyLog(user.Id, policy)
 	if inviterId != 0 {
 		if common.QuotaForInvitee > 0 {
 			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
@@ -530,6 +566,7 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 	if user.Quota > 0 {
 		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(user.Quota)))
 	}
+	recordDefaultTokenPolicyLog(user.Id, onboarding_setting.GetPolicy())
 	if inviterId != 0 {
 		if common.QuotaForInvitee > 0 {
 			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)

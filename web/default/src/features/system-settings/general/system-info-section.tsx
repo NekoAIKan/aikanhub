@@ -14,13 +14,6 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { FormDirtyIndicator } from '../components/form-dirty-indicator'
 import { FormNavigationGuard } from '../components/form-navigation-guard'
@@ -29,9 +22,6 @@ import { useSettingsForm } from '../hooks/use-settings-form'
 import { useUpdateOption } from '../hooks/use-update-option'
 
 const _systemInfoSchema = z.object({
-  theme: z.object({
-    frontend: z.enum(['default', 'classic']),
-  }),
   Notice: z.string().optional(),
   SystemName: z.string().min(1),
   ServerAddress: z.string().optional(),
@@ -61,10 +51,6 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
   const updateOption = useUpdateOption()
 
   const normalizedDefaults: SystemInfoFormValues = {
-    theme: {
-      frontend:
-        defaultValues.theme?.frontend === 'classic' ? 'classic' : 'default',
-    },
     Notice: normalizeValue(defaultValues.Notice),
     SystemName: normalizeValue(defaultValues.SystemName),
     ServerAddress: normalizeValue(defaultValues.ServerAddress),
@@ -79,9 +65,6 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
   }
 
   const systemInfoSchemaWithI18n = z.object({
-    theme: z.object({
-      frontend: z.enum(['default', 'classic']),
-    }),
     Notice: z.string().optional(),
     SystemName: z.string().min(1, {
       error: () => t('System name is required'),
@@ -130,37 +113,6 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
         <Form {...form}>
           <form onSubmit={handleSubmit} className='space-y-6'>
             <FormDirtyIndicator isDirty={isDirty} />
-            <FormField
-              control={form.control}
-              name='theme.frontend'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Frontend Theme')}</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger className='w-full'>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value='default'>
-                        {t('Default (New Frontend)')}
-                      </SelectItem>
-                      <SelectItem value='classic'>
-                        {t('Classic (Legacy Frontend)')}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>
-                    {t(
-                      'Switch between the new frontend and the classic frontend. Changes take effect after page reload.'
-                    )}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
             <FormField
               control={form.control}
               name='Notice'

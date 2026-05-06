@@ -2,6 +2,8 @@ package model
 
 import (
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -93,7 +95,7 @@ func TestInviteCampaignConsumeEnforcesUsageLimitOnIncrement(t *testing.T) {
 	require.Equal(t, 1, stored.UsedCount)
 }
 
-func TestInviteCampaignConsumeDisabledOrMissingFallsBackAsAbsent(t *testing.T) {
+func TestInviteCampaignConsumeDistinguishesDisabledFromMissing(t *testing.T) {
 	setupInviteCampaignTestDB(t)
 	require.NoError(t, DB.Create(&InviteCampaign{
 		Code:   "OFF",
@@ -103,8 +105,41 @@ func TestInviteCampaignConsumeDisabledOrMissingFallsBackAsAbsent(t *testing.T) {
 	}).Error)
 
 	_, err := ConsumeInviteCampaignCode("OFF", 2000)
-	require.True(t, errors.Is(err, ErrInviteCampaignNotFound))
+	require.True(t, errors.Is(err, ErrInviteCampaignDisabled))
 
 	_, err = ConsumeInviteCampaignCode("MISSING", 2000)
 	require.True(t, errors.Is(err, ErrInviteCampaignNotFound))
+}
+
+func TestInviteCampaignConsumeConcurrentLimitAllowsOneSuccess(t *testing.T) {
+	setupInviteCampaignTestDB(t)
+	now := int64(2000)
+	require.NoError(t, DB.Create(&InviteCampaign{
+		Code:       "ONCEPARALLEL",
+		Name:       "One parallel use",
+		Status:     InviteCampaignStatusEnabled,
+		UsageLimit: 1,
+		Quota:      100,
+	}).Error)
+
+	var successCount atomic.Int64
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := ConsumeInviteCampaignCode("ONCEPARALLEL", now)
+			if err == nil {
+				successCount.Add(1)
+			} else {
+				require.ErrorIs(t, err, ErrInviteCampaignExhausted)
+			}
+		}()
+	}
+	wg.Wait()
+
+	require.Equal(t, int64(1), successCount.Load())
+	var stored InviteCampaign
+	require.NoError(t, DB.First(&stored, "code = ?", "ONCEPARALLEL").Error)
+	require.Equal(t, 1, stored.UsedCount)
 }

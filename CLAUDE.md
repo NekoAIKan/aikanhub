@@ -33,9 +33,8 @@ types/         — Type definitions (relay formats, file sources, errors)
 i18n/          — Backend internationalization (go-i18n, en/zh)
 oauth/         — OAuth provider implementations
 pkg/           — Internal packages (cachex, ionet)
-web/             — Frontend themes container
+web/             — Frontend container
   web/default/   — Default frontend (React 19, Rsbuild, Radix UI, Tailwind)
-  web/classic/   — Classic frontend (React 18, Vite, Semi Design)
   web/default/src/i18n/ — Frontend internationalization (i18next, zh/en/fr/ru/ja/vi)
 ```
 
@@ -149,10 +148,10 @@ When working on tiered/dynamic billing (expression-based pricing), you MUST read
 
 ### Rule 8: Frontend Theme — Default-Only
 
-Classic frontend has been removed from this fork. `common.GetTheme()` is hardcoded to `"default"` and `common.SetTheme()` is a no-op. When debugging frontend issues:
+Only the default frontend is shipped. When debugging frontend issues:
 
-- **First check**: which bundle is being served? `curl http://host/` and look at the `<script src=...>` path. `/static/js/...` = default; `/assets/...` = classic (should never appear).
-- All UI work happens in `web/default/`. The `web/classic/` directory has been deleted; do not re-introduce it.
+- **First check**: which bundle is being served? `curl http://host/` and look at the `<script src=...>` path. `/static/js/...` is the default frontend bundle.
+- All UI work happens in `web/default/`.
 - New routes go in `web/default/src/routes/<path>/index.tsx` (TanStack Router file-based). After adding a route file, run `cd web/default && bunx --bun @tanstack/router-cli generate` to update `routeTree.gen.ts` (committed to git).
 
 ### Rule 9: Verify Before Instructing — Test the UI Path Yourself First
@@ -207,7 +206,7 @@ The Dockerfile uses BuildKit cache mounts (`--mount=type=cache`) for `bun instal
 
 - A bare `bun install` step without the cache mount will re-download all packages on every build (slow + wasteful)
 - Adding a top-level dir without it appearing in `.dockerignore` will balloon the build context. Always check what's in the context: a build context > 100 MB warrants investigation.
-- The classic frontend stage has been dropped. Do not add it back.
+- The Docker build should continue to build only `web/default`.
 
 ### Rule 15: Branding Sweep Checklist
 

@@ -13,8 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ThemeAssets holds the embedded frontend assets. AIKanHub only ships the
-// default frontend; the classic theme has been removed.
+// ThemeAssets holds the embedded default frontend assets.
 type ThemeAssets struct {
 	DefaultBuildFS   embed.FS
 	DefaultIndexPage []byte

@@ -1,7 +1,7 @@
 import { useParams } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
-import { parseCurrencyDisplayType } from '@/lib/currency'
 import { DEFAULT_BILLING_GROUP_MODES } from '@/lib/billing-visibility'
+import { parseCurrencyDisplayType } from '@/lib/currency'
 import { useSystemOptions, getOptionValue } from '../hooks/use-system-options'
 import type { GeneralSettings } from '../types'
 import {
@@ -10,7 +10,6 @@ import {
 } from './section-registry.tsx'
 
 const defaultGeneralSettings: GeneralSettings = {
-  'theme.frontend': 'default',
   Notice: '',
   SystemName: 'AIKanHub',
   Logo: '',
@@ -47,6 +46,9 @@ const defaultGeneralSettings: GeneralSettings = {
   'onboarding_setting.default_token_group': '',
   'onboarding_setting.default_token_quota': 500000,
   'onboarding_setting.default_token_unlimited': true,
+  'onboarding_setting.require_invite_campaign_code': false,
+  'onboarding_setting.default_token_expire_days': 0,
+  'onboarding_setting.default_token_model_limits': '',
   QuotaPerUnit: 500000,
   USDExchangeRate: 7,
   'general_setting.quota_display_type': 'USD',
