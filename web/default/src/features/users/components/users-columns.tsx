@@ -1,7 +1,13 @@
+import { useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
 import { formatQuota, formatTimestamp } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import {
+  billingVisibilitySettingsFromOptionRows,
+  resolveBillingVisibilityMode,
+} from '@/lib/billing-visibility'
+import { BillingVisibilityBadge } from '@/components/billing-visibility-badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Progress } from '@/components/ui/progress'
 import {
@@ -18,6 +24,7 @@ import {
   USER_ROLES,
   isUserDeleted,
 } from '../constants'
+import { useSystemOptions } from '../../system-settings/hooks/use-system-options'
 import { type User } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
 
@@ -29,6 +36,11 @@ function getQuotaProgressColor(percentage: number): string {
 
 export function useUsersColumns(): ColumnDef<User>[] {
   const { t } = useTranslation()
+  const { data: systemOptionsData } = useSystemOptions()
+  const billingVisibility = useMemo(
+    () => billingVisibilitySettingsFromOptionRows(systemOptionsData?.data),
+    [systemOptionsData?.data]
+  )
   return [
     {
       id: 'select',
@@ -216,8 +228,21 @@ export function useUsersColumns(): ColumnDef<User>[] {
         <DataTableColumnHeader column={column} title={t('Group')} />
       ),
       cell: ({ row }) => {
+        const user = row.original
         const group = row.getValue('group') as string
-        return <GroupBadge group={group} />
+        const mode = resolveBillingVisibilityMode({
+          role: user.role,
+          group,
+          defaultMode: billingVisibility.defaultMode,
+          groupModes: billingVisibility.groupModes,
+          explicitMode: user.billing_visibility_mode,
+        })
+        return (
+          <div className='flex flex-col items-start gap-1'>
+            <GroupBadge group={group} />
+            <BillingVisibilityBadge mode={mode} />
+          </div>
+        )
       },
       filterFn: (row, id, value) => {
         const group = String(row.getValue(id) || t('User Group')).toLowerCase()

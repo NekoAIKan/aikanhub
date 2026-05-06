@@ -1,0 +1,17 @@
+{
+  "model": "doubao-seedance-2-0-260128",
+  "content": [
+    {
+      "type": "text",
+      "text": "Macro shot of a glass frog on an emerald leaf; focus shifts from skin to its transparent belly"
+    }
+  ],
+  "duration": 5,
+  "ratio": "16:9",
+  "generate_audio": true,
+  "tools": [
+    {
+      "type": "web_search"
+    }
+  ]
+}

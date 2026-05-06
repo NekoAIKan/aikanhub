@@ -172,6 +172,37 @@ export interface LogOtherData {
   subscription_total?: number
 }
 
+export type BillingBreakdownMode =
+  | 'credits'
+  | 'summary'
+  | 'detailed'
+  | 'internal'
+
+export interface BillingBreakdown {
+  mode?: BillingBreakdownMode
+  label?: string
+  charged_credits?: number
+  charged_quota?: number
+  retail_charge_quota?: number
+  model?: string
+  basis?: string
+  tokens?: number
+  prompt_tokens?: number
+  completion_tokens?: number
+  resolution?: string
+  duration_seconds?: number
+  unit_price_per_million?: number
+  group_ratio?: number
+  precharged_quota?: number
+  actual_quota?: number
+  adjustment_quota?: number
+  upstream_cost_quota?: number
+  gross_margin_quota?: number
+  gross_margin_percent?: number
+  pricing_version?: string
+  pricing_hash?: string
+}
+
 /**
  * Log statistics data
  */
@@ -205,6 +236,7 @@ export interface MidjourneyLog {
   image_url?: string
   status: string // NOT_START, SUBMITTED, IN_PROGRESS, SUCCESS, FAILURE, MODAL
   other?: string
+  billing_breakdown?: BillingBreakdown
   created_at?: number
   updated_at?: number
 }
@@ -230,6 +262,7 @@ export interface TaskLog {
   result_url?: string // 任务成功后的视频/图片 URL（新数据写在这里；旧数据回退到 fail_reason）
   status: string // NOT_START, SUBMITTED, IN_PROGRESS, SUCCESS, FAILURE, QUEUED, UNKNOWN
   other?: string
+  billing_breakdown?: BillingBreakdown
   created_at?: number
   updated_at?: number
 }

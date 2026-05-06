@@ -583,6 +583,9 @@ func RelayTask(c *gin.Context) {
 			OriginModelName: relayInfo.OriginModelName,
 			PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
 		}
+		if videoBillingResult, ok := service.VideoBillingResultFromContext(c); ok {
+			service.ApplyVideoBillingResultToTaskBillingContext(task.PrivateData.BillingContext, videoBillingResult)
+		}
 		task.Quota = result.Quota
 		task.Data = result.TaskData
 		task.Action = relayInfo.Action

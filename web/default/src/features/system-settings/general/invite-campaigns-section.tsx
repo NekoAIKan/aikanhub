@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Gift, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { BillingVisibilityBadge } from '@/components/billing-visibility-badge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -47,6 +48,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  type BillingVisibilitySettings,
+  getBillingVisibilityDescriptionKey,
+  resolveBillingVisibilityMode,
+} from '@/lib/billing-visibility'
 import {
   createInviteCampaign,
   deleteInviteCampaign,
@@ -132,7 +138,24 @@ function campaignPayload(values: CampaignFormValues): InviteCampaign {
   }
 }
 
-export function InviteCampaignsSection() {
+function campaignBillingMode(
+  group: string | undefined,
+  billingVisibility: BillingVisibilitySettings
+) {
+  return resolveBillingVisibilityMode({
+    group,
+    defaultMode: billingVisibility.defaultMode,
+    groupModes: billingVisibility.groupModes,
+  })
+}
+
+type InviteCampaignsSectionProps = {
+  billingVisibility: BillingVisibilitySettings
+}
+
+export function InviteCampaignsSection({
+  billingVisibility,
+}: InviteCampaignsSectionProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
 
@@ -242,7 +265,7 @@ export function InviteCampaignsSection() {
     <SettingsSection
       title={t('Campaign Invites')}
       description={t(
-        'Create and manage campaign invite codes when backend support is available.'
+        'Use invited, b2b, or enterprise groups for detailed customer billing evidence.'
       )}
     >
       {unavailable ? (
@@ -313,6 +336,18 @@ export function InviteCampaignsSection() {
                     <FormControl>
                       <Input placeholder='default' {...field} />
                     </FormControl>
+                    <div className='flex items-center gap-2 pt-1'>
+                      <BillingVisibilityBadge
+                        mode={campaignBillingMode(field.value, billingVisibility)}
+                      />
+                      <span className='text-muted-foreground text-xs'>
+                        {t(
+                          getBillingVisibilityDescriptionKey(
+                            campaignBillingMode(field.value, billingVisibility)
+                          )
+                        )}
+                      </span>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -425,6 +460,7 @@ export function InviteCampaignsSection() {
                   <TableHead>{t('Code')}</TableHead>
                   <TableHead>{t('Name')}</TableHead>
                   <TableHead>{t('Group')}</TableHead>
+                  <TableHead>{t('Billing visibility')}</TableHead>
                   <TableHead>{t('Quota')}</TableHead>
                   <TableHead>{t('Usage')}</TableHead>
                   <TableHead>{t('Expires at')}</TableHead>
@@ -435,7 +471,7 @@ export function InviteCampaignsSection() {
               <TableBody>
                 {campaigns.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className='h-24 text-center'>
+                    <TableCell colSpan={9} className='h-24 text-center'>
                       {campaignsQuery.isLoading
                         ? t('Loading campaigns...')
                         : t('No campaign invites yet')}
@@ -449,6 +485,14 @@ export function InviteCampaignsSection() {
                       </TableCell>
                       <TableCell>{campaign.name ?? '-'}</TableCell>
                       <TableCell>{campaign.group ?? 'default'}</TableCell>
+                      <TableCell>
+                        <BillingVisibilityBadge
+                          mode={campaignBillingMode(
+                            campaign.group,
+                            billingVisibility
+                          )}
+                        />
+                      </TableCell>
                       <TableCell>{campaign.quota ?? 0}</TableCell>
                       <TableCell>
                         {(campaign.used_count ?? 0).toLocaleString()} /{' '}

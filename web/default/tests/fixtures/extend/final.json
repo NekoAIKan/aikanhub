@@ -1,0 +1,23 @@
+{
+  "id": "cgt-20260506113920-clg4k",
+  "model": "doubao-seedance-2-0-260128",
+  "status": "succeeded",
+  "content": {
+    "video_url": "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedance-2-0/02177803878512000000000000000000000ffffac1804224df3be.mp4"
+  },
+  "usage": {
+    "completion_tokens": 389700,
+    "total_tokens": 389700
+  },
+  "created_at": 1778038785,
+  "updated_at": 1778039193,
+  "seed": 26168,
+  "resolution": "720p",
+  "ratio": "16:9",
+  "duration": 8,
+  "framespersecond": 24,
+  "service_tier": "default",
+  "execution_expires_after": 172800,
+  "generate_audio": true,
+  "draft": false
+}

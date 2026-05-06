@@ -14,6 +14,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const ContextKeyVideoBillingResult = "video_billing_result"
+
 // LogTaskConsumption 记录任务消费日志和统计信息（仅记录，不涉及实际扣费）。
 // 实际扣费已由 BillingSession（PreConsumeBilling + SettleBilling）完成。
 func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
@@ -26,6 +28,9 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		if len(info.PriceData.OtherRatios) > 0 {
 			var contents []string
 			for key, ra := range info.PriceData.OtherRatios {
+				if isVideoBillingAliasField(key) {
+					continue
+				}
 				if 1.0 != ra {
 					contents = append(contents, fmt.Sprintf("%s: %.2f", key, ra))
 				}
@@ -50,6 +55,11 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		other["is_model_mapped"] = true
 		other["upstream_model_name"] = info.UpstreamModelName
 	}
+	if result, ok := VideoBillingResultFromContext(c); ok {
+		addVideoBillingResultToOther(other, result)
+		other["billing_profile"] = info.OriginModelName
+		other["origin_model_name"] = info.OriginModelName
+	}
 	model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
 		ChannelId: info.ChannelId,
 		ModelName: info.OriginModelName,
@@ -62,6 +72,73 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 	})
 	model.UpdateUserUsedQuotaAndRequestCount(info.UserId, info.PriceData.Quota)
 	model.UpdateChannelUsedQuota(info.ChannelId, info.PriceData.Quota)
+}
+
+func VideoBillingResultFromContext(c *gin.Context) (VideoBillingResult, bool) {
+	if c == nil {
+		return VideoBillingResult{}, false
+	}
+	value, ok := c.Get(ContextKeyVideoBillingResult)
+	if !ok {
+		return VideoBillingResult{}, false
+	}
+	result, ok := value.(VideoBillingResult)
+	return result, ok
+}
+
+func ApplyVideoBillingResultToTaskBillingContext(bc *model.TaskBillingContext, result VideoBillingResult) {
+	if bc == nil {
+		return
+	}
+	bc.BillingBasis = result.Basis
+	bc.EstimatedTokens = result.Tokens
+	bc.EstimatedQuota = result.Quota
+	bc.RetailUnitPrice = result.RetailUnitPrice
+	bc.UpstreamUnitCost = result.UpstreamUnitCost
+	bc.MarkupPercent = result.MarkupPercent
+	bc.PricingVersion = result.PricingVersion
+	bc.PricingHash = result.PricingHash
+	bc.HasReferenceMedia = result.HasReferenceMedia
+	if bc.VideoParams == nil {
+		bc.VideoParams = map[string]any{}
+	}
+	bc.VideoParams["input_seconds"] = result.InputSeconds
+	bc.VideoParams["output_seconds"] = result.OutputSeconds
+	bc.VideoParams["width"] = result.Width
+	bc.VideoParams["height"] = result.Height
+	bc.VideoParams["fps"] = result.FPS
+	if result.HasReferenceMedia {
+		bc.VideoParams["has_reference_media"] = true
+	}
+}
+
+func isVideoBillingAliasField(key string) bool {
+	return strings.HasPrefix(key, "video_")
+}
+
+func addVideoBillingResultToOther(other map[string]interface{}, result VideoBillingResult) {
+	other["billing_mode"] = "video_formula"
+	other["billing_basis"] = result.Basis
+	other["estimated_tokens"] = result.Tokens
+	other["estimated_quota"] = result.Quota
+	other["retail_unit_price"] = result.RetailUnitPrice
+	if result.UpstreamUnitCost > 0 {
+		other["upstream_unit_cost"] = result.UpstreamUnitCost
+	}
+	if result.MarkupPercent != 0 {
+		other["markup_percent"] = result.MarkupPercent
+	}
+	other["pricing_version"] = result.PricingVersion
+	other["pricing_hash"] = result.PricingHash
+	other["has_reference_media"] = result.HasReferenceMedia
+	other["video_params"] = map[string]any{
+		"input_seconds":       result.InputSeconds,
+		"output_seconds":      result.OutputSeconds,
+		"width":               result.Width,
+		"height":              result.Height,
+		"fps":                 result.FPS,
+		"has_reference_media": result.HasReferenceMedia,
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -131,12 +208,34 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 		if bc.BillingProfile != "" {
 			other["billing_profile"] = bc.BillingProfile
 		}
+		if bc.OriginModelName != "" {
+			other["origin_model_name"] = bc.OriginModelName
+		}
+		if bc.BillingBasis != "" {
+			other["billing_basis"] = bc.BillingBasis
+		}
 		if bc.EstimatedTokens > 0 {
 			other["estimated_tokens"] = bc.EstimatedTokens
 		}
 		if bc.EstimatedQuota > 0 {
 			other["estimated_quota"] = bc.EstimatedQuota
 		}
+		if bc.RetailUnitPrice > 0 {
+			other["retail_unit_price"] = bc.RetailUnitPrice
+		}
+		if bc.UpstreamUnitCost > 0 {
+			other["upstream_unit_cost"] = bc.UpstreamUnitCost
+		}
+		if bc.MarkupPercent != 0 {
+			other["markup_percent"] = bc.MarkupPercent
+		}
+		if bc.PricingVersion != "" {
+			other["pricing_version"] = bc.PricingVersion
+		}
+		if bc.PricingHash != "" {
+			other["pricing_hash"] = bc.PricingHash
+		}
+		other["has_reference_media"] = bc.HasReferenceMedia
 		if len(bc.VideoParams) > 0 {
 			other["video_params"] = bc.VideoParams
 		}

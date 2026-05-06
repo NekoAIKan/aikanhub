@@ -30,6 +30,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
 import type { UsageLog } from '../../data/schema'
+import { BillingBreakdownView } from '../billing-breakdown'
 import {
   parseLogOther,
   getParamOverrideActionLabel,
@@ -124,6 +125,17 @@ function BillingBreakdown(props: {
 }) {
   const { t } = useTranslation()
   const { log, other, isAdmin } = props
+  if (log.billing_breakdown) {
+    return (
+      <DetailSection label={t('Billing Details')}>
+        <BillingBreakdownView
+          breakdown={log.billing_breakdown}
+          fallbackQuota={log.quota}
+        />
+      </DetailSection>
+    )
+  }
+
   const isPerCall = isPerCallBilling(other.model_price)
   const isClaude = other.claude === true
   const isTieredExpr = other.billing_mode === 'tiered_expr'

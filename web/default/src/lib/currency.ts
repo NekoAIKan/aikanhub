@@ -76,6 +76,8 @@ export interface CurrencyFormatOptions {
   abbreviate?: boolean
   /** Minimal absolute value to display when rounding would produce zero */
   minimumNonZero?: number
+  /** Set false for admin/internal views that must bypass credit display */
+  useCreditDisplay?: boolean
 }
 
 type DisplayMeta =
@@ -101,6 +103,7 @@ const DEFAULT_FORMAT_OPTIONS: Required<CurrencyFormatOptions> = {
   digitsSmall: 4,
   abbreviate: true,
   minimumNonZero: 0,
+  useCreditDisplay: true,
 }
 
 const DISPLAY_TYPE_VALUES = ['USD', 'CNY', 'TOKENS', 'CUSTOM'] as const
@@ -125,6 +128,10 @@ export function parseCurrencyDisplayType(
 function getConfig(): CurrencyConfig {
   const { config } = useSystemConfigStore.getState()
   const currency = config?.currency ?? DEFAULT_CURRENCY_CONFIG
+  const creditDisplay = {
+    ...DEFAULT_CURRENCY_CONFIG.creditDisplay,
+    ...(currency?.creditDisplay ?? {}),
+  }
   return {
     ...DEFAULT_CURRENCY_CONFIG,
     ...currency,
@@ -144,6 +151,20 @@ function getConfig(): CurrencyConfig {
     customCurrencySymbol:
       currency?.customCurrencySymbol?.trim() ||
       DEFAULT_CURRENCY_CONFIG.customCurrencySymbol,
+    creditDisplay: {
+      enabled: Boolean(creditDisplay.enabled),
+      label:
+        creditDisplay.label?.trim() ||
+        DEFAULT_CURRENCY_CONFIG.creditDisplay.label,
+      quotaPerCredit:
+        creditDisplay.quotaPerCredit && creditDisplay.quotaPerCredit > 0
+          ? creditDisplay.quotaPerCredit
+          : DEFAULT_CURRENCY_CONFIG.creditDisplay.quotaPerCredit,
+      precision:
+        Number.isFinite(creditDisplay.precision) && creditDisplay.precision >= 0
+          ? Math.min(Math.floor(creditDisplay.precision), 6)
+          : DEFAULT_CURRENCY_CONFIG.creditDisplay.precision,
+    },
   }
 }
 
@@ -201,12 +222,25 @@ function mergeOptions(
     abbreviate: options.abbreviate ?? DEFAULT_FORMAT_OPTIONS.abbreviate,
     minimumNonZero:
       options.minimumNonZero ?? DEFAULT_FORMAT_OPTIONS.minimumNonZero,
+    useCreditDisplay:
+      options.useCreditDisplay ?? DEFAULT_FORMAT_OPTIONS.useCreditDisplay,
   }
 }
 
 function removeTrailingZeros(str: string): string {
   if (!str.includes('.')) return str
   return str.replace(/(\.[0-9]*?)0+$/, '$1').replace(/\.$/, '')
+}
+
+function shouldUseCreditDisplay(
+  config: CurrencyConfig,
+  options?: CurrencyFormatOptions
+): boolean {
+  return (
+    options?.useCreditDisplay !== false &&
+    config.creditDisplay.enabled &&
+    config.creditDisplay.quotaPerCredit > 0
+  )
 }
 
 function formatNumberWithSuffix(
@@ -275,6 +309,20 @@ function formatCurrencyValue(
   }).format(adjustedValue)
 
   return `${meta.symbol}${decimal}`
+}
+
+export function formatQuotaAsCredits(
+  quota: number | null | undefined,
+  options?: CurrencyFormatOptions
+): string {
+  if (quota == null || Number.isNaN(quota)) return '-'
+
+  const config = getConfig()
+  const creditConfig = config.creditDisplay
+  const credits = quota / creditConfig.quotaPerCredit
+  const precision = options?.digitsLarge ?? creditConfig.precision
+  const value = removeTrailingZeros(credits.toFixed(precision))
+  return `${value} ${creditConfig.label}`
 }
 
 /**
@@ -438,6 +486,10 @@ export function formatQuotaWithCurrency(
   if (quota == null || Number.isNaN(quota)) return '-'
 
   const { config } = getCurrencyDisplay()
+  if (shouldUseCreditDisplay(config, options)) {
+    return formatQuotaAsCredits(quota, options)
+  }
+
   const amountUSD = quota / config.quotaPerUnit
   return formatCurrencyFromUSD(amountUSD, options)
 }
@@ -463,6 +515,10 @@ export function formatQuotaWithCurrency(
  */
 export function getCurrencyLabel(): string {
   const { config, meta } = getCurrencyDisplay()
+
+  if (shouldUseCreditDisplay(config)) {
+    return config.creditDisplay.label
+  }
 
   if (meta.kind === 'tokens') {
     return 'Tokens'
@@ -495,7 +551,8 @@ export function getCurrencyLabel(): string {
  * Use this to conditionally show currency-specific UI elements
  */
 export function isCurrencyDisplayEnabled(): boolean {
-  const { meta } = getCurrencyDisplay()
+  const { config, meta } = getCurrencyDisplay()
+  if (shouldUseCreditDisplay(config)) return true
   return meta.kind !== 'tokens'
 }
 

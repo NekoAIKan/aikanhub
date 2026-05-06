@@ -1,6 +1,7 @@
 import { useParams } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { parseCurrencyDisplayType } from '@/lib/currency'
+import { DEFAULT_BILLING_GROUP_MODES } from '@/lib/billing-visibility'
 import { useSystemOptions, getOptionValue } from '../hooks/use-system-options'
 import type { GeneralSettings } from '../types'
 import {
@@ -28,10 +29,17 @@ const defaultGeneralSettings: GeneralSettings = {
   'quota_setting.enable_free_model_pre_consume': true,
   'credit_display_setting.enabled': true,
   'credit_display_setting.label': 'Credits',
-  'credit_display_setting.quota_per_credit': 500000,
+  'credit_display_setting.quota_per_credit': 5000,
   'credit_display_setting.precision': 2,
   'profit_setting.default_markup_percent': 30,
-  'profit_setting.upstream_cost_per_million_tokens': 0,
+  'profit_setting.upstream_cost_per_million_tokens': 1,
+  'profit_setting.apply_to_default_video_profiles': true,
+  'billing_visibility_setting.default_mode': 'credits',
+  'billing_visibility_setting.group_modes': JSON.stringify(
+    DEFAULT_BILLING_GROUP_MODES,
+    null,
+    2
+  ),
   'video_billing_setting.profiles': '{}',
   'onboarding_setting.new_user_quota': 0,
   'onboarding_setting.default_group': 'default',

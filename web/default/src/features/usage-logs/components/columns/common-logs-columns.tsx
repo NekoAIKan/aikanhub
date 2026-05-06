@@ -40,6 +40,7 @@ import {
 } from '../../lib/utils'
 import type { LogOtherData } from '../../types'
 import { DetailsDialog } from '../dialogs/details-dialog'
+import { BillingBreakdownView } from '../billing-breakdown'
 import { ModelBadge } from '../model-badge'
 import { useUsageLogsContext } from '../usage-logs-provider'
 
@@ -713,9 +714,16 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
         return (
           <div className='flex flex-col gap-0.5'>
-            <span className='border-border/80 inline-flex w-fit items-center rounded-md border bg-muted/60 px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums'>
-              {quotaStr}
-            </span>
+            {log.billing_breakdown ? (
+              <BillingBreakdownView
+                breakdown={log.billing_breakdown}
+                fallbackQuota={quota}
+              />
+            ) : (
+              <span className='border-border/80 inline-flex w-fit items-center rounded-md border bg-muted/60 px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums'>
+                {quotaStr}
+              </span>
+            )}
           </div>
         )
       },

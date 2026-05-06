@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react'
 import {
   useSystemConfigStore,
+  type CreditDisplayConfig,
   type CurrencyConfig,
   type CurrencyDisplayType,
   type SystemConfig,
@@ -28,6 +29,12 @@ interface StatusApiResponse {
     usd_exchange_rate?: number
     custom_currency_symbol?: string
     custom_currency_exchange_rate?: number
+    credit_display?: {
+      enabled?: boolean
+      label?: string
+      quota_per_credit?: number
+      precision?: number
+    }
   }
 }
 
@@ -51,6 +58,23 @@ export function mapStatusDataToConfig(
   const quotaDisplayType =
     (data.quota_display_type as CurrencyDisplayType | undefined) ??
     DEFAULT_CURRENCY_CONFIG.quotaDisplayType
+  const creditDisplayData = data.credit_display
+  const creditDisplay: CreditDisplayConfig = {
+    enabled:
+      creditDisplayData?.enabled ??
+      DEFAULT_CURRENCY_CONFIG.creditDisplay.enabled,
+    label:
+      creditDisplayData?.label?.trim() ||
+      DEFAULT_CURRENCY_CONFIG.creditDisplay.label,
+    quotaPerCredit: toNumber(
+      creditDisplayData?.quota_per_credit,
+      DEFAULT_CURRENCY_CONFIG.creditDisplay.quotaPerCredit
+    ),
+    precision: toNumber(
+      creditDisplayData?.precision,
+      DEFAULT_CURRENCY_CONFIG.creditDisplay.precision
+    ),
+  }
 
   const currency: CurrencyConfig = {
     displayInCurrency:
@@ -71,6 +95,7 @@ export function mapStatusDataToConfig(
       data.custom_currency_exchange_rate,
       DEFAULT_CURRENCY_CONFIG.customCurrencyExchangeRate
     ),
+    creditDisplay,
   }
 
   return {

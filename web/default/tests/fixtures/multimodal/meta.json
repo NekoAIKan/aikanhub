@@ -1,0 +1,20 @@
+{
+  "case": "multimodal",
+  "expected": "succeeded",
+  "actual_status": "succeeded",
+  "task_id": "cgt-20260506113924-c8hhf",
+  "billing_fields": {
+    "model": "doubao-seedance-2-0-260128",
+    "resolution": "720p",
+    "duration": 5,
+    "fps": 24,
+    "completion_tokens": 324900,
+    "total_tokens": 324900
+  },
+  "video_artifact": {
+    "kind": "binary",
+    "path": "video.mp4",
+    "bytes": 2581202
+  },
+  "poll_count": 69
+}

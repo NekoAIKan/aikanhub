@@ -1,0 +1,20 @@
+{
+  "case": "i2v_firstlast",
+  "expected": "succeeded",
+  "actual_status": "succeeded",
+  "task_id": "cgt-20260506113918-lcrbf",
+  "billing_fields": {
+    "model": "doubao-seedance-2-0-fast-260128",
+    "resolution": "720p",
+    "duration": 5,
+    "fps": 24,
+    "completion_tokens": 108900,
+    "total_tokens": 108900
+  },
+  "video_artifact": {
+    "kind": "binary",
+    "path": "video.mp4",
+    "bytes": 2119940
+  },
+  "poll_count": 29
+}

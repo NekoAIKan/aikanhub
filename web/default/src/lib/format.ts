@@ -53,12 +53,29 @@ export function formatQuota(quota: number): string {
 }
 
 /**
+ * Format quota using legacy currency/raw quota display even when public credit
+ * display is enabled. Use this for admin-only accounting surfaces.
+ */
+export function formatQuotaInternal(quota: number): string {
+  return formatQuotaWithCurrency(quota, {
+    digitsLarge: 2,
+    digitsSmall: 4,
+    abbreviate: true,
+    useCreditDisplay: false,
+  })
+}
+
+/**
  * Parse quota from the current display input back to quota units.
  */
 export function parseQuotaFromDollars(amount: number): number {
   if (!Number.isFinite(amount)) return 0
 
   const { config, meta } = getCurrencyDisplay()
+
+  if (config.creditDisplay.enabled && config.creditDisplay.quotaPerCredit > 0) {
+    return Math.round(amount * config.creditDisplay.quotaPerCredit)
+  }
 
   // Tokens-only or raw quota mode
   if (meta.kind === 'tokens') {
@@ -79,6 +96,10 @@ export function parseQuotaFromDollars(amount: number): number {
  */
 export function quotaUnitsToDollars(units: number): number {
   const { config, meta } = getCurrencyDisplay()
+
+  if (config.creditDisplay.enabled && config.creditDisplay.quotaPerCredit > 0) {
+    return units / config.creditDisplay.quotaPerCredit
+  }
 
   if (meta.kind === 'tokens') {
     return units

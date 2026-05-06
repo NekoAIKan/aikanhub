@@ -1,0 +1,20 @@
+{
+  "case": "web_search",
+  "expected": "succeeded",
+  "actual_status": "succeeded",
+  "task_id": "cgt-20260506113918-shtcc",
+  "billing_fields": {
+    "model": "doubao-seedance-2-0-260128",
+    "resolution": "720p",
+    "duration": 5,
+    "fps": 24,
+    "completion_tokens": 108900,
+    "total_tokens": 108900
+  },
+  "video_artifact": {
+    "kind": "binary",
+    "path": "video.mp4",
+    "bytes": 1506417
+  },
+  "poll_count": 55
+}

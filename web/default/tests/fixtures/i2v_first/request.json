@@ -1,0 +1,18 @@
+{
+  "model": "doubao-seedance-2-0-fast-260128",
+  "content": [
+    {
+      "type": "text",
+      "text": "Slow camera push-in, subject animates from still to motion"
+    },
+    {
+      "type": "image_url",
+      "image_url": {
+        "url": "https://picsum.photos/seed/aikanhub-first/800/600"
+      },
+      "role": "first_frame"
+    }
+  ],
+  "duration": 5,
+  "ratio": "16:9"
+}

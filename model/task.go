@@ -110,17 +110,24 @@ type TaskPrivateData struct {
 
 // TaskBillingContext 记录任务提交时的计费参数，以便轮询阶段可以重新计算额度。
 type TaskBillingContext struct {
-	ModelPrice      float64            `json:"model_price,omitempty"`       // 模型单价
-	GroupRatio      float64            `json:"group_ratio,omitempty"`       // 分组倍率
-	ModelRatio      float64            `json:"model_ratio,omitempty"`       // 模型倍率
-	OtherRatios     map[string]float64 `json:"other_ratios,omitempty"`      // 附加倍率（时长、分辨率等）
-	OriginModelName string             `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
-	PerCallBilling  bool               `json:"per_call_billing,omitempty"`  // 按次计费：跳过轮询阶段的差额结算
-	BillingMode     string             `json:"billing_mode,omitempty"`      // 计费模式（例如 formula）
-	BillingProfile  string             `json:"billing_profile,omitempty"`   // 视频计费 profile/model key
-	EstimatedTokens int                `json:"estimated_tokens,omitempty"`  // 提交时估算 token
-	EstimatedQuota  int                `json:"estimated_quota,omitempty"`   // 提交时估算额度
-	VideoParams     map[string]any     `json:"video_params,omitempty"`      // 视频计费参数快照
+	ModelPrice        float64            `json:"model_price,omitempty"`         // 模型单价
+	GroupRatio        float64            `json:"group_ratio,omitempty"`         // 分组倍率
+	ModelRatio        float64            `json:"model_ratio,omitempty"`         // 模型倍率
+	OtherRatios       map[string]float64 `json:"other_ratios,omitempty"`        // 附加倍率（时长、分辨率等）
+	OriginModelName   string             `json:"origin_model_name,omitempty"`   // 模型名称，必须为OriginModelName
+	PerCallBilling    bool               `json:"per_call_billing,omitempty"`    // 按次计费：跳过轮询阶段的差额结算
+	BillingMode       string             `json:"billing_mode,omitempty"`        // 计费模式（例如 formula）
+	BillingProfile    string             `json:"billing_profile,omitempty"`     // 视频计费 profile/model key
+	BillingBasis      string             `json:"billing_basis,omitempty"`       // 计费依据（公式或上游用量）
+	EstimatedTokens   int                `json:"estimated_tokens,omitempty"`    // 提交时估算 token
+	EstimatedQuota    int                `json:"estimated_quota,omitempty"`     // 提交时估算额度
+	RetailUnitPrice   float64            `json:"retail_unit_price,omitempty"`   // 提交时冻结的零售价（每百万 token）
+	UpstreamUnitCost  float64            `json:"upstream_unit_cost,omitempty"`  // 提交时冻结的上游成本（每百万 token）
+	MarkupPercent     float64            `json:"markup_percent,omitempty"`      // 提交时冻结的默认加价百分比
+	PricingVersion    string             `json:"pricing_version,omitempty"`     // 稳定计价版本，含 profile hash
+	PricingHash       string             `json:"pricing_hash,omitempty"`        // 计价 profile hash
+	HasReferenceMedia bool               `json:"has_reference_media,omitempty"` // 是否使用参考视频/输入视频
+	VideoParams       map[string]any     `json:"video_params,omitempty"`        // 视频计费参数快照
 }
 
 // GetUpstreamTaskID 获取上游真实 task ID（用于与 provider 通信）
@@ -390,6 +397,15 @@ func (t *Task) NormalizeBillingContext() {
 	if bc.EstimatedQuota == 0 {
 		bc.EstimatedQuota = intTaskBillingRatio(bc.OtherRatios, "video_estimated_quota")
 	}
+	if bc.RetailUnitPrice == 0 {
+		bc.RetailUnitPrice = floatTaskBillingRatio(bc.OtherRatios, "video_retail_unit_price")
+	}
+	if bc.UpstreamUnitCost == 0 {
+		bc.UpstreamUnitCost = floatTaskBillingRatio(bc.OtherRatios, "video_upstream_unit_cost")
+	}
+	if bc.MarkupPercent == 0 {
+		bc.MarkupPercent = floatTaskBillingRatio(bc.OtherRatios, "video_markup_percent")
+	}
 	if bc.VideoParams == nil {
 		bc.VideoParams = map[string]any{}
 	}
@@ -401,6 +417,10 @@ func (t *Task) NormalizeBillingContext() {
 	if bc.OtherRatios["video_draft"] > 0 {
 		bc.VideoParams["draft"] = true
 	}
+	if bc.OtherRatios["video_has_reference_media"] > 0 {
+		bc.HasReferenceMedia = true
+		bc.VideoParams["has_reference_media"] = true
+	}
 }
 
 func intTaskBillingRatio(ratios map[string]float64, key string) int {
@@ -408,6 +428,13 @@ func intTaskBillingRatio(ratios map[string]float64, key string) int {
 		return 0
 	}
 	return int(ratios[key])
+}
+
+func floatTaskBillingRatio(ratios map[string]float64, key string) float64 {
+	if ratios == nil {
+		return 0
+	}
+	return ratios[key]
 }
 
 func setTaskVideoParam(params map[string]any, key string, value int) {

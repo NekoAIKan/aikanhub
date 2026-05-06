@@ -1,0 +1,26 @@
+{
+  "model": "doubao-seedance-2-0-260128",
+  "content": [
+    {
+      "type": "text",
+      "text": "Replace the subject in video1 with the object from image1; keep camera motion intact"
+    },
+    {
+      "type": "image_url",
+      "image_url": {
+        "url": "https://picsum.photos/seed/aikanhub-ref1/800/600"
+      },
+      "role": "reference_image"
+    },
+    {
+      "type": "video_url",
+      "video_url": {
+        "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4"
+      },
+      "role": "reference_video"
+    }
+  ],
+  "duration": 5,
+  "ratio": "16:9",
+  "generate_audio": true
+}

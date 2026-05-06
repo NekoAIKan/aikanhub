@@ -27,6 +27,8 @@ export interface UserProfile {
   email?: string
   /** User group */
   group: string
+  /** Resolved billing visibility mode */
+  billing_visibility_mode?: string
   /** Current quota balance */
   quota: number
   /** Total used quota */

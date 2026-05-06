@@ -27,6 +27,7 @@ import {
   createChannelColumn,
   createProgressColumn,
 } from './column-helpers'
+import { BillingBreakdownView } from '../billing-breakdown'
 
 function parseTaskData(data: unknown): unknown[] {
   if (Array.isArray(data)) return data
@@ -243,6 +244,27 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
       meta: { label: t('Status') },
     },
     createProgressColumn<TaskLog>({ headerLabel: t('Progress') }),
+    {
+      id: 'billing',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title={t('Cost')} />
+      ),
+      cell: ({ row }) => {
+        const log = row.original
+        if (!log.billing_breakdown) {
+          return <span className='text-muted-foreground/60 text-xs'>-</span>
+        }
+
+        return (
+          <BillingBreakdownView
+            breakdown={log.billing_breakdown}
+            fallbackQuota={log.billing_breakdown.charged_quota}
+          />
+        )
+      },
+      meta: { label: t('Cost') },
+      size: 260,
+    },
     {
       accessorKey: 'fail_reason',
       header: ({ column }) => (

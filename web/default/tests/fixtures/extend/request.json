@@ -1,0 +1,19 @@
+{
+  "model": "doubao-seedance-2-0-260128",
+  "content": [
+    {
+      "type": "text",
+      "text": "Continue the scene with cinematic camera motion"
+    },
+    {
+      "type": "video_url",
+      "video_url": {
+        "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4"
+      },
+      "role": "reference_video"
+    }
+  ],
+  "duration": 8,
+  "ratio": "16:9",
+  "generate_audio": true
+}

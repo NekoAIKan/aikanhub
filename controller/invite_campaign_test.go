@@ -113,3 +113,40 @@ func TestRegisterAppliesCampaignInvitePolicyAndIncrementsUsage(t *testing.T) {
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
 	require.Equal(t, false, response["success"])
 }
+
+func TestGetSelfIncludesResolvedBillingVisibilityMode(t *testing.T) {
+	db := setupGrowthControllerTestDB(t)
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_visibility_setting.default_mode": "credits",
+		"billing_visibility_setting.group_modes":  `{"default":"credits","trial":"credits","beta":"summary","invited":"detailed","b2b":"detailed","enterprise":"detailed"}`,
+	}))
+	require.NoError(t, db.Create(&model.User{
+		Id:       90,
+		Username: "b2b-user",
+		Password: "password1",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
+		Group:    "b2b",
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/user/self", nil)
+	ctx.Set("id", 90)
+	ctx.Set("role", common.RoleCommonUser)
+
+	GetSelf(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Group                 string `json:"group"`
+			BillingVisibilityMode string `json:"billing_visibility_mode"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	require.Equal(t, "b2b", response.Data.Group)
+	require.Equal(t, "detailed", response.Data.BillingVisibilityMode)
+}

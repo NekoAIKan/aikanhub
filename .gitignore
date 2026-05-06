@@ -41,4 +41,19 @@ skills-lock.json
 .env.local
 backups/
 .env.maomao
+.env.dev
 docker-compose.local.override.yml
+backups/
+web/default/tests/e2e/.auth/
+web/default/tests/e2e/test-results/
+web/default/tests/e2e/playwright-report/
+web/default/tests/e2e/blob-report/
+web/default/tests/e2e/report/
+web/default/tests/test-results/report/
+web/default/tests/mock_volcano.log
+web/default/tests/fixtures/_smoke/
+web/default/tests/fixtures/**/final.raw.json
+
+# Keep PR-local frontend helpers visible even when a global ignore has lib/.
+!web/default/src/lib/
+!web/default/src/lib/billing-visibility.ts

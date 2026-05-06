@@ -1,0 +1,11 @@
+{
+  "http": 400,
+  "body": {
+    "error": {
+      "code": "InvalidParameter",
+      "message": "the parameter resolution specified in the request is not valid for model doubao-seedance-2-0-fast in t2v Request id: 021778038758459ee0a64726bc009f7e456b5009c40f931729923",
+      "param": "",
+      "type": "BadRequest"
+    }
+  }
+}

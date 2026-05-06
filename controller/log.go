@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,6 +27,7 @@ func GetAllLogs(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	attachLogBillingBreakdowns(logs, service.BillingVisibilityInternal)
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(logs)
 	common.ApiSuccess(c, pageInfo)
@@ -47,10 +49,22 @@ func GetUserLogs(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	userGroup, _ := model.GetUserGroup(userId, false)
+	billingMode := service.GetBillingVisibilityMode(c.GetInt("role"), userGroup)
+	attachLogBillingBreakdowns(logs, billingMode)
+	for _, log := range logs {
+		service.SanitizeLogOtherForBillingVisibility(log, billingMode)
+	}
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(logs)
 	common.ApiSuccess(c, pageInfo)
 	return
+}
+
+func attachLogBillingBreakdowns(logs []*model.Log, mode string) {
+	for _, log := range logs {
+		log.BillingBreakdown = service.BuildLogBillingBreakdown(log, mode)
+	}
 }
 
 // Deprecated: SearchAllLogs 已废弃，前端未使用该接口。
@@ -85,6 +99,12 @@ func GetLogByKey(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
+	}
+	userGroup, _ := model.GetUserGroup(c.GetInt("id"), false)
+	billingMode := service.GetBillingVisibilityMode(common.RoleCommonUser, userGroup)
+	attachLogBillingBreakdowns(logs, billingMode)
+	for _, log := range logs {
+		service.SanitizeLogOtherForBillingVisibility(log, billingMode)
 	}
 	c.JSON(200, gin.H{
 		"success": true,

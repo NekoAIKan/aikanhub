@@ -15,16 +15,17 @@ type VideoResolution struct {
 }
 
 type VideoBillingProfile struct {
-	Mode                    string                     `json:"mode"`
-	UnitPrice               float64                    `json:"unit_price"`
-	FallbackFPS             int                        `json:"fallback_fps"`
-	FallbackWidth           int                        `json:"fallback_width"`
-	FallbackHeight          int                        `json:"fallback_height"`
-	FallbackDurationSeconds int                        `json:"fallback_duration_seconds"`
-	UseUpstreamUsage        bool                       `json:"use_upstream_usage"`
-	ConservativeMultiplier  float64                    `json:"conservative_multiplier"`
-	DraftMultiplier         float64                    `json:"draft_multiplier"`
-	ResolutionAliases       map[string]VideoResolution `json:"resolution_aliases"`
+	Mode                            string                     `json:"mode"`
+	UnitPrice                       float64                    `json:"unit_price"`
+	FallbackFPS                     int                        `json:"fallback_fps"`
+	FallbackWidth                   int                        `json:"fallback_width"`
+	FallbackHeight                  int                        `json:"fallback_height"`
+	FallbackDurationSeconds         int                        `json:"fallback_duration_seconds"`
+	UseUpstreamUsage                bool                       `json:"use_upstream_usage"`
+	ConservativeMultiplier          float64                    `json:"conservative_multiplier"`
+	ReferenceConservativeMultiplier float64                    `json:"reference_conservative_multiplier"`
+	DraftMultiplier                 float64                    `json:"draft_multiplier"`
+	ResolutionAliases               map[string]VideoResolution `json:"resolution_aliases"`
 }
 
 type VideoBillingSetting struct {
@@ -50,15 +51,16 @@ func init() {
 
 func defaultSeedanceProfile() VideoBillingProfile {
 	return VideoBillingProfile{
-		Mode:                    ModeFormula,
-		UnitPrice:               1,
-		FallbackFPS:             24,
-		FallbackWidth:           1280,
-		FallbackHeight:          720,
-		FallbackDurationSeconds: 5,
-		UseUpstreamUsage:        true,
-		ConservativeMultiplier:  1.25,
-		DraftMultiplier:         0.5,
+		Mode:                            ModeFormula,
+		UnitPrice:                       0,
+		FallbackFPS:                     24,
+		FallbackWidth:                   1280,
+		FallbackHeight:                  720,
+		FallbackDurationSeconds:         5,
+		UseUpstreamUsage:                true,
+		ConservativeMultiplier:          1.25,
+		ReferenceConservativeMultiplier: 2,
+		DraftMultiplier:                 0.5,
 		ResolutionAliases: map[string]VideoResolution{
 			"480p":      {Width: 832, Height: 480},
 			"720p":      {Width: 1280, Height: 720},
