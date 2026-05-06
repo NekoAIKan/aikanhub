@@ -26,12 +26,18 @@ function EmptyAboutState() {
     <div className='flex min-h-[60vh] items-center justify-center p-8'>
       <div className='max-w-2xl space-y-6 text-center'>
         <div className='flex justify-center'>
-          <img src='/logo.png' alt='AIKanHub' className='h-24 w-24 object-contain' />
+          <img
+            src='/logo.png'
+            alt='kittyvibe'
+            className='h-24 w-24 object-contain'
+          />
         </div>
         <div className='space-y-2'>
-          <h2 className='text-2xl font-bold'>AIKanHub</h2>
+          <h2 className='text-2xl font-bold'>kittyvibe</h2>
           <p className='text-muted-foreground'>
-            {t('A unified video generation API gateway. One key, all major models.')}
+            {t(
+              'A unified video generation API gateway. One key, all major models.'
+            )}
           </p>
         </div>
         <div className='space-y-3 text-sm'>
@@ -46,7 +52,7 @@ function EmptyAboutState() {
             </a>
           </p>
           <p className='text-muted-foreground/80'>
-            © {currentYear} AIKanHub · forked from{' '}
+            © {currentYear} kittyvibe · forked from{' '}
             <a
               href='https://github.com/Calcium-Ion/new-api'
               target='_blank'

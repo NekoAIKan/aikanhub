@@ -32,7 +32,7 @@ export function useSidebarData(): SidebarData {
       },
     ],
     navGroups: [
-      // Chat group hidden — AIKanHub is video-first; the upstream chat playground
+      // Chat group hidden: kittyvibe is video-first; the upstream chat playground
       // doesn't support video tasks. Tracked in NekoAIKan/aikanhub#3 for a video
       // playground replacement. Code preserved here to ease upstream rebases.
       // {

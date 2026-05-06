@@ -121,6 +121,7 @@ export type GeneralSettings = {
   ServerAddress: string
   'legal.user_agreement': string
   'legal.privacy_policy': string
+  'legal.refund_policy': string
   QuotaForNewUser: number
   PreConsumedQuota: number
   QuotaForInviter: number

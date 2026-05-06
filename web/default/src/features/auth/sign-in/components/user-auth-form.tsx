@@ -74,7 +74,9 @@ export function UserAuthForm({
 
   const hasUserAgreement = Boolean(status?.user_agreement_enabled)
   const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
-  const requiresLegalConsent = hasUserAgreement || hasPrivacyPolicy
+  const hasRefundPolicy = Boolean(status?.refund_policy_enabled)
+  const requiresLegalConsent =
+    hasUserAgreement || hasPrivacyPolicy || hasRefundPolicy
   const passkeyButtonDisabled =
     isPasskeyLoading ||
     !passkeySupported ||

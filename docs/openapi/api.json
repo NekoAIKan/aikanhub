@@ -274,6 +274,31 @@
         ]
       }
     },
+    "/api/refund-policy": {
+      "get": {
+        "summary": "获取退款政策",
+        "deprecated": false,
+        "description": "🔓 无需鉴权",
+        "tags": [
+          "系统"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ]
+      }
+    },
     "/api/about": {
       "get": {
         "summary": "获取关于信息",

@@ -11,7 +11,7 @@ import {
 
 const defaultGeneralSettings: GeneralSettings = {
   Notice: '',
-  SystemName: 'AIKanHub',
+  SystemName: 'kittyvibe',
   Logo: '',
   Footer: '',
   About: '',
@@ -19,6 +19,7 @@ const defaultGeneralSettings: GeneralSettings = {
   ServerAddress: '',
   'legal.user_agreement': '',
   'legal.privacy_policy': '',
+  'legal.refund_policy': '',
   QuotaForNewUser: 0,
   PreConsumedQuota: 0,
   QuotaForInviter: 0,

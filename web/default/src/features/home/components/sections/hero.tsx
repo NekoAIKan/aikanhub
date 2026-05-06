@@ -48,7 +48,7 @@ export function Hero(props: HeroProps) {
           style={{ animationDelay: '80ms' }}
         >
           {t(
-            'AIKanHub aggregates the best video generation models behind one API and one bill. Seedance 2.0 today; Pixverse and HappyHorse next. Pay per video, no surprises.'
+            'kittyvibe aggregates the best video generation models behind one API and one bill. Seedance 2.0 today; Pixverse and HappyHorse next. Pay per video, no surprises.'
           )}
         </p>
         <div

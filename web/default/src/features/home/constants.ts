@@ -1,5 +1,5 @@
 /**
- * Home page constants — AIKanHub video gen focus
+ * Home page constants — kittyvibe video gen focus
  */
 import { type TFunction } from 'i18next'
 
