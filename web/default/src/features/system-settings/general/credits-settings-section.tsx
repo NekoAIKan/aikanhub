@@ -4,6 +4,15 @@ import type { Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Calculator } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import {
+  BILLING_VISIBILITY_MODES,
+  DEFAULT_BILLING_GROUP_MODES,
+  getBillingVisibilityDescriptionKey,
+  getBillingVisibilityLabelKey,
+  getBillingVisibilityShortLabelKey,
+  normalizeBillingVisibilityMode,
+  type BillingVisibilityMode,
+} from '@/lib/billing-visibility'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -25,15 +34,6 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  BILLING_VISIBILITY_MODES,
-  DEFAULT_BILLING_GROUP_MODES,
-  getBillingVisibilityDescriptionKey,
-  getBillingVisibilityLabelKey,
-  getBillingVisibilityShortLabelKey,
-  normalizeBillingVisibilityMode,
-  type BillingVisibilityMode,
-} from '@/lib/billing-visibility'
 import { FormDirtyIndicator } from '../components/form-dirty-indicator'
 import { FormNavigationGuard } from '../components/form-navigation-guard'
 import { SettingsSection } from '../components/settings-section'
@@ -149,10 +149,7 @@ function parseGroupModes(value: string): Record<string, BillingVisibilityMode> {
     Object.entries({
       ...DEFAULT_BILLING_GROUP_MODES,
       ...parsed,
-    }).map(([group, mode]) => [
-      group,
-      normalizeBillingVisibilityMode(mode),
-    ])
+    }).map(([group, mode]) => [group, normalizeBillingVisibilityMode(mode)])
   )
 }
 
@@ -195,18 +192,19 @@ export function CreditsSettingsSection({
     [watched.billing_visibility_setting?.group_modes]
   )
 
-  const setGroupMode = (
-    group: string,
-    mode: BillingVisibilityMode
-  ): void => {
+  const setGroupMode = (group: string, mode: BillingVisibilityMode): void => {
     const next = {
       ...groupModes,
       [group]: mode,
     }
-    form.setValue('billing_visibility_setting.group_modes', stringifyGroupModes(next), {
-      shouldDirty: true,
-      shouldValidate: true,
-    })
+    form.setValue(
+      'billing_visibility_setting.group_modes',
+      stringifyGroupModes(next),
+      {
+        shouldDirty: true,
+        shouldValidate: true,
+      }
+    )
   }
 
   const preview = useMemo(() => {
@@ -463,7 +461,10 @@ export function CreditsSettingsSection({
             />
           </div>
 
-          <div data-testid='fixture-pricing-preview' className='rounded-lg border p-4'>
+          <div
+            data-testid='fixture-pricing-preview'
+            className='rounded-lg border p-4'
+          >
             <div className='mb-3 flex items-center gap-2'>
               <Calculator className='text-muted-foreground h-4 w-4' />
               <div className='text-sm font-medium'>
@@ -479,9 +480,7 @@ export function CreditsSettingsSection({
                     <th className='py-2 text-left font-medium'>
                       {t('Credits')}
                     </th>
-                    <th className='py-2 text-left font-medium'>
-                      {t('Quota')}
-                    </th>
+                    <th className='py-2 text-left font-medium'>{t('Quota')}</th>
                     <th className='py-2 text-left font-medium'>
                       {t('Retail Charge')}
                     </th>
@@ -541,9 +540,7 @@ export function CreditsSettingsSection({
                   <Select
                     value={field.value}
                     onValueChange={(value) =>
-                      field.onChange(
-                        normalizeBillingVisibilityMode(value)
-                      )
+                      field.onChange(normalizeBillingVisibilityMode(value))
                     }
                   >
                     <FormControl>

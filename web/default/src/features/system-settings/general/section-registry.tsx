@@ -20,9 +20,6 @@ const GENERAL_SECTIONS = [
     build: (settings: GeneralSettings) => (
       <SystemInfoSection
         defaultValues={{
-          theme: {
-            frontend: settings['theme.frontend'] as 'default' | 'classic',
-          },
           Notice: settings.Notice,
           SystemName: settings.SystemName,
           Logo: settings.Logo,
@@ -119,6 +116,12 @@ const GENERAL_SECTIONS = [
               settings['onboarding_setting.default_token_quota'],
             default_token_unlimited:
               settings['onboarding_setting.default_token_unlimited'],
+            require_invite_campaign_code:
+              settings['onboarding_setting.require_invite_campaign_code'],
+            default_token_expire_days:
+              settings['onboarding_setting.default_token_expire_days'],
+            default_token_model_limits:
+              settings['onboarding_setting.default_token_model_limits'],
           },
         }}
       />

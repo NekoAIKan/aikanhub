@@ -112,6 +112,122 @@ type OptionUpdateRequest struct {
 	Value any    `json:"value"`
 }
 
+func normalizeOptionUpdateValue(value any) string {
+	switch v := value.(type) {
+	case bool:
+		return common.Interface2String(v)
+	case float64:
+		return common.Interface2String(v)
+	case int:
+		return common.Interface2String(v)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+func validateFloatRatioMapOption(value string, label string) error {
+	var parsed map[string]float64
+	if err := common.UnmarshalJsonStr(value, &parsed); err != nil {
+		return fmt.Errorf("%s设置失败: %w", label, err)
+	}
+	for name, ratio := range parsed {
+		if ratio < 0 {
+			return fmt.Errorf("%s设置失败: %s 的倍率不能小于 0", label, name)
+		}
+	}
+	return nil
+}
+
+func validateOptionUpdate(key string, value string) error {
+	switch key {
+	case "GitHubOAuthEnabled":
+		if value == "true" && common.GitHubClientId == "" {
+			return fmt.Errorf("无法启用 GitHub OAuth，请先填入 GitHub Client Id 以及 GitHub Client Secret！")
+		}
+	case "discord.enabled":
+		if value == "true" && system_setting.GetDiscordSettings().ClientId == "" {
+			return fmt.Errorf("无法启用 Discord OAuth，请先填入 Discord Client Id 以及 Discord Client Secret！")
+		}
+	case "oidc.enabled":
+		if value == "true" && system_setting.GetOIDCSettings().ClientId == "" {
+			return fmt.Errorf("无法启用 OIDC 登录，请先填入 OIDC Client Id 以及 OIDC Client Secret！")
+		}
+	case "LinuxDOOAuthEnabled":
+		if value == "true" && common.LinuxDOClientId == "" {
+			return fmt.Errorf("无法启用 LinuxDO OAuth，请先填入 LinuxDO Client Id 以及 LinuxDO Client Secret！")
+		}
+	case "EmailDomainRestrictionEnabled":
+		if value == "true" && len(common.EmailDomainWhitelist) == 0 {
+			return fmt.Errorf("无法启用邮箱域名限制，请先填入限制的邮箱域名！")
+		}
+	case "WeChatAuthEnabled":
+		if value == "true" && common.WeChatServerAddress == "" {
+			return fmt.Errorf("无法启用微信登录，请先填入微信登录相关配置信息！")
+		}
+	case "TurnstileCheckEnabled":
+		if value == "true" && common.TurnstileSiteKey == "" {
+			return fmt.Errorf("无法启用 Turnstile 校验，请先填入 Turnstile 校验相关配置信息！")
+		}
+	case "TelegramOAuthEnabled":
+		if value == "true" && common.TelegramBotToken == "" {
+			return fmt.Errorf("无法启用 Telegram OAuth，请先填入 Telegram Bot Token！")
+		}
+	case "theme.frontend":
+		if value != "default" {
+			return fmt.Errorf("无效的主题值，仅支持 default")
+		}
+	case "GroupRatio":
+		if err := ratio_setting.CheckGroupRatio(value); err != nil {
+			return err
+		}
+	case "ImageRatio":
+		if err := validateFloatRatioMapOption(value, "图片倍率"); err != nil {
+			return err
+		}
+	case "AudioRatio":
+		if err := validateFloatRatioMapOption(value, "音频倍率"); err != nil {
+			return err
+		}
+	case "AudioCompletionRatio":
+		if err := validateFloatRatioMapOption(value, "音频补全倍率"); err != nil {
+			return err
+		}
+	case "CreateCacheRatio":
+		if err := validateFloatRatioMapOption(value, "缓存创建倍率"); err != nil {
+			return err
+		}
+	case "ModelRequestRateLimitGroup":
+		if err := setting.CheckModelRequestRateLimitGroup(value); err != nil {
+			return err
+		}
+	case "AutomaticDisableStatusCodes":
+		if _, err := operation_setting.ParseHTTPStatusCodeRanges(value); err != nil {
+			return err
+		}
+	case "AutomaticRetryStatusCodes":
+		if _, err := operation_setting.ParseHTTPStatusCodeRanges(value); err != nil {
+			return err
+		}
+	case "console_setting.api_info":
+		if err := console_setting.ValidateConsoleSettings(value, "ApiInfo"); err != nil {
+			return err
+		}
+	case "console_setting.announcements":
+		if err := console_setting.ValidateConsoleSettings(value, "Announcements"); err != nil {
+			return err
+		}
+	case "console_setting.faq":
+		if err := console_setting.ValidateConsoleSettings(value, "FAQ"); err != nil {
+			return err
+		}
+	case "console_setting.uptime_kuma_groups":
+		if err := console_setting.ValidateConsoleSettings(value, "UptimeKumaGroups"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func UpdateOption(c *gin.Context) {
 	var option OptionUpdateRequest
 	err := common.DecodeJson(c.Request.Body, &option)
@@ -122,200 +238,15 @@ func UpdateOption(c *gin.Context) {
 		})
 		return
 	}
-	switch option.Value.(type) {
-	case bool:
-		option.Value = common.Interface2String(option.Value.(bool))
-	case float64:
-		option.Value = common.Interface2String(option.Value.(float64))
-	case int:
-		option.Value = common.Interface2String(option.Value.(int))
-	default:
-		option.Value = fmt.Sprintf("%v", option.Value)
+	optionValue := normalizeOptionUpdateValue(option.Value)
+	if err := validateOptionUpdate(option.Key, optionValue); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
 	}
-	switch option.Key {
-	case "GitHubOAuthEnabled":
-		if option.Value == "true" && common.GitHubClientId == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 GitHub OAuth，请先填入 GitHub Client Id 以及 GitHub Client Secret！",
-			})
-			return
-		}
-	case "discord.enabled":
-		if option.Value == "true" && system_setting.GetDiscordSettings().ClientId == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 Discord OAuth，请先填入 Discord Client Id 以及 Discord Client Secret！",
-			})
-			return
-		}
-	case "oidc.enabled":
-		if option.Value == "true" && system_setting.GetOIDCSettings().ClientId == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 OIDC 登录，请先填入 OIDC Client Id 以及 OIDC Client Secret！",
-			})
-			return
-		}
-	case "LinuxDOOAuthEnabled":
-		if option.Value == "true" && common.LinuxDOClientId == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 LinuxDO OAuth，请先填入 LinuxDO Client Id 以及 LinuxDO Client Secret！",
-			})
-			return
-		}
-	case "EmailDomainRestrictionEnabled":
-		if option.Value == "true" && len(common.EmailDomainWhitelist) == 0 {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用邮箱域名限制，请先填入限制的邮箱域名！",
-			})
-			return
-		}
-	case "WeChatAuthEnabled":
-		if option.Value == "true" && common.WeChatServerAddress == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用微信登录，请先填入微信登录相关配置信息！",
-			})
-			return
-		}
-	case "TurnstileCheckEnabled":
-		if option.Value == "true" && common.TurnstileSiteKey == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 Turnstile 校验，请先填入 Turnstile 校验相关配置信息！",
-			})
-
-			return
-		}
-	case "TelegramOAuthEnabled":
-		if option.Value == "true" && common.TelegramBotToken == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 Telegram OAuth，请先填入 Telegram Bot Token！",
-			})
-			return
-		}
-	case "theme.frontend":
-		if option.Value != "default" && option.Value != "classic" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的主题值，可选值：default（新版前端）、classic（经典前端）",
-			})
-			return
-		}
-	case "GroupRatio":
-		err = ratio_setting.CheckGroupRatio(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	case "ImageRatio":
-		err = ratio_setting.UpdateImageRatioByJSONString(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "图片倍率设置失败: " + err.Error(),
-			})
-			return
-		}
-	case "AudioRatio":
-		err = ratio_setting.UpdateAudioRatioByJSONString(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "音频倍率设置失败: " + err.Error(),
-			})
-			return
-		}
-	case "AudioCompletionRatio":
-		err = ratio_setting.UpdateAudioCompletionRatioByJSONString(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "音频补全倍率设置失败: " + err.Error(),
-			})
-			return
-		}
-	case "CreateCacheRatio":
-		err = ratio_setting.UpdateCreateCacheRatioByJSONString(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "缓存创建倍率设置失败: " + err.Error(),
-			})
-			return
-		}
-	case "ModelRequestRateLimitGroup":
-		err = setting.CheckModelRequestRateLimitGroup(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	case "AutomaticDisableStatusCodes":
-		_, err = operation_setting.ParseHTTPStatusCodeRanges(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	case "AutomaticRetryStatusCodes":
-		_, err = operation_setting.ParseHTTPStatusCodeRanges(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	case "console_setting.api_info":
-		err = console_setting.ValidateConsoleSettings(option.Value.(string), "ApiInfo")
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	case "console_setting.announcements":
-		err = console_setting.ValidateConsoleSettings(option.Value.(string), "Announcements")
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	case "console_setting.faq":
-		err = console_setting.ValidateConsoleSettings(option.Value.(string), "FAQ")
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	case "console_setting.uptime_kuma_groups":
-		err = console_setting.ValidateConsoleSettings(option.Value.(string), "UptimeKumaGroups")
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	}
-	err = model.UpdateOption(option.Key, option.Value.(string))
+	err = model.UpdateOption(option.Key, optionValue)
 	if err != nil {
 		common.ApiError(c, err)
 		return

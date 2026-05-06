@@ -7,9 +7,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Gift, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { BillingVisibilityBadge } from '@/components/billing-visibility-badge'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import {
+  type BillingVisibilitySettings,
+  getBillingVisibilityDescriptionKey,
+  resolveBillingVisibilityMode,
+} from '@/lib/billing-visibility'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,6 +23,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Empty,
   EmptyContent,
@@ -48,11 +52,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import {
-  type BillingVisibilitySettings,
-  getBillingVisibilityDescriptionKey,
-  resolveBillingVisibilityMode,
-} from '@/lib/billing-visibility'
+import { BillingVisibilityBadge } from '@/components/billing-visibility-badge'
 import {
   createInviteCampaign,
   deleteInviteCampaign,
@@ -86,7 +86,9 @@ function normalizeCampaigns(
   data: Awaited<ReturnType<typeof getInviteCampaigns>> | undefined
 ) {
   if (!data?.data) return []
-  const campaigns = Array.isArray(data.data) ? data.data : (data.data.items ?? [])
+  const campaigns = Array.isArray(data.data)
+    ? data.data
+    : (data.data.items ?? [])
   return campaigns.map((campaign) => ({
     ...campaign,
     enabled:
@@ -95,8 +97,7 @@ function normalizeCampaigns(
         campaign.status === undefined),
     max_uses: campaign.max_uses ?? campaign.usage_limit ?? 0,
     expires_at:
-      campaign.expires_at ??
-      timestampToDateTimeLocal(campaign.end_time),
+      campaign.expires_at ?? timestampToDateTimeLocal(campaign.end_time),
   }))
 }
 
@@ -130,9 +131,7 @@ function campaignPayload(values: CampaignFormValues): InviteCampaign {
     name: values.name,
     group: values.group,
     quota: values.quota,
-    status: values.enabled
-      ? CAMPAIGN_STATUS_ENABLED
-      : CAMPAIGN_STATUS_DISABLED,
+    status: values.enabled ? CAMPAIGN_STATUS_ENABLED : CAMPAIGN_STATUS_DISABLED,
     usage_limit: values.max_uses,
     end_time: dateTimeLocalToTimestamp(values.expires_at),
   }
@@ -338,7 +337,10 @@ export function InviteCampaignsSection({
                     </FormControl>
                     <div className='flex items-center gap-2 pt-1'>
                       <BillingVisibilityBadge
-                        mode={campaignBillingMode(field.value, billingVisibility)}
+                        mode={campaignBillingMode(
+                          field.value,
+                          billingVisibility
+                        )}
                       />
                       <span className='text-muted-foreground text-xs'>
                         {t(

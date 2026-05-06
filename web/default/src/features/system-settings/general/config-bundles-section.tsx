@@ -26,6 +26,7 @@ import {
   previewConfigBundleImport,
 } from '../api'
 import { SettingsSection } from '../components/settings-section'
+import type { ConfigBundleImportPreview } from '../types'
 import { tryJsonParse } from '../utils/json-parser'
 
 const SENSITIVE_KEY_PATTERNS = [
@@ -83,47 +84,36 @@ function downloadJson(data: unknown) {
   URL.revokeObjectURL(url)
 }
 
-function extractPreviewSummary(preview: unknown) {
-  if (!preview || typeof preview !== 'object') return []
-  const source = preview as Record<string, unknown>
-  const candidateKeys = [
-    'changed',
-    'changes',
-    'created',
-    'updated',
-    'removed',
-    'dangerous',
-    'sensitive',
-  ]
-
-  return candidateKeys.flatMap((key) => {
-    const value = source[key]
-    if (!value) return []
-    if (Array.isArray(value)) {
-      return value.slice(0, 8).map((item) => `${key}: ${String(item)}`)
-    }
-    if (typeof value === 'object') {
-      return Object.keys(value as Record<string, unknown>)
-        .slice(0, 8)
-        .map((item) => `${key}: ${item}`)
-    }
-    return [`${key}: ${String(value)}`]
-  })
+function formatPreviewSummary(preview: ConfigBundleImportPreview | null) {
+  if (!preview) return []
+  return [
+    ['Create', preview.summary.create],
+    ['Update', preview.summary.update],
+    ['Unchanged', preview.summary.unchanged],
+    ['Blocked', preview.summary.blocked],
+    ['Rejected', preview.summary.rejected],
+  ] as const
 }
 
 export function ConfigBundlesSection() {
   const { t } = useTranslation()
   const [bundleText, setBundleText] = useState('')
   const [bundlePayload, setBundlePayload] = useState<unknown>(null)
-  const [preview, setPreview] = useState<unknown>(null)
+  const [preview, setPreview] = useState<ConfigBundleImportPreview | null>(null)
+  const [lastExportRedacted, setLastExportRedacted] = useState<string[]>([])
 
   const parsed = useMemo(() => tryJsonParse(bundleText), [bundleText])
   const warnings = useMemo(
     () => (parsed.success ? sensitiveKeys(parsed.data).slice(0, 12) : []),
     [parsed]
   )
-  const previewSummary = useMemo(
-    () => extractPreviewSummary(preview),
+  const previewSummary = useMemo(() => formatPreviewSummary(preview), [preview])
+  const rejectedDiffs = useMemo(
+    () => preview?.diffs.filter((diff) => diff.action === 'rejected') ?? [],
+    [preview]
+  )
+  const blockedDiffs = useMemo(
+    () => preview?.diffs.filter((diff) => diff.action === 'blocked') ?? [],
     [preview]
   )
 
@@ -134,6 +124,7 @@ export function ConfigBundlesSection() {
         toast.error(data.message || t('Failed to export config bundle'))
         return
       }
+      setLastExportRedacted(data.data.redacted ?? [])
       downloadJson(data.data)
       toast.success(t('Config bundle exported'))
     },
@@ -153,7 +144,7 @@ export function ConfigBundlesSection() {
         toast.error(data.message || t('Failed to preview import'))
         return
       }
-      setPreview(data.data ?? {})
+      setPreview(data.data ?? null)
       toast.success(t('Import preview ready'))
     },
     onError: (error: Error) => {
@@ -240,6 +231,20 @@ export function ConfigBundlesSection() {
                 </div>
               </div>
             </div>
+            {lastExportRedacted.length > 0 && (
+              <div className='mt-3'>
+                <div className='text-muted-foreground mb-2 text-xs'>
+                  {t('Last export redacted keys')}
+                </div>
+                <div className='flex flex-wrap gap-2'>
+                  {lastExportRedacted.slice(0, 12).map((key) => (
+                    <Badge key={key} variant='outline'>
+                      {key}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <Alert>
@@ -296,7 +301,11 @@ export function ConfigBundlesSection() {
                 <AlertDialogTrigger asChild>
                   <Button
                     type='button'
-                    disabled={!preview || importMutation.isPending}
+                    disabled={
+                      !preview ||
+                      preview.summary.rejected > 0 ||
+                      importMutation.isPending
+                    }
                   >
                     {importMutation.isPending
                       ? t('Importing...')
@@ -350,12 +359,42 @@ export function ConfigBundlesSection() {
               </div>
               {previewSummary.length > 0 && (
                 <div className='mb-3 flex flex-wrap gap-2'>
-                  {previewSummary.map((item) => (
-                    <Badge key={item} variant='outline'>
-                      {item}
+                  {previewSummary.map(([label, count]) => (
+                    <Badge key={label} variant='outline'>
+                      {t(label)}: {count}
                     </Badge>
                   ))}
                 </div>
+              )}
+              {blockedDiffs.length > 0 && (
+                <div className='mb-3'>
+                  <div className='text-muted-foreground mb-2 text-xs'>
+                    {t('Blocked keys')}
+                  </div>
+                  <div className='flex flex-wrap gap-2'>
+                    {blockedDiffs.slice(0, 12).map((diff) => (
+                      <Badge key={diff.key} variant='secondary'>
+                        {diff.key}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {rejectedDiffs.length > 0 && (
+                <Alert variant='destructive' className='mb-3'>
+                  <AlertTriangle className='h-4 w-4' />
+                  <AlertTitle>{t('Validation failures')}</AlertTitle>
+                  <AlertDescription>
+                    <div className='mt-2 space-y-1'>
+                      {rejectedDiffs.slice(0, 6).map((diff) => (
+                        <div key={diff.key}>
+                          <span className='font-medium'>{diff.key}</span>
+                          {diff.message ? `: ${diff.message}` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  </AlertDescription>
+                </Alert>
               )}
               <pre className='bg-muted max-h-80 overflow-auto rounded-md p-3 text-xs'>
                 {stringify(preview)}

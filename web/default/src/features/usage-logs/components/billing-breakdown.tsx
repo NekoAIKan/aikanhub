@@ -53,7 +53,8 @@ function chargedDisplay(
 function billingRows(breakdown: BillingBreakdown) {
   const rows: Array<{ label: string; value: string; internal?: boolean }> = []
   const mode = breakdown.mode ?? 'credits'
-  const isDetailed = mode === 'summary' || mode === 'detailed' || mode === 'internal'
+  const isDetailed =
+    mode === 'summary' || mode === 'detailed' || mode === 'internal'
   const isInternal = mode === 'internal'
 
   if (!isDetailed) return rows
@@ -152,7 +153,7 @@ export function BillingBreakdownView({
 
   return (
     <div className='flex max-w-[300px] flex-col gap-1'>
-      <span className='border-border/80 inline-flex w-fit items-center rounded-md border bg-muted/60 px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums'>
+      <span className='border-border/80 bg-muted/60 inline-flex w-fit items-center rounded-md border px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums'>
         {chargedDisplay(breakdown, fallbackQuota)}
       </span>
       {!compact && rows.length > 0 && (
@@ -167,7 +168,7 @@ export function BillingBreakdownView({
           {rows.map((row) => (
             <div key={`${row.label}-${row.value}`} className='min-w-0'>
               <span className='font-medium'>{t(row.label)}:</span>{' '}
-              <span className='break-words font-mono'>{row.value}</span>
+              <span className='font-mono break-words'>{row.value}</span>
             </div>
           ))}
         </div>

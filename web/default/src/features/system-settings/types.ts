@@ -24,19 +24,51 @@ export type UpdateOptionResponse = {
 export type ConfigBundleExportResponse = {
   success: boolean
   message: string
-  data?: unknown
+  data?: ConfigBundle
 }
 
 export type ConfigBundlePreviewResponse = {
   success: boolean
   message: string
-  data?: unknown
+  data?: ConfigBundleImportPreview
 }
 
 export type ConfigBundleImportResponse = {
   success: boolean
   message: string
-  data?: unknown
+  data?: ConfigBundleImportPreview
+}
+
+export type ConfigBundle = {
+  schema_version?: number
+  version?: number
+  exported_at?: number
+  app?: string
+  options?: Record<string, string>
+  redacted?: string[]
+}
+
+export type ConfigBundleDiff = {
+  key: string
+  current_value: string
+  incoming_value: string
+  action: 'create' | 'update' | 'unchanged' | 'blocked' | 'rejected'
+  blocked: boolean
+  message?: string
+}
+
+export type ConfigBundleSummary = {
+  create: number
+  update: number
+  unchanged: number
+  blocked: number
+  rejected: number
+}
+
+export type ConfigBundleImportPreview = {
+  apply: boolean
+  diffs: ConfigBundleDiff[]
+  summary: ConfigBundleSummary
 }
 
 export type InviteCampaign = {
@@ -80,7 +112,6 @@ export type DeleteLogsResponse = {
 }
 
 export type GeneralSettings = {
-  'theme.frontend': string
   Notice: string
   SystemName: string
   Logo: string
@@ -114,6 +145,9 @@ export type GeneralSettings = {
   'onboarding_setting.default_token_group': string
   'onboarding_setting.default_token_quota': number
   'onboarding_setting.default_token_unlimited': boolean
+  'onboarding_setting.require_invite_campaign_code': boolean
+  'onboarding_setting.default_token_expire_days': number
+  'onboarding_setting.default_token_model_limits': string
   QuotaPerUnit: number
   USDExchangeRate: number
   'general_setting.quota_display_type': string

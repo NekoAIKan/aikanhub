@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
+	"github.com/QuantumNous/new-api/setting/onboarding_setting"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -267,6 +268,7 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 	if affCode := session.Get("aff"); affCode != nil {
 		inviteCode, _ = affCode.(string)
 	}
+	policy := onboarding_setting.GetPolicy()
 	inviterId := 0
 
 	// Use transaction to ensure user creation and OAuth binding are atomic
@@ -274,7 +276,7 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 		// Custom provider: create user and binding in a transaction
 		err := model.DB.Transaction(func(tx *gorm.DB) error {
 			var err error
-			inviterId, err = applyRegistrationInvitePolicy(tx, user, inviteCode, true)
+			inviterId, err = applyRegistrationInvitePolicy(tx, user, inviteCode, !policy.RequireInviteCampaignCode, policy.RequireInviteCampaignCode)
 			if err != nil {
 				return err
 			}
@@ -306,7 +308,7 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 		// Built-in provider: create user and update provider ID in a transaction
 		err := model.DB.Transaction(func(tx *gorm.DB) error {
 			var err error
-			inviterId, err = applyRegistrationInvitePolicy(tx, user, inviteCode, true)
+			inviterId, err = applyRegistrationInvitePolicy(tx, user, inviteCode, !policy.RequireInviteCampaignCode, policy.RequireInviteCampaignCode)
 			if err != nil {
 				return err
 			}

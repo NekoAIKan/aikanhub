@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/onboarding_setting"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -132,9 +133,12 @@ func Logout(c *gin.Context) {
 	})
 }
 
-func applyRegistrationInvitePolicy(tx *gorm.DB, user *model.User, inviteCode string, allowAffiliateFallback bool) (int, error) {
+func applyRegistrationInvitePolicy(tx *gorm.DB, user *model.User, inviteCode string, allowAffiliateFallback bool, requireCampaign bool) (int, error) {
 	inviteCode = strings.TrimSpace(inviteCode)
 	if inviteCode == "" {
+		if requireCampaign {
+			return 0, model.ErrInviteCampaignRequired
+		}
 		return 0, nil
 	}
 	campaign, err := model.ConsumeInviteCampaignCodeWithTx(tx, inviteCode, common.GetTimestamp())
@@ -146,6 +150,9 @@ func applyRegistrationInvitePolicy(tx *gorm.DB, user *model.User, inviteCode str
 			user.Group = campaign.Group
 		}
 		return 0, nil
+	}
+	if requireCampaign {
+		return 0, err
 	}
 	if !allowAffiliateFallback || !errors.Is(err, model.ErrInviteCampaignNotFound) {
 		return 0, err
@@ -193,11 +200,12 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserExists)
 		return
 	}
+	policy := onboarding_setting.GetPolicy()
 	inviteCode := strings.TrimSpace(user.InviteCode)
 	allowAffiliateFallback := false
 	if inviteCode == "" {
 		inviteCode = strings.TrimSpace(user.AffCode) // this code is the inviter's code, not the user's own code
-		allowAffiliateFallback = true
+		allowAffiliateFallback = !policy.RequireInviteCampaignCode
 	}
 	inviterId := 0
 	cleanUser := model.User{
@@ -211,7 +219,7 @@ func Register(c *gin.Context) {
 	}
 	err = model.DB.Transaction(func(tx *gorm.DB) error {
 		var err error
-		inviterId, err = applyRegistrationInvitePolicy(tx, &cleanUser, inviteCode, allowAffiliateFallback)
+		inviterId, err = applyRegistrationInvitePolicy(tx, &cleanUser, inviteCode, allowAffiliateFallback, policy.RequireInviteCampaignCode)
 		if err != nil {
 			return err
 		}

@@ -16,8 +16,10 @@ const (
 
 var (
 	ErrInviteCampaignNotFound  = errors.New("无效的邀请码")
+	ErrInviteCampaignDisabled  = errors.New("邀请码已停用")
 	ErrInviteCampaignExpired   = errors.New("邀请码已过期")
 	ErrInviteCampaignExhausted = errors.New("邀请码已用完")
+	ErrInviteCampaignRequired  = errors.New("需要有效的邀请码")
 )
 
 type InviteCampaign struct {
@@ -111,13 +113,16 @@ func ConsumeInviteCampaignCodeWithTx(tx *gorm.DB, code string, now int64) (*Invi
 
 	var campaign InviteCampaign
 	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("code = ? AND status = ?", code, InviteCampaignStatusEnabled).
+		Where("code = ?", code).
 		First(&campaign).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrInviteCampaignNotFound
 		}
 		return nil, err
+	}
+	if campaign.Status != InviteCampaignStatusEnabled {
+		return nil, ErrInviteCampaignDisabled
 	}
 	if campaign.StartTime != 0 && campaign.StartTime > now {
 		return nil, ErrInviteCampaignExpired
@@ -130,7 +135,7 @@ func ConsumeInviteCampaignCodeWithTx(tx *gorm.DB, code string, now int64) (*Invi
 	}
 
 	result := tx.Model(&InviteCampaign{}).
-		Where("id = ? AND (usage_limit <= ? OR used_count < usage_limit)", campaign.Id, 0).
+		Where("id = ? AND status = ? AND (usage_limit <= ? OR used_count < usage_limit)", campaign.Id, InviteCampaignStatusEnabled, 0).
 		Updates(map[string]any{
 			"used_count":   gorm.Expr("used_count + ?", 1),
 			"updated_time": now,
@@ -139,6 +144,10 @@ func ConsumeInviteCampaignCodeWithTx(tx *gorm.DB, code string, now int64) (*Invi
 		return nil, result.Error
 	}
 	if result.RowsAffected != 1 {
+		var latest InviteCampaign
+		if err := tx.First(&latest, "id = ?", campaign.Id).Error; err == nil && latest.Status != InviteCampaignStatusEnabled {
+			return nil, ErrInviteCampaignDisabled
+		}
 		return nil, ErrInviteCampaignExhausted
 	}
 	campaign.UsedCount++

@@ -39,14 +39,22 @@ func TestOptionBundleExportExcludesSensitiveKeys(t *testing.T) {
 	var response struct {
 		Success bool `json:"success"`
 		Data    struct {
-			Options map[string]string `json:"options"`
+			SchemaVersion int               `json:"schema_version"`
+			App           string            `json:"app"`
+			ExportedAt    int64             `json:"exported_at"`
+			Options       map[string]string `json:"options"`
+			Redacted      []string          `json:"redacted"`
 		} `json:"data"`
 	}
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
 	require.True(t, response.Success)
+	require.Equal(t, 2, response.Data.SchemaVersion)
+	require.Equal(t, "aikanhub", response.Data.App)
+	require.NotZero(t, response.Data.ExportedAt)
 	require.Equal(t, "kittyvibe", response.Data.Options["SystemName"])
 	require.NotContains(t, response.Data.Options, "GitHubClientSecret")
 	require.NotContains(t, response.Data.Options, "TurnstileSiteKey")
+	require.ElementsMatch(t, []string{"GitHubClientSecret", "TurnstileSiteKey"}, response.Data.Redacted)
 }
 
 func TestOptionBundleImportPreviewAndApplySkipsSensitiveKeys(t *testing.T) {
@@ -95,4 +103,124 @@ func TestOptionBundleImportPreviewAndApplySkipsSensitiveKeys(t *testing.T) {
 	require.NoError(t, db.First(&option, "key = ?", "SystemName").Error)
 	require.Equal(t, "After", option.Value)
 	require.Error(t, db.First(&option, "key = ?", "GitHubClientSecret").Error)
+}
+
+func TestOptionBundleImportAcceptsRawSchemaV2Bundle(t *testing.T) {
+	setupGrowthControllerTestDB(t)
+	model.InitOptionMap()
+	require.NoError(t, model.UpdateOption("SystemName", "Before"))
+
+	body := `{"schema_version":2,"app":"aikanhub","options":{"SystemName":"RawAfter"}}`
+	ctx, recorder := newOptionBundleContext(t, http.MethodPost, "/api/option/bundle/import/apply", body)
+	ApplyOptionBundleImport(ctx)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Apply bool `json:"apply"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	require.True(t, response.Data.Apply)
+	require.Equal(t, "RawAfter", common.OptionMap["SystemName"])
+}
+
+func TestOptionBundleImportAcceptsRawLegacyBundle(t *testing.T) {
+	setupGrowthControllerTestDB(t)
+	model.InitOptionMap()
+	require.NoError(t, model.UpdateOption("SystemName", "Before"))
+
+	body := `{"version":1,"options":{"SystemName":"LegacyAfter"}}`
+	ctx, recorder := newOptionBundleContext(t, http.MethodPost, "/api/option/bundle/import/apply", body)
+	ApplyOptionBundleImport(ctx)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Apply bool `json:"apply"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	require.True(t, response.Data.Apply)
+	require.Equal(t, "LegacyAfter", common.OptionMap["SystemName"])
+}
+
+func TestOptionBundleImportPreviewRejectsInvalidOptionsWithoutMutation(t *testing.T) {
+	setupGrowthControllerTestDB(t)
+	model.InitOptionMap()
+	require.NoError(t, model.UpdateOption("GroupRatio", `{"default":1}`))
+	require.NoError(t, model.UpdateOption("SystemName", "Before"))
+
+	body := `{"bundle":{"schema_version":2,"app":"aikanhub","options":{"GroupRatio":"not-json"}}}`
+	ctx, recorder := newOptionBundleContext(t, http.MethodPost, "/api/option/bundle/import/preview", body)
+	PreviewOptionBundleImport(ctx)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var preview struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Summary struct {
+				Rejected int `json:"rejected"`
+			} `json:"summary"`
+			Diffs []OptionBundleDiff `json:"diffs"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &preview))
+	require.True(t, preview.Success)
+	require.Equal(t, 1, preview.Data.Summary.Rejected)
+	require.Len(t, preview.Data.Diffs, 1)
+	require.Equal(t, "rejected", preview.Data.Diffs[0].Action)
+	require.NotEmpty(t, preview.Data.Diffs[0].Message)
+	require.Equal(t, `{"default":1}`, common.OptionMap["GroupRatio"])
+}
+
+func TestOptionBundleApplyRejectsInvalidOptionsWithoutMutation(t *testing.T) {
+	setupGrowthControllerTestDB(t)
+	model.InitOptionMap()
+	require.NoError(t, model.UpdateOption("GroupRatio", `{"default":1}`))
+
+	body := `{"bundle":{"schema_version":2,"app":"aikanhub","options":{"GroupRatio":"not-json","SystemName":"After"}}}`
+	ctx, recorder := newOptionBundleContext(t, http.MethodPost, "/api/option/bundle/import/apply", body)
+	ApplyOptionBundleImport(ctx)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Summary struct {
+				Rejected int `json:"rejected"`
+			} `json:"summary"`
+			Diffs []OptionBundleDiff `json:"diffs"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.False(t, response.Success)
+	require.Equal(t, 1, response.Data.Summary.Rejected)
+	require.Len(t, response.Data.Diffs, 2)
+	require.Equal(t, `{"default":1}`, common.OptionMap["GroupRatio"])
+	require.Equal(t, "Before", common.OptionMap["SystemName"])
+}
+
+func TestOptionBundleApplyWritesAuditLog(t *testing.T) {
+	db := setupGrowthControllerTestDB(t)
+	model.InitOptionMap()
+	require.NoError(t, model.UpdateOption("SystemName", "Before"))
+
+	body := `{"bundle":{"schema_version":2,"app":"aikanhub","options":{"SystemName":"After"}}}`
+	ctx, recorder := newOptionBundleContext(t, http.MethodPost, "/api/option/bundle/import/apply", body)
+	ctx.Set("id", 42)
+	ctx.Set("username", "root")
+	ApplyOptionBundleImport(ctx)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var log model.Log
+	require.NoError(t, db.Last(&log).Error)
+	require.Equal(t, 42, log.UserId)
+	require.Equal(t, model.LogTypeManage, log.Type)
+	require.Contains(t, log.Content, "配置包")
+	require.Contains(t, log.Content, "SystemName")
 }

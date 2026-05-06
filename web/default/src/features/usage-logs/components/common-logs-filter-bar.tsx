@@ -1,7 +1,14 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
-import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import { useQueryClient, useIsFetching } from '@tanstack/react-query'
-import { ChevronDown, Eye, EyeOff, Loader2, RotateCcw, Search } from 'lucide-react'
+import { useNavigate, getRouteApi } from '@tanstack/react-router'
+import {
+  ChevronDown,
+  Eye,
+  EyeOff,
+  Loader2,
+  RotateCcw,
+  Search,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useIsAdmin } from '@/hooks/use-admin'
@@ -208,9 +215,7 @@ export function CommonLogsFilterBar({
       <div
         className={cn(
           'grid gap-2 overflow-hidden transition-all duration-200',
-          expanded
-            ? 'grid-rows-[1fr] opacity-100'
-            : 'grid-rows-[0fr] opacity-0'
+          expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
         )}
       >
         <div className='min-h-0 overflow-hidden'>
@@ -282,7 +287,12 @@ export function CommonLogsFilterBar({
             <RotateCcw className='size-3.5' />
             {t('Reset')}
           </Button>
-          <Button size='sm' className='h-8' onClick={handleApply} disabled={fetchingLogs > 0}>
+          <Button
+            size='sm'
+            className='h-8'
+            onClick={handleApply}
+            disabled={fetchingLogs > 0}
+          >
             {fetchingLogs > 0 ? (
               <Loader2 className='size-3.5 animate-spin' />
             ) : (
