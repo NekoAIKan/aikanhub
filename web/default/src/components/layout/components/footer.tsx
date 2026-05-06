@@ -59,9 +59,9 @@ function ProjectAttribution(props: { currentYear: number }) {
           href='https://github.com/NekoAIKan/aikanhub'
           target='_blank'
           rel='noopener noreferrer'
-          className='text-foreground/70 font-medium transition-colors hover:text-foreground'
+          className='text-foreground/70 hover:text-foreground font-medium transition-colors'
         >
-          AIKanHub
+          kittyvibe
         </a>
         {' · '}
         <a
@@ -87,7 +87,7 @@ export function Footer(props: FooterProps) {
   } = useSystemConfig()
 
   const displayLogo = systemLogo || props.logo || '/logo.png'
-  const displayName = systemName || props.name || 'AIKanHub'
+  const displayName = systemName || props.name || 'kittyvibe'
   const isDemoSiteMode = Boolean(demoSiteEnabled)
   const currentYear = new Date().getFullYear()
 
@@ -125,7 +125,12 @@ export function Footer(props: FooterProps) {
 
   if (footerHtml) {
     return (
-      <footer className={cn('border-border/40 relative z-10 border-t', props.className)}>
+      <footer
+        className={cn(
+          'border-border/40 relative z-10 border-t',
+          props.className
+        )}
+      >
         <div className='mx-auto w-full max-w-6xl px-6 py-5'>
           <div className='bg-muted/20 border-border/50 flex flex-col items-center justify-between gap-4 rounded-2xl border px-4 py-4 backdrop-blur-sm sm:flex-row sm:px-5'>
             <div

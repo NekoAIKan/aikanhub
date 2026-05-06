@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FileWarning } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -28,6 +29,62 @@ function isLikelyHtml(value: string) {
   return /<\/?[a-z][\s\S]*>/i.test(value)
 }
 
+function sanitizeHtml(value: string) {
+  if (typeof window === 'undefined') {
+    return value
+      .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+      .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
+      .replace(/\sstyle\s*=\s*(['"]).*?\1/gi, '')
+      .replace(
+        /\s(?:action|formaction|href|src|srcset|xlink:href)\s*=\s*(['"])\s*(?:javascript|data|vbscript):.*?\1/gi,
+        ''
+      )
+  }
+
+  const doc = new DOMParser().parseFromString(value, 'text/html')
+  const blockedTags = [
+    'base',
+    'button',
+    'embed',
+    'form',
+    'iframe',
+    'input',
+    'link',
+    'meta',
+    'object',
+    'option',
+    'script',
+    'select',
+    'style',
+    'textarea',
+  ]
+
+  doc.querySelectorAll(blockedTags.join(',')).forEach((node) => node.remove())
+  doc.body.querySelectorAll('*').forEach((element) => {
+    Array.from(element.attributes).forEach((attribute) => {
+      const name = attribute.name.toLowerCase()
+      const value = attribute.value.trim().toLowerCase()
+      if (
+        name.startsWith('on') ||
+        name === 'style' ||
+        ([
+          'action',
+          'formaction',
+          'href',
+          'src',
+          'srcset',
+          'xlink:href',
+        ].includes(name) &&
+          /^(javascript|data|vbscript):/.test(value))
+      ) {
+        element.removeAttribute(attribute.name)
+      }
+    })
+  })
+
+  return doc.body.innerHTML
+}
+
 export function LegalDocument({
   title,
   queryKey,
@@ -45,6 +102,7 @@ export function LegalDocument({
   const hasContent = rawContent.length > 0
   const isUrl = hasContent && isValidUrl(rawContent)
   const isHtml = hasContent && !isUrl && isLikelyHtml(rawContent)
+  const sanitizedHtml = useMemo(() => sanitizeHtml(rawContent), [rawContent])
   const success = data?.success ?? false
 
   if (isLoading) {
@@ -118,10 +176,13 @@ export function LegalDocument({
         {isHtml ? (
           <div
             className='prose prose-neutral dark:prose-invert max-w-none'
-            dangerouslySetInnerHTML={{ __html: rawContent }}
+            dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
           />
         ) : (
-          <Markdown className='prose-neutral dark:prose-invert max-w-none'>
+          <Markdown
+            allowHtml={false}
+            className='prose-neutral dark:prose-invert max-w-none'
+          >
             {rawContent}
           </Markdown>
         )}

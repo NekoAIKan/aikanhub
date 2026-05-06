@@ -6,9 +6,14 @@ import { cn } from '@/lib/utils'
 interface MarkdownProps {
   children: string
   className?: string
+  allowHtml?: boolean
 }
 
-export function Markdown({ children, className }: MarkdownProps) {
+export function Markdown({
+  children,
+  className,
+  allowHtml = true,
+}: MarkdownProps) {
   return (
     <div
       className={cn(
@@ -31,7 +36,7 @@ export function Markdown({ children, className }: MarkdownProps) {
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw]}
+        rehypePlugins={allowHtml ? [rehypeRaw] : []}
         components={{
           // 自定义组件渲染（可选）
           a: ({ node, ...props }) => (

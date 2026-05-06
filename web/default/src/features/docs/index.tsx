@@ -5,7 +5,7 @@ import { CopyButton } from '@/components/copy-button'
 import { PublicLayout } from '@/components/layout'
 
 const ENDPOINT_BASE =
-  typeof window !== 'undefined' ? window.location.origin : 'https://your.aikanhub.com'
+  typeof window !== 'undefined' ? window.location.origin : 'https://your.kittyvibe.com'
 
 // ============================================================================
 // Code samples (literal — code stays in English; example prompts kept in
@@ -859,7 +859,7 @@ export function Docs() {
                 <h1 className='text-3xl font-semibold tracking-tight'>{t('API Documentation')}</h1>
                 <p className='text-muted-foreground text-sm'>
                   {t(
-                    'AIKanHub video generation API — call mainstream video models with one token, OpenAI-style async tasks.',
+                    'kittyvibe video generation API — call mainstream video models with one token, OpenAI-style async tasks.',
                   )}
                 </p>
               </header>
@@ -875,7 +875,7 @@ export function Docs() {
                 >
                   <p className='text-sm leading-relaxed'>
                     {t(
-                      'AIKanHub is a unified video generation API gateway. All supported models are called through the same set of endpoints — one token, no per-vendor signups, no SDK juggling, no fragmented invoices.',
+                      'kittyvibe is a unified video generation API gateway. All supported models are called through the same set of endpoints — one token, no per-vendor signups, no SDK juggling, no fragmented invoices.',
                     )}
                   </p>
                   <ul className='text-muted-foreground list-disc space-y-1 pl-6 text-sm'>
@@ -890,7 +890,7 @@ export function Docs() {
                     </li>
                     <li>
                       {t(
-                        'Videos are served from AIKanHub-signed URLs so storage links never leak to clients.',
+                        'Videos are served from kittyvibe-signed URLs so storage links never leak to clients.',
                       )}
                     </li>
                     <li>
@@ -996,7 +996,7 @@ export function Docs() {
                   id='seedance-overview'
                   title={t('Seedance overview')}
                   description={t(
-                    'Seedance is a high-end video generation model series. AIKanHub supports every Seedance call mode: text-to-video, image-to-video (first / first+last frame), multi-modal reference, edit video, extend video — plus audio generation and web search augmentation.',
+                    'Seedance is a high-end video generation model series. kittyvibe supports every Seedance call mode: text-to-video, image-to-video (first / first+last frame), multi-modal reference, edit video, extend video — plus audio generation and web search augmentation.',
                   )}
                 >
                   <Callout type='tip'>

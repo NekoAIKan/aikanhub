@@ -220,7 +220,7 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, header *http.Header, info *
 			header.Set("HTTP-Referer", "https://github.com/NekoAIKan/aikanhub")
 		}
 		if header.Get("X-OpenRouter-Title") == "" {
-			header.Set("X-OpenRouter-Title", "AIKanHub")
+			header.Set("X-OpenRouter-Title", "kittyvibe")
 		}
 	}
 	return nil

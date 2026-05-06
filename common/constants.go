@@ -13,7 +13,7 @@ import (
 
 var StartTime = time.Now().Unix() // unit: second
 var Version = "v0.0.0"            // this hard coding will be replaced automatically when building, no need to manually change
-var SystemName = "AIKanHub"
+var SystemName = "kittyvibe"
 var Footer = ""
 var Logo = ""
 var TopUpLink = ""
@@ -21,19 +21,19 @@ var TopUpLink = ""
 var themeValue atomic.Value // stores string; safe for concurrent read/write
 
 func init() {
-	// AIKanHub: classic theme is no longer maintained — always serve default.
+	// kittyvibe: classic theme is no longer maintained; always serve default.
 	// Source for classic still exists in web/classic/ to ease upstream rebases,
 	// but the runtime never selects it. Full deletion is tracked in Issue #6.
 	themeValue.Store("default")
 }
 
-// GetTheme always returns "default" for AIKanHub. Kept as a function (not const)
+// GetTheme always returns "default" for kittyvibe. Kept as a function (not const)
 // so call sites elsewhere don't need changes.
 func GetTheme() string {
 	return "default"
 }
 
-// SetTheme is a no-op in AIKanHub. We always serve default. Kept to avoid
+// SetTheme is a no-op in kittyvibe. We always serve default. Kept to avoid
 // breaking callers in upstream code paths.
 func SetTheme(_ string) {}
 

@@ -1,5 +1,5 @@
-import type { GeneralSettings } from '../types'
 import { parseBillingVisibilitySettings } from '@/lib/billing-visibility'
+import type { GeneralSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ChannelAffinitySection } from './channel-affinity'
 import { CheckinSettingsSection } from './checkin-settings-section'
@@ -33,6 +33,7 @@ const GENERAL_SECTIONS = [
           legal: {
             user_agreement: settings['legal.user_agreement'],
             privacy_policy: settings['legal.privacy_policy'],
+            refund_policy: settings['legal.refund_policy'],
           },
         }}
       />
@@ -85,11 +86,9 @@ const GENERAL_SECTIONS = [
               settings['profit_setting.apply_to_default_video_profiles'],
           },
           billing_visibility_setting: {
-            default_mode: settings['billing_visibility_setting.default_mode'] as
-              | 'credits'
-              | 'summary'
-              | 'detailed'
-              | 'internal',
+            default_mode: settings[
+              'billing_visibility_setting.default_mode'
+            ] as 'credits' | 'summary' | 'detailed' | 'internal',
             group_modes: settings['billing_visibility_setting.group_modes'],
           },
           video_billing_setting: {
