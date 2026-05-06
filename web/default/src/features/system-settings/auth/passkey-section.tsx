@@ -176,7 +176,7 @@ export function PasskeySection({ defaultValues }: PasskeySectionProps) {
                 <FormLabel>{t('Relying Party Display Name')}</FormLabel>
                 <FormControl>
                   <Input
-                    placeholder={t('e.g. AIKanHub Console')}
+                    placeholder={t('e.g. kittyvibe Console')}
                     {...field}
                     value={field.value ?? ''}
                   />

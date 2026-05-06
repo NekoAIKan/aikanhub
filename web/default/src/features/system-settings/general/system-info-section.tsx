@@ -42,6 +42,7 @@ const _systemInfoSchema = z.object({
   legal: z.object({
     user_agreement: z.string().optional(),
     privacy_policy: z.string().optional(),
+    refund_policy: z.string().optional(),
   }),
 })
 
@@ -75,6 +76,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
     legal: {
       user_agreement: normalizeValue(defaultValues.legal?.user_agreement),
       privacy_policy: normalizeValue(defaultValues.legal?.privacy_policy),
+      refund_policy: normalizeValue(defaultValues.legal?.refund_policy),
     },
   }
 
@@ -94,6 +96,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
     legal: z.object({
       user_agreement: z.string().optional(),
       privacy_policy: z.string().optional(),
+      refund_policy: z.string().optional(),
     }),
   })
 
@@ -193,7 +196,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                 <FormItem>
                   <FormLabel>{t('System Name')}</FormLabel>
                   <FormControl>
-                    <Input placeholder='AIKanHub' {...field} />
+                    <Input placeholder='kittyvibe' {...field} />
                   </FormControl>
                   <FormDescription>
                     {t('The name displayed across the application')}
@@ -297,7 +300,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                   <FormLabel>{t('Home Page Content')}</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder={t('Welcome to AIKanHub...')}
+                      placeholder={t('Welcome to kittyvibe...')}
                       rows={6}
                       {...field}
                     />
@@ -355,6 +358,31 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                   <FormDescription>
                     {t(
                       'Leave empty to disable the privacy policy requirement. Supports Markdown, HTML, or a full URL to redirect users.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='legal.refund_policy'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Refund Policy')}</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder={t(
+                        'Provide Markdown, HTML, or an external URL for the refund policy'
+                      )}
+                      rows={6}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Leave empty to disable the refund policy requirement. Supports Markdown, HTML, or a full URL to redirect users.'
                     )}
                   </FormDescription>
                   <FormMessage />

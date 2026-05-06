@@ -1,7 +1,7 @@
 import { useParams } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
-import { parseCurrencyDisplayType } from '@/lib/currency'
 import { DEFAULT_BILLING_GROUP_MODES } from '@/lib/billing-visibility'
+import { parseCurrencyDisplayType } from '@/lib/currency'
 import { useSystemOptions, getOptionValue } from '../hooks/use-system-options'
 import type { GeneralSettings } from '../types'
 import {
@@ -12,7 +12,7 @@ import {
 const defaultGeneralSettings: GeneralSettings = {
   'theme.frontend': 'default',
   Notice: '',
-  SystemName: 'AIKanHub',
+  SystemName: 'kittyvibe',
   Logo: '',
   Footer: '',
   About: '',
@@ -20,6 +20,7 @@ const defaultGeneralSettings: GeneralSettings = {
   ServerAddress: '',
   'legal.user_agreement': '',
   'legal.privacy_policy': '',
+  'legal.refund_policy': '',
   QuotaForNewUser: 0,
   PreConsumedQuota: 0,
   QuotaForInviter: 0,

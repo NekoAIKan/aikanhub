@@ -16,58 +16,44 @@ export function TermsFooter({
   const { t } = useTranslation()
   const text =
     variant === 'sign-in'
-      ? 'By clicking sign in, you agree to our'
-      : 'By creating an account, you agree to our'
+      ? t('By clicking sign in, you agree to our')
+      : t('By creating an account, you agree to our')
 
   const hasUserAgreement = Boolean(status?.user_agreement_enabled)
   const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
+  const hasRefundPolicy = Boolean(status?.refund_policy_enabled)
 
-  if (!hasUserAgreement && !hasPrivacyPolicy) {
+  const activeLinks = [
+    hasUserAgreement
+      ? { label: t('User Agreement'), href: '/user-agreement' }
+      : null,
+    hasPrivacyPolicy
+      ? { label: t('Privacy Policy'), href: '/privacy-policy' }
+      : null,
+    hasRefundPolicy
+      ? { label: t('Refund Policy'), href: '/refund-policy' }
+      : null,
+  ].filter(Boolean) as Array<{ label: string; href: string }>
+
+  if (activeLinks.length === 0) {
     return null
   }
-
-  const agreementLink = {
-    label: 'User Agreement',
-    href: '/user-agreement',
-  }
-  const privacyLink = {
-    label: 'Privacy Policy',
-    href: '/privacy-policy',
-  }
-
-  const activeLinks =
-    hasUserAgreement || hasPrivacyPolicy
-      ? ([
-          hasUserAgreement ? agreementLink : null,
-          hasPrivacyPolicy ? privacyLink : null,
-        ].filter(Boolean) as Array<{ label: string; href: string }>)
-      : [agreementLink, privacyLink]
-
-  const [firstLink, secondLink] = activeLinks
 
   return (
     <p className={cn('text-muted-foreground text-center text-xs', className)}>
       {text}{' '}
-      {firstLink && (
-        <a
-          href={firstLink.href}
-          className='hover:text-primary underline underline-offset-4'
-        >
-          {firstLink.label}
-        </a>
-      )}
-      {secondLink && (
-        <>
-          {' '}
-          {t('and')}{' '}
+      {activeLinks.map((link, index) => (
+        <span key={link.href}>
+          {index > 0 &&
+            (index === activeLinks.length - 1 ? ` ${t('and')} ` : ', ')}
           <a
-            href={secondLink.href}
+            href={link.href}
             className='hover:text-primary underline underline-offset-4'
           >
-            {secondLink.label}
+            {link.label}
           </a>
-        </>
-      )}
+        </span>
+      ))}
       .
     </p>
   )

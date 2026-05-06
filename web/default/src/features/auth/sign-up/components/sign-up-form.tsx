@@ -83,7 +83,9 @@ export function SignUpForm({
   const emailVerificationRequired = !!status?.email_verification
   const hasUserAgreement = Boolean(status?.user_agreement_enabled)
   const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
-  const requiresLegalConsent = hasUserAgreement || hasPrivacyPolicy
+  const hasRefundPolicy = Boolean(status?.refund_policy_enabled)
+  const requiresLegalConsent =
+    hasUserAgreement || hasPrivacyPolicy || hasRefundPolicy
   const oauthRegisterEnabled =
     status?.oauth_register_enabled ??
     status?.data?.oauth_register_enabled ??

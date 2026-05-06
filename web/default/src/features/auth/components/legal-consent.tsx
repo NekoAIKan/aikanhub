@@ -20,8 +20,21 @@ export function LegalConsent({
   const { t } = useTranslation()
   const hasUserAgreement = Boolean(status?.user_agreement_enabled)
   const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
+  const hasRefundPolicy = Boolean(status?.refund_policy_enabled)
 
-  if (!hasUserAgreement && !hasPrivacyPolicy) {
+  const links = [
+    hasUserAgreement
+      ? { href: '/user-agreement', label: t('User Agreement') }
+      : null,
+    hasPrivacyPolicy
+      ? { href: '/privacy-policy', label: t('Privacy Policy') }
+      : null,
+    hasRefundPolicy
+      ? { href: '/refund-policy', label: t('Refund Policy') }
+      : null,
+  ].filter(Boolean) as Array<{ href: string; label: string }>
+
+  if (links.length === 0) {
     return null
   }
 
@@ -48,27 +61,20 @@ export function LegalConsent({
       >
         <span>
           {t('I have read and agree to the')}{' '}
-          {hasUserAgreement && (
-            <a
-              href='/user-agreement'
-              target='_blank'
-              rel='noopener noreferrer'
-              className='text-primary hover:underline'
-            >
-              {t('User Agreement')}
-            </a>
-          )}
-          {hasUserAgreement && hasPrivacyPolicy && ' and the '}
-          {hasPrivacyPolicy && (
-            <a
-              href='/privacy-policy'
-              target='_blank'
-              rel='noopener noreferrer'
-              className='text-primary hover:underline'
-            >
-              {t('Privacy Policy')}
-            </a>
-          )}
+          {links.map((link, index) => (
+            <span key={link.href}>
+              {index > 0 &&
+                (index === links.length - 1 ? ` ${t('and')} ` : ', ')}
+              <a
+                href={link.href}
+                target='_blank'
+                rel='noopener noreferrer'
+                className='text-primary hover:underline'
+              >
+                {link.label}
+              </a>
+            </span>
+          ))}
           .
         </span>
       </Label>
