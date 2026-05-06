@@ -18,6 +18,10 @@ const STATUS_RELATED_KEYS = [
   'general_setting.quota_display_type',
   'general_setting.custom_currency_symbol',
   'general_setting.custom_currency_exchange_rate',
+  'credit_display_setting.enabled',
+  'credit_display_setting.label',
+  'credit_display_setting.quota_per_credit',
+  'credit_display_setting.precision',
 ]
 
 export function useUpdateOption() {
@@ -31,7 +35,7 @@ export function useUpdateOption() {
       }
       return data
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (_data, variables) => {
       // Always refresh system-options
       queryClient.invalidateQueries({ queryKey: ['system-options'] })
 
