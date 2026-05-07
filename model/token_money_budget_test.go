@@ -12,7 +12,7 @@ import (
 
 func setupTokenMoneyBudgetTest(t *testing.T) {
 	t.Helper()
-	require.NoError(t, DB.AutoMigrate(&Token{}))
+	ensureModelTestSchema(t, &Token{})
 	require.NoError(t, DB.Exec("DELETE FROM tokens").Error)
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
 		"billing_setting.money_billing_mode":  "legacy",

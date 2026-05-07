@@ -11,7 +11,7 @@ import (
 
 func setupMoneyWalletTest(t *testing.T) {
 	t.Helper()
-	require.NoError(t, DB.AutoMigrate(&MoneyWallet{}, &MoneyWalletTransaction{}))
+	ensureModelTestSchema(t, &MoneyWallet{}, &MoneyWalletTransaction{})
 	require.NoError(t, DB.Exec("DELETE FROM money_wallet_transactions").Error)
 	require.NoError(t, DB.Exec("DELETE FROM money_wallets").Error)
 	t.Cleanup(func() {

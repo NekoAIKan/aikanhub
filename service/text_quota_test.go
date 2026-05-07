@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
@@ -14,6 +15,61 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func TestApplyMoneyUsageSettlementQuoteUsesRetailPolicy(t *testing.T) {
+	ensureServiceTestSchema(t, &model.RetailPricingPolicy{})
+	require.NoError(t, model.DB.Exec("DELETE FROM retail_pricing_policies").Error)
+	t.Cleanup(func() {
+		model.DB.Exec("DELETE FROM retail_pricing_policies")
+	})
+	require.NoError(t, model.DB.Create(&model.RetailPricingPolicy{
+		PublicModel:  "gpt-money-runtime",
+		Group:        model.DefaultPricingGroup,
+		EndpointType: string(constant.EndpointTypeOpenAI),
+		PricingMode:  model.PricingModeFixedRule,
+		Currency:     "USD",
+		BillingRuleJSON: `{
+			"schema_version": 1,
+			"profile_type": "money_usage_pricing",
+			"currency": "USD",
+			"rates": {
+				"input_token": {"amount_micros": 1000000, "basis": "per_million_units", "currency": "USD"},
+				"output_token": {"amount_micros": 2000000, "basis": "per_million_units", "currency": "USD"},
+				"cached_input_token": {"amount_micros": 100000, "basis": "per_million_units", "currency": "USD"},
+				"cache_write_token": {"amount_micros": 500000, "basis": "per_million_units", "currency": "USD"},
+				"request": {"amount_micros": 10000, "basis": "per_unit", "currency": "USD"},
+				"web_search_call": {"amount_micros": 30000, "basis": "per_unit", "currency": "USD"}
+			}
+		}`,
+		Enabled: true,
+	}).Error)
+
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-money-runtime",
+		UsingGroup:      model.DefaultPricingGroup,
+		PriceData: types.PriceData{
+			MoneyPricingEnabled: true,
+			MoneyEndpointType:   string(constant.EndpointTypeOpenAI),
+		},
+	}
+	summary := &textQuotaSummary{
+		ModelName:            "gpt-money-runtime",
+		PromptTokens:         1_000_000,
+		CompletionTokens:     500_000,
+		TotalTokens:          1_500_000,
+		CacheTokens:          100_000,
+		CacheCreationTokens:  10_000,
+		WebSearchCallCount:   2,
+		CacheCreationRatio:   1,
+		CacheCreationRatio5m: 1,
+		CacheCreationRatio1h: 1,
+	}
+
+	require.NoError(t, applyMoneyUsageSettlementQuote(relayInfo, summary))
+	require.True(t, relayInfo.PriceData.MoneyActualAmountKnown)
+	require.Equal(t, int64(2_085_000), relayInfo.PriceData.MoneyActualAmountMicros)
+	require.Equal(t, model.MoneyMicrosToLegacyQuota(2_085_000), summary.Quota)
+}
 
 func TestCalculateTextQuotaSummaryUnifiedForClaudeSemantic(t *testing.T) {
 	gin.SetMode(gin.TestMode)

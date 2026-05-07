@@ -23,16 +23,19 @@ import (
 // BillingSession 封装单次请求的预扣费/结算/退款生命周期。
 // 实现 relaycommon.BillingSettler 接口。
 type BillingSession struct {
-	relayInfo        *relaycommon.RelayInfo
-	funding          FundingSource
-	preConsumedQuota int  // 实际预扣额度（信任用户可能为 0）
-	tokenConsumed    int  // 令牌额度实际扣减量
-	extraReserved    int  // 发送前补充预扣的额度（订阅退款时需要单独回滚）
-	trusted          bool // 是否命中信任额度旁路
-	fundingSettled   bool // funding.Settle 已成功，资金来源已提交
-	settled          bool // Settle 全部完成（资金 + 令牌）
-	refunded         bool // Refund 已调用
-	mu               sync.Mutex
+	relayInfo           *relaycommon.RelayInfo
+	funding             FundingSource
+	preConsumedQuota    int // 实际预扣额度（信任用户可能为 0）
+	tokenConsumed       int // 令牌额度实际扣减量
+	extraReserved       int // 发送前补充预扣的额度（订阅退款时需要单独回滚）
+	preConsumedMicros   int64
+	tokenConsumedMicros int64
+	extraReservedMicros int64
+	trusted             bool // 是否命中信任额度旁路
+	fundingSettled      bool // funding.Settle 已成功，资金来源已提交
+	settled             bool // Settle 全部完成（资金 + 令牌）
+	refunded            bool // Refund 已调用
+	mu                  sync.Mutex
 }
 
 // Settle 根据实际消耗额度进行结算。
@@ -45,9 +48,11 @@ func (s *BillingSession) Settle(actualQuota int) error {
 		return nil
 	}
 	delta := actualQuota - s.preConsumedQuota
+	actualMicros := s.actualAmountMicros(actualQuota)
+	deltaMicros := actualMicros - s.preConsumedMicros
 	// 1) 调整资金来源（仅在尚未提交时执行，防止重复调用）
 	if !s.fundingSettled {
-		if err := s.funding.Settle(delta); err != nil {
+		if err := s.funding.Settle(delta, actualMicros); err != nil {
 			return err
 		}
 		s.fundingSettled = true
@@ -56,11 +61,11 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	var tokenErr error
 	if !s.relayInfo.IsPlayground {
 		if !model.ShouldWriteLegacyQuota() {
-			amountMicros := model.LegacyQuotaToMoneyMicros(int64(absInt(delta)))
+			amountMicros := absMicros(deltaMicros)
 			if amountMicros > 0 {
-				if delta > 0 {
+				if deltaMicros > 0 {
 					tokenErr = model.DecreaseTokenMoneyBudget(s.relayInfo.TokenId, s.relayInfo.TokenKey, amountMicros)
-				} else if delta < 0 {
+				} else if deltaMicros < 0 {
 					tokenErr = model.IncreaseTokenMoneyBudget(s.relayInfo.TokenId, s.relayInfo.TokenKey, amountMicros)
 				}
 			}
@@ -79,7 +84,7 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	if s.funding.Source() == BillingSourceSubscription {
 		s.relayInfo.SubscriptionPostDelta += int64(delta)
 		if !model.ShouldWriteLegacyQuota() {
-			s.relayInfo.SubscriptionPostDeltaAmountMicros += model.LegacyQuotaDeltaToMoneyMicros(int64(delta))
+			s.relayInfo.SubscriptionPostDeltaAmountMicros += deltaMicros
 		}
 	}
 	s.settled = true
@@ -107,7 +112,9 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	tokenKey := s.relayInfo.TokenKey
 	isPlayground := s.relayInfo.IsPlayground
 	tokenConsumed := s.tokenConsumed
+	tokenConsumedMicros := s.tokenConsumedMicros
 	extraReserved := s.extraReserved
+	extraReservedMicros := s.extraReservedMicros
 	subscriptionId := s.relayInfo.SubscriptionId
 	funding := s.funding
 
@@ -117,7 +124,13 @@ func (s *BillingSession) Refund(c *gin.Context) {
 			common.SysLog("error refunding billing source: " + err.Error())
 		}
 		if extraReserved > 0 && funding.Source() == BillingSourceSubscription && subscriptionId > 0 {
-			if err := model.PostConsumeUserSubscriptionDelta(subscriptionId, -int64(extraReserved)); err != nil {
+			var err error
+			if !model.ShouldWriteLegacyQuota() {
+				err = model.PostConsumeUserSubscriptionMoneyDelta(subscriptionId, -extraReservedMicros)
+			} else {
+				err = model.PostConsumeUserSubscriptionDelta(subscriptionId, -int64(extraReserved))
+			}
+			if err != nil {
 				common.SysLog("error refunding subscription extra reserved quota: " + err.Error())
 			}
 		}
@@ -125,7 +138,11 @@ func (s *BillingSession) Refund(c *gin.Context) {
 		if tokenConsumed > 0 && !isPlayground {
 			var err error
 			if !model.ShouldWriteLegacyQuota() {
-				err = model.IncreaseTokenMoneyBudget(tokenId, tokenKey, model.LegacyQuotaToMoneyMicros(int64(tokenConsumed)))
+				amountMicros := tokenConsumedMicros
+				if amountMicros <= 0 {
+					amountMicros = model.LegacyQuotaToMoneyMicros(int64(tokenConsumed))
+				}
+				err = model.IncreaseTokenMoneyBudget(tokenId, tokenKey, amountMicros)
 			} else {
 				err = model.IncreaseTokenQuota(tokenId, tokenKey, tokenConsumed)
 			}
@@ -187,6 +204,12 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 	s.preConsumedQuota += delta
 	s.tokenConsumed += delta
 	s.extraReserved += delta
+	if !model.ShouldWriteLegacyQuota() {
+		deltaMicros := model.LegacyQuotaToMoneyMicros(int64(delta))
+		s.preConsumedMicros += deltaMicros
+		s.tokenConsumedMicros += deltaMicros
+		s.extraReservedMicros += deltaMicros
+	}
 	s.syncRelayInfo()
 	return nil
 }
@@ -211,19 +234,26 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 
 	// ---- 1) 预扣令牌额度 ----
 	if effectiveQuota > 0 {
-		if err := PreConsumeTokenQuota(s.relayInfo, effectiveQuota); err != nil {
+		amountMicros := s.preConsumeAmountMicros(effectiveQuota)
+		if err := PreConsumeTokenQuotaWithMoneyAmount(s.relayInfo, effectiveQuota, amountMicros); err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 		}
 		s.tokenConsumed = effectiveQuota
+		s.tokenConsumedMicros = amountMicros
 	}
 
 	// ---- 2) 预扣资金来源 ----
-	if err := s.funding.PreConsume(effectiveQuota); err != nil {
+	amountMicros := s.preConsumeAmountMicros(effectiveQuota)
+	if err := s.funding.PreConsume(effectiveQuota, amountMicros); err != nil {
 		// 预扣费失败，回滚令牌额度
 		if s.tokenConsumed > 0 && !s.relayInfo.IsPlayground {
 			var rollbackErr error
 			if !model.ShouldWriteLegacyQuota() {
-				rollbackErr = model.IncreaseTokenMoneyBudget(s.relayInfo.TokenId, s.relayInfo.TokenKey, model.LegacyQuotaToMoneyMicros(int64(s.tokenConsumed)))
+				rollbackMicros := s.tokenConsumedMicros
+				if rollbackMicros <= 0 {
+					rollbackMicros = model.LegacyQuotaToMoneyMicros(int64(s.tokenConsumed))
+				}
+				rollbackErr = model.IncreaseTokenMoneyBudget(s.relayInfo.TokenId, s.relayInfo.TokenKey, rollbackMicros)
 			} else {
 				rollbackErr = model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, s.tokenConsumed)
 			}
@@ -232,6 +262,7 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 					s.relayInfo.UserId, s.relayInfo.TokenId, s.tokenConsumed, err.Error(), rollbackErr.Error()))
 			}
 			s.tokenConsumed = 0
+			s.tokenConsumedMicros = 0
 		}
 		// TODO: model 层应定义哨兵错误（如 ErrNoActiveSubscription），用 errors.Is 替代字符串匹配
 		errMsg := err.Error()
@@ -242,6 +273,7 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 	}
 
 	s.preConsumedQuota = effectiveQuota
+	s.preConsumedMicros = amountMicros
 
 	// ---- 同步 RelayInfo 兼容字段 ----
 	s.syncRelayInfo()
@@ -262,6 +294,9 @@ func (s *BillingSession) reserveFunding(delta int) error {
 			}
 		}
 		funding.consumed += delta
+		if !model.ShouldWriteLegacyQuota() {
+			funding.consumedMicros += model.LegacyQuotaToMoneyMicros(int64(delta))
+		}
 		return nil
 	case *SubscriptionFunding:
 		if err := model.PostConsumeUserSubscriptionDelta(funding.subscriptionId, int64(delta)); err != nil {
@@ -310,6 +345,33 @@ func (s *BillingSession) reserveToken(delta int) error {
 	return nil
 }
 
+func (s *BillingSession) preConsumeAmountMicros(quota int) int64 {
+	if model.ShouldWriteLegacyQuota() {
+		return 0
+	}
+	if s.relayInfo != nil && s.relayInfo.PriceData.MoneyPricingEnabled && s.relayInfo.PriceData.MoneyPreConsumedAmountKnown {
+		return s.relayInfo.PriceData.MoneyPreConsumedAmountMicros
+	}
+	return model.LegacyQuotaToMoneyMicros(int64(quota))
+}
+
+func (s *BillingSession) actualAmountMicros(actualQuota int) int64 {
+	if model.ShouldWriteLegacyQuota() {
+		return -1
+	}
+	if s.relayInfo != nil && s.relayInfo.PriceData.MoneyPricingEnabled && s.relayInfo.PriceData.MoneyActualAmountKnown {
+		return s.relayInfo.PriceData.MoneyActualAmountMicros
+	}
+	return model.LegacyQuotaToMoneyMicros(int64(actualQuota))
+}
+
+func absMicros(value int64) int64 {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
+
 // shouldTrust 统一信任额度检查，适用于钱包和订阅。
 func (s *BillingSession) shouldTrust(c *gin.Context) bool {
 	if !model.ShouldWriteLegacyQuota() {
@@ -356,15 +418,19 @@ func (s *BillingSession) syncRelayInfo() {
 	info.BillingSource = s.funding.Source()
 
 	if sub, ok := s.funding.(*SubscriptionFunding); ok {
+		preConsumedMicros := sub.amountMicros
+		if preConsumedMicros <= 0 {
+			preConsumedMicros = model.LegacyQuotaToMoneyMicros(sub.preConsumed)
+		}
 		info.SubscriptionId = sub.subscriptionId
 		info.SubscriptionPreConsumed = sub.preConsumed + int64(s.extraReserved)
 		info.SubscriptionPostDelta = 0
 		info.SubscriptionAmountTotal = sub.AmountTotal
 		info.SubscriptionAmountUsedAfterPreConsume = sub.AmountUsedAfter + int64(s.extraReserved)
-		info.SubscriptionPreConsumedAmountMicros = model.LegacyQuotaToMoneyMicros(sub.preConsumed + int64(s.extraReserved))
+		info.SubscriptionPreConsumedAmountMicros = preConsumedMicros + s.extraReservedMicros
 		info.SubscriptionPostDeltaAmountMicros = 0
 		info.SubscriptionAmountTotalMicros = sub.AmountTotalMicros
-		info.SubscriptionAmountUsedMicrosAfterPreConsume = sub.AmountUsedMicrosAfter + model.LegacyQuotaToMoneyMicros(int64(s.extraReserved))
+		info.SubscriptionAmountUsedMicrosAfterPreConsume = sub.AmountUsedMicrosAfter + s.extraReservedMicros
 		info.SubscriptionCurrency = sub.Currency
 		info.SubscriptionPlanId = sub.PlanId
 		info.SubscriptionPlanTitle = sub.PlanTitle
@@ -373,6 +439,13 @@ func (s *BillingSession) syncRelayInfo() {
 		info.SubscriptionPreConsumed = 0
 		info.SubscriptionPreConsumedAmountMicros = 0
 	}
+}
+
+func moneyAmountMicrosForPreConsume(relayInfo *relaycommon.RelayInfo, preConsumedQuota int) int64 {
+	if relayInfo != nil && relayInfo.PriceData.MoneyPricingEnabled && relayInfo.PriceData.MoneyPreConsumedAmountKnown {
+		return relayInfo.PriceData.MoneyPreConsumedAmountMicros
+	}
+	return model.LegacyQuotaToMoneyMicros(int64(preConsumedQuota))
 }
 
 // ---------------------------------------------------------------------------
@@ -390,7 +463,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 	// 钱包路径需要先检查用户额度
 	tryWallet := func() (*BillingSession, *types.NewAPIError) {
 		if !model.ShouldWriteLegacyQuota() {
-			requiredMicros := model.LegacyQuotaToMoneyMicros(int64(preConsumedQuota))
+			requiredMicros := moneyAmountMicrosForPreConsume(relayInfo, preConsumedQuota)
 			availableMicros, err := model.GetMoneyWalletAvailableMicros(relayInfo.UserId, model.SettlementCurrency())
 			if err != nil {
 				return nil, types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
@@ -447,10 +520,11 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		session := &BillingSession{
 			relayInfo: relayInfo,
 			funding: &SubscriptionFunding{
-				requestId: relayInfo.RequestId,
-				userId:    relayInfo.UserId,
-				modelName: relayInfo.OriginModelName,
-				amount:    subConsume,
+				requestId:    relayInfo.RequestId,
+				userId:       relayInfo.UserId,
+				modelName:    relayInfo.OriginModelName,
+				amount:       subConsume,
+				amountMicros: moneyAmountMicrosForPreConsume(relayInfo, int(subConsume)),
 			},
 		}
 		// 必须传 subConsume 而非 preConsumedQuota，保证 SubscriptionFunding.amount、

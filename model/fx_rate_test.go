@@ -9,7 +9,7 @@ import (
 
 func setupFxRateTest(t *testing.T) {
 	t.Helper()
-	require.NoError(t, DB.AutoMigrate(&FxRate{}))
+	ensureModelTestSchema(t, &FxRate{})
 	require.NoError(t, DB.Exec("DELETE FROM fx_rates").Error)
 	t.Cleanup(func() {
 		DB.Exec("DELETE FROM fx_rates")

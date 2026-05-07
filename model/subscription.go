@@ -1058,6 +1058,10 @@ func fillSubscriptionPreConsumeResult(result *SubscriptionPreConsumeResult, sub 
 
 // PreConsumeUserSubscription pre-consumes from any active subscription total quota or money budget.
 func PreConsumeUserSubscription(requestId string, userId int, modelName string, quotaType int, amount int64) (*SubscriptionPreConsumeResult, error) {
+	return PreConsumeUserSubscriptionWithMoneyAmount(requestId, userId, modelName, quotaType, amount, 0)
+}
+
+func PreConsumeUserSubscriptionWithMoneyAmount(requestId string, userId int, modelName string, quotaType int, amount int64, amountMicros int64) (*SubscriptionPreConsumeResult, error) {
 	if userId <= 0 {
 		return nil, errors.New("invalid userId")
 	}
@@ -1071,7 +1075,10 @@ func PreConsumeUserSubscription(requestId string, userId int, modelName string, 
 	useMoneyBudget := !ShouldWriteLegacyQuota()
 	requestedAmountMicros := int64(0)
 	if useMoneyBudget {
-		requestedAmountMicros = LegacyQuotaToMoneyMicros(amount)
+		requestedAmountMicros = amountMicros
+		if requestedAmountMicros <= 0 {
+			requestedAmountMicros = LegacyQuotaToMoneyMicros(amount)
+		}
 		if requestedAmountMicros <= 0 {
 			return nil, errors.New("amount_micros must be > 0")
 		}
@@ -1296,6 +1303,9 @@ func GetSubscriptionPlanInfoByUserSubscriptionId(userSubscriptionId int) (*Subsc
 // In money billing mode the legacy delta is converted to settlement-currency micros
 // and only the money budget fields are mutated.
 func PostConsumeUserSubscriptionDelta(userSubscriptionId int, delta int64) error {
+	if !ShouldWriteLegacyQuota() {
+		return PostConsumeUserSubscriptionMoneyDelta(userSubscriptionId, legacyQuotaDeltaToMoneyMicros(delta))
+	}
 	if userSubscriptionId <= 0 {
 		return errors.New("invalid userSubscriptionId")
 	}
@@ -1309,23 +1319,6 @@ func PostConsumeUserSubscriptionDelta(userSubscriptionId int, delta int64) error
 			First(&sub).Error; err != nil {
 			return err
 		}
-		if !ShouldWriteLegacyQuota() {
-			deltaMicros := legacyQuotaDeltaToMoneyMicros(delta)
-			if deltaMicros == 0 {
-				return nil
-			}
-			newUsedMicros := subscriptionAmountUsedMicros(&sub) + deltaMicros
-			if newUsedMicros < 0 {
-				newUsedMicros = 0
-			}
-			totalMicros := subscriptionAmountTotalMicros(&sub)
-			if totalMicros > 0 && newUsedMicros > totalMicros {
-				return fmt.Errorf("subscription used amount_micros exceeds total, used=%d total=%d", newUsedMicros, totalMicros)
-			}
-			sub.AmountUsedMicros = newUsedMicros
-			sub.Currency = normalizeSubscriptionCurrency(sub.Currency)
-			return tx.Save(&sub).Error
-		}
 		newUsed := sub.AmountUsed + delta
 		if newUsed < 0 {
 			newUsed = 0
@@ -1334,6 +1327,34 @@ func PostConsumeUserSubscriptionDelta(userSubscriptionId int, delta int64) error
 			return fmt.Errorf("subscription used exceeds total, used=%d total=%d", newUsed, sub.AmountTotal)
 		}
 		sub.AmountUsed = newUsed
+		return tx.Save(&sub).Error
+	})
+}
+
+func PostConsumeUserSubscriptionMoneyDelta(userSubscriptionId int, deltaMicros int64) error {
+	if userSubscriptionId <= 0 {
+		return errors.New("invalid userSubscriptionId")
+	}
+	if deltaMicros == 0 {
+		return nil
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var sub UserSubscription
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").
+			Where("id = ?", userSubscriptionId).
+			First(&sub).Error; err != nil {
+			return err
+		}
+		newUsedMicros := subscriptionAmountUsedMicros(&sub) + deltaMicros
+		if newUsedMicros < 0 {
+			newUsedMicros = 0
+		}
+		totalMicros := subscriptionAmountTotalMicros(&sub)
+		if totalMicros > 0 && newUsedMicros > totalMicros {
+			return fmt.Errorf("subscription used amount_micros exceeds total, used=%d total=%d", newUsedMicros, totalMicros)
+		}
+		sub.AmountUsedMicros = newUsedMicros
+		sub.Currency = normalizeSubscriptionCurrency(sub.Currency)
 		return tx.Save(&sub).Error
 	})
 }

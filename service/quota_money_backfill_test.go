@@ -13,7 +13,7 @@ import (
 
 func setupQuotaMoneyBackfillTest(t *testing.T) {
 	t.Helper()
-	require.NoError(t, model.DB.AutoMigrate(&model.User{}, &model.Token{}, &model.UserSubscription{}, &model.MoneyWallet{}, &model.MoneyWalletTransaction{}))
+	ensureServiceTestSchema(t, &model.User{}, &model.Token{}, &model.UserSubscription{}, &model.MoneyWallet{}, &model.MoneyWalletTransaction{})
 	require.NoError(t, model.DB.Exec("DELETE FROM money_wallet_transactions").Error)
 	require.NoError(t, model.DB.Exec("DELETE FROM money_wallets").Error)
 	require.NoError(t, model.DB.Exec("DELETE FROM user_subscriptions").Error)

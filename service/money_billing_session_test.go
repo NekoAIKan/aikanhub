@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/config"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,7 +17,7 @@ import (
 
 func setupMoneyBillingSessionTest(t *testing.T) {
 	t.Helper()
-	require.NoError(t, model.DB.AutoMigrate(&model.User{}, &model.Token{}, &model.MoneyWallet{}, &model.MoneyWalletTransaction{}))
+	ensureServiceTestSchema(t, &model.User{}, &model.Token{}, &model.MoneyWallet{}, &model.MoneyWalletTransaction{})
 	for _, table := range []string{"money_wallet_transactions", "money_wallets", "tokens", "users"} {
 		require.NoError(t, model.DB.Exec("DELETE FROM "+table).Error)
 	}
@@ -149,4 +150,38 @@ func TestMoneyBillingSessionSettleChargesDifference(t *testing.T) {
 	settledToken := fetchMoneyBillingSessionToken(t, token.Id)
 	assert.Equal(t, int64(500_000), settledToken.RemainAmountMicros)
 	assert.Equal(t, int64(1_500_000), settledToken.UsedAmountMicros)
+}
+
+func TestMoneyBillingSessionUsesExactMoneyPricingAmounts(t *testing.T) {
+	setupMoneyBillingSessionTest(t)
+	token := seedMoneyBillingSessionUserAndToken(t, 1008, "money-session-exactmicros")
+	relayInfo := newMoneyBillingRelayInfo(1008, token, "req-money-session-exactmicros")
+	relayInfo.PriceData = types.PriceData{
+		MoneyPricingEnabled:          true,
+		MoneyPreConsumedAmountKnown:  true,
+		MoneyPreConsumedAmountMicros: 750_000,
+		MoneySettlementCurrency:      "USD",
+	}
+	ctx := newMoneyBillingSessionContext()
+
+	apiErr := PreConsumeBilling(ctx, 500_000, relayInfo)
+	require.Nil(t, apiErr)
+
+	wallet := fetchMoneyBillingSessionWallet(t, 1008)
+	assert.Equal(t, int64(1_250_000), wallet.AvailableMicros)
+	assert.Equal(t, int64(750_000), wallet.FrozenMicros)
+	prechargedToken := fetchMoneyBillingSessionToken(t, token.Id)
+	assert.Equal(t, int64(1_250_000), prechargedToken.RemainAmountMicros)
+	assert.Equal(t, int64(750_000), prechargedToken.UsedAmountMicros)
+
+	relayInfo.PriceData.MoneyActualAmountKnown = true
+	relayInfo.PriceData.MoneyActualAmountMicros = 600_000
+	require.NoError(t, SettleBilling(ctx, relayInfo, 250_000))
+
+	wallet = fetchMoneyBillingSessionWallet(t, 1008)
+	assert.Equal(t, int64(1_400_000), wallet.AvailableMicros)
+	assert.Equal(t, int64(0), wallet.FrozenMicros)
+	settledToken := fetchMoneyBillingSessionToken(t, token.Id)
+	assert.Equal(t, int64(1_400_000), settledToken.RemainAmountMicros)
+	assert.Equal(t, int64(600_000), settledToken.UsedAmountMicros)
 }

@@ -17,9 +17,9 @@ type FundingSource interface {
 	// Source 返回资金来源标识："wallet" 或 "subscription"
 	Source() string
 	// PreConsume 从该资金来源预扣 amount 额度
-	PreConsume(amount int) error
+	PreConsume(amount int, amountMicros int64) error
 	// Settle 根据差额调整资金来源（正数补扣，负数退还）
-	Settle(delta int) error
+	Settle(delta int, finalAmountMicros int64) error
 	// Refund 退还所有预扣费
 	Refund() error
 }
@@ -34,6 +34,7 @@ type WalletFunding struct {
 	currency         string
 	preauthRequestId string
 	consumed         int // 实际预扣的用户额度
+	consumedMicros   int64
 }
 
 func (w *WalletFunding) Source() string { return BillingSourceWallet }
@@ -60,12 +61,14 @@ func (w *WalletFunding) requestScopedID(suffix string) string {
 	return fmt.Sprintf("billing:%s:wallet:%s", w.requestId, suffix)
 }
 
-func (w *WalletFunding) PreConsume(amount int) error {
+func (w *WalletFunding) PreConsume(amount int, amountMicros int64) error {
 	if amount <= 0 {
 		return nil
 	}
 	if !model.ShouldWriteLegacyQuota() {
-		amountMicros := model.LegacyQuotaToMoneyMicros(int64(amount))
+		if amountMicros <= 0 {
+			amountMicros = model.LegacyQuotaToMoneyMicros(int64(amount))
+		}
 		if amountMicros <= 0 {
 			return nil
 		}
@@ -73,6 +76,7 @@ func (w *WalletFunding) PreConsume(amount int) error {
 			return err
 		}
 		w.consumed = amount
+		w.consumedMicros = amountMicros
 		return nil
 	}
 	if err := model.DecreaseUserQuota(w.userId, amount, false); err != nil {
@@ -82,10 +86,16 @@ func (w *WalletFunding) PreConsume(amount int) error {
 	return nil
 }
 
-func (w *WalletFunding) Settle(delta int) error {
+func (w *WalletFunding) Settle(delta int, finalAmountMicros int64) error {
 	if delta == 0 {
 		if !model.ShouldWriteLegacyQuota() && w.preauthRequestId != "" {
-			return model.SettleFrozenWallet(w.userId, w.currency, w.preauthID(), model.LegacyQuotaToMoneyMicros(int64(w.consumed)), w.requestScopedID("settle"), "billing_settle")
+			if finalAmountMicros < 0 {
+				finalAmountMicros = w.consumedMicros
+			}
+			if finalAmountMicros <= 0 && w.consumed > 0 {
+				finalAmountMicros = model.LegacyQuotaToMoneyMicros(int64(w.consumed))
+			}
+			return model.SettleFrozenWallet(w.userId, w.currency, w.preauthID(), finalAmountMicros, w.requestScopedID("settle"), "billing_settle")
 		}
 		return nil
 	}
@@ -94,7 +104,10 @@ func (w *WalletFunding) Settle(delta int) error {
 		if finalQuota < 0 {
 			finalQuota = 0
 		}
-		finalMicros := model.LegacyQuotaToMoneyMicros(int64(finalQuota))
+		finalMicros := finalAmountMicros
+		if finalMicros < 0 {
+			finalMicros = model.LegacyQuotaToMoneyMicros(int64(finalQuota))
+		}
 		if w.preauthRequestId == "" {
 			if finalMicros <= 0 {
 				return nil
@@ -133,6 +146,7 @@ type SubscriptionFunding struct {
 	userId         int
 	modelName      string
 	amount         int64 // 预扣的订阅额度（subConsume）
+	amountMicros   int64
 	subscriptionId int
 	preConsumed    int64
 	// 以下字段在 PreConsume 成功后填充，供 RelayInfo 同步使用
@@ -147,9 +161,12 @@ type SubscriptionFunding struct {
 
 func (s *SubscriptionFunding) Source() string { return BillingSourceSubscription }
 
-func (s *SubscriptionFunding) PreConsume(_ int) error {
+func (s *SubscriptionFunding) PreConsume(_ int, amountMicros int64) error {
 	// amount 参数被忽略，使用内部 s.amount（已在构造时根据 preConsumedQuota 计算）
-	res, err := model.PreConsumeUserSubscription(s.requestId, s.userId, s.modelName, 0, s.amount)
+	if amountMicros <= 0 {
+		amountMicros = s.amountMicros
+	}
+	res, err := model.PreConsumeUserSubscriptionWithMoneyAmount(s.requestId, s.userId, s.modelName, 0, s.amount, amountMicros)
 	if err != nil {
 		return err
 	}
@@ -160,6 +177,7 @@ func (s *SubscriptionFunding) PreConsume(_ int) error {
 	s.AmountTotalMicros = res.AmountTotalMicros
 	s.AmountUsedMicrosAfter = res.AmountUsedMicrosAfter
 	s.Currency = res.Currency
+	s.amountMicros = res.PreConsumedAmountMicros
 	// 获取订阅计划信息
 	if planInfo, err := model.GetSubscriptionPlanInfoByUserSubscriptionId(res.UserSubscriptionId); err == nil && planInfo != nil {
 		s.PlanId = planInfo.PlanId
@@ -168,9 +186,12 @@ func (s *SubscriptionFunding) PreConsume(_ int) error {
 	return nil
 }
 
-func (s *SubscriptionFunding) Settle(delta int) error {
+func (s *SubscriptionFunding) Settle(delta int, finalAmountMicros int64) error {
 	if delta == 0 {
 		return nil
+	}
+	if !model.ShouldWriteLegacyQuota() && finalAmountMicros >= 0 {
+		return model.PostConsumeUserSubscriptionMoneyDelta(s.subscriptionId, finalAmountMicros-s.amountMicros)
 	}
 	return model.PostConsumeUserSubscriptionDelta(s.subscriptionId, int64(delta))
 }

@@ -19,11 +19,28 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 func TestMain(m *testing.M) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	var db *gorm.DB
+	var err error
+	if dsn := os.Getenv("TEST_POSTGRES_DSN"); dsn != "" {
+		db, err = gorm.Open(postgres.New(postgres.Config{
+			DSN:                  dsn,
+			PreferSimpleProtocol: true,
+		}), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+		common.UsingPostgreSQL = true
+		common.UsingSQLite = false
+		common.UsingMySQL = false
+	} else {
+		db, err = gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+		common.UsingSQLite = true
+		common.UsingPostgreSQL = false
+		common.UsingMySQL = false
+	}
 	if err != nil {
 		panic("failed to open test db: " + err.Error())
 	}
@@ -36,7 +53,6 @@ func TestMain(m *testing.M) {
 	model.DB = db
 	model.LOG_DB = db
 
-	common.UsingSQLite = true
 	common.RedisEnabled = false
 	common.BatchUpdateEnabled = false
 	common.LogConsumeEnabled = true
@@ -48,14 +64,26 @@ func TestMain(m *testing.M) {
 		&model.Log{},
 		&model.Channel{},
 		&model.TopUp{},
+		&model.SubscriptionPlan{},
 		&model.UserSubscription{},
+		&model.SubscriptionPreConsumeRecord{},
 		&model.MoneyWallet{},
 		&model.MoneyWalletTransaction{},
+		&model.FxRate{},
+		&model.RetailPricingPolicy{},
 	); err != nil {
 		panic("failed to migrate: " + err.Error())
 	}
 
 	os.Exit(m.Run())
+}
+
+func ensureServiceTestSchema(t *testing.T, values ...interface{}) {
+	t.Helper()
+	if common.UsingPostgreSQL {
+		return
+	}
+	require.NoError(t, model.DB.AutoMigrate(values...))
 }
 
 // ---------------------------------------------------------------------------

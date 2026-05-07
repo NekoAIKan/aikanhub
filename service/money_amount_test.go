@@ -11,7 +11,7 @@ import (
 
 func setupMoneyAmountFxTest(t *testing.T) {
 	t.Helper()
-	require.NoError(t, model.DB.AutoMigrate(&model.FxRate{}))
+	ensureServiceTestSchema(t, &model.FxRate{})
 	require.NoError(t, model.DB.Exec("DELETE FROM fx_rates").Error)
 	t.Cleanup(func() {
 		model.DB.Exec("DELETE FROM fx_rates")

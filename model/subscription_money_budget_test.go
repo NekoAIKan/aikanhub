@@ -12,10 +12,10 @@ import (
 
 func setupSubscriptionMoneyBudgetTest(t *testing.T) {
 	t.Helper()
-	require.NoError(t, DB.AutoMigrate(&User{}, &UserSubscription{}, &SubscriptionPreConsumeRecord{}))
+	ensureModelTestSchema(t, &User{}, &UserSubscription{}, &SubscriptionPreConsumeRecord{})
 	if common.UsingSQLite {
 		require.NoError(t, ensureSubscriptionPlanTableSQLite())
-	} else {
+	} else if !common.UsingPostgreSQL {
 		require.NoError(t, DB.AutoMigrate(&SubscriptionPlan{}))
 	}
 	for _, table := range []string{

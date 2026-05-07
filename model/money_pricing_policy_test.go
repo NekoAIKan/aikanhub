@@ -12,7 +12,7 @@ const validMoneyUsageProfileJSON = `{"schema_version":1,"profile_type":"money_us
 
 func setupMoneyPricingPolicyTest(t *testing.T) {
 	t.Helper()
-	require.NoError(t, DB.AutoMigrate(&ChannelModelCost{}, &RetailPricingPolicy{}))
+	ensureModelTestSchema(t, &ChannelModelCost{}, &RetailPricingPolicy{})
 	require.NoError(t, DB.Exec("DELETE FROM channel_model_costs").Error)
 	require.NoError(t, DB.Exec("DELETE FROM retail_pricing_policies").Error)
 	t.Cleanup(func() {

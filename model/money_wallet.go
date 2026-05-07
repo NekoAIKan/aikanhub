@@ -84,6 +84,21 @@ func LegacyQuotaToMoneyMicros(quota int64) int64 {
 		IntPart()
 }
 
+func MoneyMicrosToLegacyQuota(amountMicros int64) int {
+	if amountMicros <= 0 || common.QuotaPerUnit <= 0 {
+		return 0
+	}
+	quota := decimal.NewFromInt(amountMicros).
+		Mul(decimal.NewFromFloat(common.QuotaPerUnit)).
+		Div(decimal.NewFromInt(1_000_000)).
+		Round(0).
+		IntPart()
+	if quota > int64(^uint(0)>>1) {
+		return int(^uint(0) >> 1)
+	}
+	return int(quota)
+}
+
 func legacyQuotaDeltaToMoneyMicros(quota int64) int64 {
 	if quota == 0 {
 		return 0

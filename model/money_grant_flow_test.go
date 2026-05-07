@@ -11,7 +11,7 @@ import (
 
 func setupMoneyGrantFlowTest(t *testing.T) {
 	t.Helper()
-	require.NoError(t, DB.AutoMigrate(&User{}, &Token{}, &Log{}, &MoneyWallet{}, &MoneyWalletTransaction{}, &Redemption{}, &Checkin{}))
+	ensureModelTestSchema(t, &User{}, &Token{}, &Log{}, &MoneyWallet{}, &MoneyWalletTransaction{}, &Redemption{}, &Checkin{})
 	for _, table := range []string{
 		"money_wallet_transactions",
 		"money_wallets",
@@ -112,7 +112,7 @@ func TestRedeemCreditsMoneyWalletInMoneyMode(t *testing.T) {
 	assert.Equal(t, int64(1_000_000), fetchGrantFlowWallet(t, 902).AvailableMicros)
 
 	var redemption Redemption
-	require.NoError(t, DB.First(&redemption, "`key` = ?", "redeem-money-mode-key").Error)
+	require.NoError(t, DB.First(&redemption, commonKeyCol+" = ?", "redeem-money-mode-key").Error)
 	assert.Equal(t, common.RedemptionCodeStatusUsed, redemption.Status)
 	assert.Equal(t, 902, redemption.UsedUserId)
 }

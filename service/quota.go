@@ -378,6 +378,10 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 }
 
 func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
+	return PreConsumeTokenQuotaWithMoneyAmount(relayInfo, quota, model.LegacyQuotaToMoneyMicros(int64(quota)))
+}
+
+func PreConsumeTokenQuotaWithMoneyAmount(relayInfo *relaycommon.RelayInfo, quota int, amountMicros int64) error {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
@@ -392,7 +396,9 @@ func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
 		return err
 	}
 	if !model.ShouldWriteLegacyQuota() {
-		amountMicros := model.LegacyQuotaToMoneyMicros(int64(quota))
+		if amountMicros <= 0 {
+			amountMicros = model.LegacyQuotaToMoneyMicros(int64(quota))
+		}
 		if amountMicros <= 0 {
 			return nil
 		}

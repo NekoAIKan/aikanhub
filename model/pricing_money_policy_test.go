@@ -11,10 +11,8 @@ import (
 
 func setupPricingMoneyPolicyTest(t *testing.T) {
 	t.Helper()
-	common.UsingSQLite = true
-	common.UsingPostgreSQL = false
 	initCol()
-	require.NoError(t, DB.AutoMigrate(&Channel{}, &Ability{}, &RetailPricingPolicy{}, &Model{}, &Vendor{}))
+	ensureModelTestSchema(t, &Channel{}, &Ability{}, &RetailPricingPolicy{}, &Model{}, &Vendor{})
 	for _, table := range []string{"retail_pricing_policies", "abilities", "channels", "models", "vendors"} {
 		require.NoError(t, DB.Exec("DELETE FROM "+table).Error)
 	}
