@@ -26,8 +26,8 @@ Verification:
 
 ### Current Focus
 
-- Add money-denominated API token budget fields.
-- Migrate grants and admin balance entry points to money wallet transactions.
+- Finish replacing remaining legacy quota-only runtime adjustment paths with money-aware helpers.
+- Expand money-native reporting fields while keeping legacy quota rows readable.
 
 ### 2026-05-07: Money Pricing Display Anchor
 
@@ -92,15 +92,30 @@ Verification:
 
 - `rtk go test ./service ./model ./setting/billing_setting -run 'QuotaBackfill|MoneyBillingMode|QuotaGuard|QuotaWrite|MoneyWallet|RechargeMoneyMode' -count=1 -timeout=180s`
 
+### 2026-05-07: Subscription Money Budgets And Async Task Adjustments
+
+- Added money-denominated subscription plan and user subscription budget fields.
+- Money mode subscription pre-consume, post-consume, refund, reset, and logging now use `amount_*_micros` instead of mutating legacy subscription quota fields.
+- Subscription plan creation converts legacy quota budgets into settlement-currency micros when explicit money budget fields are absent.
+- Quota-to-money backfill apply now fills API token money budgets and subscription money budgets, not only user wallets.
+- Async task refund/recalculation helpers now adjust money wallets and token money budgets in money mode.
+- Fixed a SQLite transaction deadlock risk by reading DB time through the active transaction in `CreateUserSubscriptionFromPlanTx`.
+
+Verification:
+
+- `rtk go test ./model -run 'Subscription.*Money|PreConsumeUserSubscriptionUsesMoney|PostConsumeUserSubscriptionDeltaUsesMoney' -count=1 -timeout=120s`
+- `rtk go test ./service -run 'TaskQuota|Recalculate|QuotaBackfill|MoneyBillingSession|Subscription|Token' -count=1 -timeout=300s`
+- `rtk go test ./model ./service ./controller ./setting/billing_setting -run 'Money|Subscription|QuotaBackfill|Token|Billing|Redeem|Checkin|TransferAff|Recharge|Pricing|Task' -count=1 -timeout=360s`
+
 ### Current Focus
 
-- Add money-denominated API token budget fields.
-- Migrate grants and admin balance entry points to money wallet transactions.
+- Finish replacing remaining legacy quota-only runtime adjustment paths with money-aware helpers.
+- Expand money-native reporting fields while keeping legacy quota rows readable.
 
 ## Remaining Acceptance Items
 
-- Chat, responses, image, audio, tool/search, violation-fee, and video billing paths freeze and settle money wallet balances.
+- Chat, responses, image, audio, tool/search, violation-fee, and primary async task billing paths freeze and settle money wallet balances.
 - API token and subscription budgets are money-denominated.
-- Redemption, invite, affiliate, check-in, onboarding, subscription, admin adjustment, and transfer flows write money wallet transactions.
+- Redemption, invite, affiliate, check-in, onboarding, admin adjustment, and transfer flows write money wallet transactions.
 - Pricing pages show money units and examples.
 - Historical quota reports remain readable and clearly labeled as legacy data.

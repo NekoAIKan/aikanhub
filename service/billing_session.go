@@ -78,6 +78,9 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	// 3) 更新 relayInfo 上的订阅 PostDelta（用于日志）
 	if s.funding.Source() == BillingSourceSubscription {
 		s.relayInfo.SubscriptionPostDelta += int64(delta)
+		if !model.ShouldWriteLegacyQuota() {
+			s.relayInfo.SubscriptionPostDeltaAmountMicros += model.LegacyQuotaDeltaToMoneyMicros(int64(delta))
+		}
 	}
 	s.settled = true
 	return tokenErr
@@ -218,7 +221,13 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 	if err := s.funding.PreConsume(effectiveQuota); err != nil {
 		// 预扣费失败，回滚令牌额度
 		if s.tokenConsumed > 0 && !s.relayInfo.IsPlayground {
-			if rollbackErr := model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, s.tokenConsumed); rollbackErr != nil {
+			var rollbackErr error
+			if !model.ShouldWriteLegacyQuota() {
+				rollbackErr = model.IncreaseTokenMoneyBudget(s.relayInfo.TokenId, s.relayInfo.TokenKey, model.LegacyQuotaToMoneyMicros(int64(s.tokenConsumed)))
+			} else {
+				rollbackErr = model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, s.tokenConsumed)
+			}
+			if rollbackErr != nil {
 				common.SysLog(fmt.Sprintf("error rolling back token quota (userId=%d, tokenId=%d, amount=%d, fundingErr=%s): %s",
 					s.relayInfo.UserId, s.relayInfo.TokenId, s.tokenConsumed, err.Error(), rollbackErr.Error()))
 			}
@@ -352,11 +361,17 @@ func (s *BillingSession) syncRelayInfo() {
 		info.SubscriptionPostDelta = 0
 		info.SubscriptionAmountTotal = sub.AmountTotal
 		info.SubscriptionAmountUsedAfterPreConsume = sub.AmountUsedAfter + int64(s.extraReserved)
+		info.SubscriptionPreConsumedAmountMicros = model.LegacyQuotaToMoneyMicros(sub.preConsumed + int64(s.extraReserved))
+		info.SubscriptionPostDeltaAmountMicros = 0
+		info.SubscriptionAmountTotalMicros = sub.AmountTotalMicros
+		info.SubscriptionAmountUsedMicrosAfterPreConsume = sub.AmountUsedMicrosAfter + model.LegacyQuotaToMoneyMicros(int64(s.extraReserved))
+		info.SubscriptionCurrency = sub.Currency
 		info.SubscriptionPlanId = sub.PlanId
 		info.SubscriptionPlanTitle = sub.PlanTitle
 	} else {
 		info.SubscriptionId = 0
 		info.SubscriptionPreConsumed = 0
+		info.SubscriptionPreConsumedAmountMicros = 0
 	}
 }
 

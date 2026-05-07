@@ -166,6 +166,9 @@ func taskAdjustFunding(task *model.Task, delta int) error {
 	if taskIsSubscription(task) {
 		return model.PostConsumeUserSubscriptionDelta(task.PrivateData.SubscriptionId, int64(delta))
 	}
+	if !model.ShouldWriteLegacyQuota() {
+		return model.AdjustWalletLegacyQuota(task.UserId, -delta, fmt.Sprintf("task:%s:funding-delta:%d", task.TaskID, delta), "task_billing_adjust")
+	}
 	if delta > 0 {
 		return model.DecreaseUserQuota(task.UserId, delta, false)
 	}
@@ -183,7 +186,17 @@ func taskAdjustTokenQuota(ctx context.Context, task *model.Task, delta int) {
 		return
 	}
 	var err error
-	if delta > 0 {
+	if !model.ShouldWriteLegacyQuota() {
+		amountMicros := model.LegacyQuotaToMoneyMicros(int64(absInt(delta)))
+		if amountMicros <= 0 {
+			return
+		}
+		if delta > 0 {
+			err = model.DecreaseTokenMoneyBudget(task.PrivateData.TokenId, tokenKey, amountMicros)
+		} else {
+			err = model.IncreaseTokenMoneyBudget(task.PrivateData.TokenId, tokenKey, amountMicros)
+		}
+	} else if delta > 0 {
 		err = model.DecreaseTokenQuota(task.PrivateData.TokenId, tokenKey, delta)
 	} else {
 		err = model.IncreaseTokenQuota(task.PrivateData.TokenId, tokenKey, -delta)

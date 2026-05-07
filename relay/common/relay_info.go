@@ -137,6 +137,12 @@ type RelayInfo struct {
 	SubscriptionPreConsumed int64
 	// SubscriptionPostDelta is the post-consume delta applied to amount_used (quota units; can be negative).
 	SubscriptionPostDelta int64
+	// Money-denominated subscription fields used when money billing mode is enabled.
+	SubscriptionPreConsumedAmountMicros         int64
+	SubscriptionPostDeltaAmountMicros           int64
+	SubscriptionAmountTotalMicros               int64
+	SubscriptionAmountUsedMicrosAfterPreConsume int64
+	SubscriptionCurrency                        string
 	// SubscriptionPlanId / SubscriptionPlanTitle are used for logging/UI display.
 	SubscriptionPlanId    int
 	SubscriptionPlanTitle string

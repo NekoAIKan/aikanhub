@@ -64,6 +64,8 @@ func TestQuotaMoneyBackfillApplyIsIdempotent(t *testing.T) {
 	t.Cleanup(func() { common.QuotaPerUnit = originalQuotaPerUnit })
 
 	require.NoError(t, model.DB.Create(&model.User{Id: 702, Username: "u702", AffCode: "u702", Quota: 1_000_000, Status: common.UserStatusEnabled}).Error)
+	require.NoError(t, model.DB.Create(&model.Token{UserId: 702, Key: "token702", RemainQuota: 250_000}).Error)
+	require.NoError(t, model.DB.Create(&model.UserSubscription{UserId: 702, AmountTotal: 1_000_000, AmountUsed: 250_000, Status: "active"}).Error)
 
 	first, err := ApplyQuotaMoneyBackfill("USD")
 	require.NoError(t, err)
@@ -71,7 +73,11 @@ func TestQuotaMoneyBackfillApplyIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, int64(1), first.UserTransactionsSeen)
+	assert.Equal(t, int64(1), first.TokenBudgetsUpdated)
+	assert.Equal(t, int64(1), first.SubscriptionBudgetsUpdated)
 	assert.Equal(t, int64(1), second.UserTransactionsSeen)
+	assert.Equal(t, int64(0), second.TokenBudgetsUpdated)
+	assert.Equal(t, int64(0), second.SubscriptionBudgetsUpdated)
 
 	var wallet model.MoneyWallet
 	require.NoError(t, model.DB.First(&wallet, "user_id = ? AND currency = ?", 702, "USD").Error)
@@ -80,6 +86,17 @@ func TestQuotaMoneyBackfillApplyIsIdempotent(t *testing.T) {
 	var count int64
 	require.NoError(t, model.DB.Model(&model.MoneyWalletTransaction{}).Where("request_id = ?", "quota_backfill:user:702:USD").Count(&count).Error)
 	assert.Equal(t, int64(1), count)
+
+	var token model.Token
+	require.NoError(t, model.DB.First(&token, "`key` = ?", "token702").Error)
+	assert.Equal(t, int64(500_000), token.RemainAmountMicros)
+	assert.Equal(t, "USD", token.Currency)
+
+	var sub model.UserSubscription
+	require.NoError(t, model.DB.First(&sub, "user_id = ?", 702).Error)
+	assert.Equal(t, int64(2_000_000), sub.AmountTotalMicros)
+	assert.Equal(t, int64(500_000), sub.AmountUsedMicros)
+	assert.Equal(t, "USD", sub.Currency)
 }
 
 func TestQuotaWriteGuardRejectsMoneyMode(t *testing.T) {

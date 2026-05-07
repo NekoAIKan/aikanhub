@@ -23,8 +23,10 @@ type QuotaMoneyBackfillPreview struct {
 }
 
 type QuotaMoneyBackfillApplyResult struct {
-	Preview              QuotaMoneyBackfillPreview `json:"preview"`
-	UserTransactionsSeen int64                     `json:"user_transactions_seen"`
+	Preview                    QuotaMoneyBackfillPreview `json:"preview"`
+	UserTransactionsSeen       int64                     `json:"user_transactions_seen"`
+	TokenBudgetsUpdated        int64                     `json:"token_budgets_updated"`
+	SubscriptionBudgetsUpdated int64                     `json:"subscription_budgets_updated"`
 }
 
 func QuotaToMoneyMicros(quota int64) int64 {
@@ -87,6 +89,50 @@ func ApplyQuotaMoneyBackfill(currency string) (QuotaMoneyBackfillApplyResult, er
 				return err
 			}
 			result.UserTransactionsSeen++
+		}
+		var tokens []model.Token
+		if err := tx.Where("remain_quota > ?", 0).Find(&tokens).Error; err != nil {
+			return err
+		}
+		for _, token := range tokens {
+			if token.RemainAmountMicros > 0 {
+				continue
+			}
+			amountMicros := QuotaToMoneyMicros(int64(token.RemainQuota))
+			if amountMicros <= 0 {
+				continue
+			}
+			updates := map[string]interface{}{
+				"remain_amount_micros": amountMicros,
+				"currency":             preview.Currency,
+			}
+			if err := tx.Model(&model.Token{}).Where("id = ?", token.Id).Updates(updates).Error; err != nil {
+				return err
+			}
+			result.TokenBudgetsUpdated++
+		}
+		var subscriptions []model.UserSubscription
+		if err := tx.Where("amount_total > amount_used").Find(&subscriptions).Error; err != nil {
+			return err
+		}
+		for _, sub := range subscriptions {
+			updates := map[string]interface{}{}
+			if sub.AmountTotalMicros <= 0 && sub.AmountTotal > 0 {
+				updates["amount_total_micros"] = QuotaToMoneyMicros(sub.AmountTotal)
+			}
+			if sub.AmountUsedMicros <= 0 && sub.AmountUsed > 0 {
+				updates["amount_used_micros"] = QuotaToMoneyMicros(sub.AmountUsed)
+			}
+			if sub.Currency == "" {
+				updates["currency"] = preview.Currency
+			}
+			if len(updates) == 0 {
+				continue
+			}
+			if err := tx.Model(&model.UserSubscription{}).Where("id = ?", sub.Id).Updates(updates).Error; err != nil {
+				return err
+			}
+			result.SubscriptionBudgetsUpdated++
 		}
 		return nil
 	})

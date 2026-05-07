@@ -170,6 +170,8 @@ type SubscriptionPlan struct {
 
 	// Total quota (amount in quota units, 0 = unlimited)
 	TotalAmount int64 `json:"total_amount" gorm:"type:bigint;not null;default:0"`
+	// Money-denominated subscription budget in micros (0 = unlimited or legacy-derived)
+	TotalAmountMicros int64 `json:"total_amount_micros" gorm:"type:bigint;not null;default:0"`
 
 	// Quota reset period for plan
 	QuotaResetPeriod        string `json:"quota_reset_period" gorm:"type:varchar(16);default:'never'"`
@@ -183,11 +185,13 @@ func (p *SubscriptionPlan) BeforeCreate(tx *gorm.DB) error {
 	now := common.GetTimestamp()
 	p.CreatedAt = now
 	p.UpdatedAt = now
+	p.Currency = normalizeSubscriptionCurrency(p.Currency)
 	return nil
 }
 
 func (p *SubscriptionPlan) BeforeUpdate(tx *gorm.DB) error {
 	p.UpdatedAt = common.GetTimestamp()
+	p.Currency = normalizeSubscriptionCurrency(p.Currency)
 	return nil
 }
 
@@ -238,6 +242,10 @@ type UserSubscription struct {
 
 	AmountTotal int64 `json:"amount_total" gorm:"type:bigint;not null;default:0"`
 	AmountUsed  int64 `json:"amount_used" gorm:"type:bigint;not null;default:0"`
+	// Money-denominated budget fields used when money billing mode is enabled.
+	AmountTotalMicros int64  `json:"amount_total_micros" gorm:"type:bigint;not null;default:0"`
+	AmountUsedMicros  int64  `json:"amount_used_micros" gorm:"type:bigint;not null;default:0"`
+	Currency          string `json:"currency" gorm:"type:varchar(8);not null;default:'USD'"`
 
 	StartTime int64  `json:"start_time" gorm:"bigint"`
 	EndTime   int64  `json:"end_time" gorm:"bigint;index;index:idx_user_sub_active,priority:3"`
@@ -259,16 +267,65 @@ func (s *UserSubscription) BeforeCreate(tx *gorm.DB) error {
 	now := common.GetTimestamp()
 	s.CreatedAt = now
 	s.UpdatedAt = now
+	s.Currency = normalizeSubscriptionCurrency(s.Currency)
 	return nil
 }
 
 func (s *UserSubscription) BeforeUpdate(tx *gorm.DB) error {
 	s.UpdatedAt = common.GetTimestamp()
+	s.Currency = normalizeSubscriptionCurrency(s.Currency)
 	return nil
 }
 
 type SubscriptionSummary struct {
 	Subscription *UserSubscription `json:"subscription"`
+}
+
+func normalizeSubscriptionCurrency(currency string) string {
+	currency = normalizeMoneyCurrency(currency)
+	if currency == "" {
+		return SettlementCurrency()
+	}
+	return currency
+}
+
+func planTotalAmountMicros(plan *SubscriptionPlan) int64 {
+	if plan == nil {
+		return 0
+	}
+	if plan.TotalAmountMicros > 0 {
+		return plan.TotalAmountMicros
+	}
+	if !ShouldWriteLegacyQuota() && plan.TotalAmount > 0 {
+		return LegacyQuotaToMoneyMicros(plan.TotalAmount)
+	}
+	return 0
+}
+
+func subscriptionAmountTotalMicros(sub *UserSubscription) int64 {
+	if sub == nil {
+		return 0
+	}
+	if sub.AmountTotalMicros > 0 {
+		return sub.AmountTotalMicros
+	}
+	if sub.AmountTotal > 0 {
+		return LegacyQuotaToMoneyMicros(sub.AmountTotal)
+	}
+	return 0
+}
+
+func subscriptionAmountUsedMicros(sub *UserSubscription) int64 {
+	if sub == nil {
+		return 0
+	}
+	if sub.AmountUsedMicros > 0 {
+		return sub.AmountUsedMicros
+	}
+	if sub.AmountUsed > 0 {
+		return LegacyQuotaToMoneyMicros(sub.AmountUsed)
+	}
+	return 0
 }
 
 func calcPlanEndTime(start time.Time, plan *SubscriptionPlan) (int64, error) {
@@ -456,7 +513,7 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 			return nil, errors.New("已达到该套餐购买上限")
 		}
 	}
-	nowUnix := GetDBTimestamp()
+	nowUnix := getDBTimestampWithDB(tx)
 	now := time.Unix(nowUnix, 0)
 	endUnix, err := calcPlanEndTime(now, plan)
 	if err != nil {
@@ -484,20 +541,23 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 		}
 	}
 	sub := &UserSubscription{
-		UserId:        userId,
-		PlanId:        plan.Id,
-		AmountTotal:   plan.TotalAmount,
-		AmountUsed:    0,
-		StartTime:     now.Unix(),
-		EndTime:       endUnix,
-		Status:        "active",
-		Source:        source,
-		LastResetTime: lastReset,
-		NextResetTime: nextReset,
-		UpgradeGroup:  upgradeGroup,
-		PrevUserGroup: prevGroup,
-		CreatedAt:     common.GetTimestamp(),
-		UpdatedAt:     common.GetTimestamp(),
+		UserId:            userId,
+		PlanId:            plan.Id,
+		AmountTotal:       plan.TotalAmount,
+		AmountUsed:        0,
+		AmountTotalMicros: planTotalAmountMicros(plan),
+		AmountUsedMicros:  0,
+		Currency:          normalizeSubscriptionCurrency(plan.Currency),
+		StartTime:         now.Unix(),
+		EndTime:           endUnix,
+		Status:            "active",
+		Source:            source,
+		LastResetTime:     lastReset,
+		NextResetTime:     nextReset,
+		UpgradeGroup:      upgradeGroup,
+		PrevUserGroup:     prevGroup,
+		CreatedAt:         common.GetTimestamp(),
+		UpdatedAt:         common.GetTimestamp(),
 	}
 	if err := tx.Create(sub).Error; err != nil {
 		return nil, err
@@ -812,11 +872,16 @@ func AdminDeleteUserSubscription(userSubscriptionId int) (string, error) {
 }
 
 type SubscriptionPreConsumeResult struct {
-	UserSubscriptionId int
-	PreConsumed        int64
-	AmountTotal        int64
-	AmountUsedBefore   int64
-	AmountUsedAfter    int64
+	UserSubscriptionId      int
+	PreConsumed             int64
+	AmountTotal             int64
+	AmountUsedBefore        int64
+	AmountUsedAfter         int64
+	PreConsumedAmountMicros int64
+	AmountTotalMicros       int64
+	AmountUsedMicrosBefore  int64
+	AmountUsedMicrosAfter   int64
+	Currency                string
 }
 
 // ExpireDueSubscriptions marks expired subscriptions and handles group downgrade.
@@ -908,25 +973,29 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 
 // SubscriptionPreConsumeRecord stores idempotent pre-consume operations per request.
 type SubscriptionPreConsumeRecord struct {
-	Id                 int    `json:"id"`
-	RequestId          string `json:"request_id" gorm:"type:varchar(64);uniqueIndex"`
-	UserId             int    `json:"user_id" gorm:"index"`
-	UserSubscriptionId int    `json:"user_subscription_id" gorm:"index"`
-	PreConsumed        int64  `json:"pre_consumed" gorm:"type:bigint;not null;default:0"`
-	Status             string `json:"status" gorm:"type:varchar(32);index"` // consumed/refunded
-	CreatedAt          int64  `json:"created_at" gorm:"bigint"`
-	UpdatedAt          int64  `json:"updated_at" gorm:"bigint;index"`
+	Id                      int    `json:"id"`
+	RequestId               string `json:"request_id" gorm:"type:varchar(64);uniqueIndex"`
+	UserId                  int    `json:"user_id" gorm:"index"`
+	UserSubscriptionId      int    `json:"user_subscription_id" gorm:"index"`
+	PreConsumed             int64  `json:"pre_consumed" gorm:"type:bigint;not null;default:0"`
+	PreConsumedAmountMicros int64  `json:"pre_consumed_amount_micros" gorm:"type:bigint;not null;default:0"`
+	Currency                string `json:"currency" gorm:"type:varchar(8);not null;default:'USD'"`
+	Status                  string `json:"status" gorm:"type:varchar(32);index"` // consumed/refunded
+	CreatedAt               int64  `json:"created_at" gorm:"bigint"`
+	UpdatedAt               int64  `json:"updated_at" gorm:"bigint;index"`
 }
 
 func (r *SubscriptionPreConsumeRecord) BeforeCreate(tx *gorm.DB) error {
 	now := common.GetTimestamp()
 	r.CreatedAt = now
 	r.UpdatedAt = now
+	r.Currency = normalizeSubscriptionCurrency(r.Currency)
 	return nil
 }
 
 func (r *SubscriptionPreConsumeRecord) BeforeUpdate(tx *gorm.DB) error {
 	r.UpdatedAt = common.GetTimestamp()
+	r.Currency = normalizeSubscriptionCurrency(r.Currency)
 	return nil
 }
 
@@ -960,13 +1029,34 @@ func maybeResetUserSubscriptionWithPlanTx(tx *gorm.DB, sub *UserSubscription, pl
 		}
 		return nil
 	}
-	sub.AmountUsed = 0
+	if ShouldWriteLegacyQuota() {
+		sub.AmountUsed = 0
+	} else {
+		sub.AmountUsedMicros = 0
+		sub.Currency = normalizeSubscriptionCurrency(sub.Currency)
+	}
 	sub.LastResetTime = base.Unix()
 	sub.NextResetTime = next
 	return tx.Save(sub).Error
 }
 
-// PreConsumeUserSubscription pre-consumes from any active subscription total quota.
+func fillSubscriptionPreConsumeResult(result *SubscriptionPreConsumeResult, sub *UserSubscription, preConsumed int64, preConsumedAmountMicros int64, usedBefore int64, usedAfter int64, usedMicrosBefore int64, usedMicrosAfter int64) {
+	if result == nil || sub == nil {
+		return
+	}
+	result.UserSubscriptionId = sub.Id
+	result.PreConsumed = preConsumed
+	result.AmountTotal = sub.AmountTotal
+	result.AmountUsedBefore = usedBefore
+	result.AmountUsedAfter = usedAfter
+	result.PreConsumedAmountMicros = preConsumedAmountMicros
+	result.AmountTotalMicros = subscriptionAmountTotalMicros(sub)
+	result.AmountUsedMicrosBefore = usedMicrosBefore
+	result.AmountUsedMicrosAfter = usedMicrosAfter
+	result.Currency = normalizeSubscriptionCurrency(sub.Currency)
+}
+
+// PreConsumeUserSubscription pre-consumes from any active subscription total quota or money budget.
 func PreConsumeUserSubscription(requestId string, userId int, modelName string, quotaType int, amount int64) (*SubscriptionPreConsumeResult, error) {
 	if userId <= 0 {
 		return nil, errors.New("invalid userId")
@@ -978,6 +1068,14 @@ func PreConsumeUserSubscription(requestId string, userId int, modelName string, 
 		return nil, errors.New("amount must be > 0")
 	}
 	now := GetDBTimestamp()
+	useMoneyBudget := !ShouldWriteLegacyQuota()
+	requestedAmountMicros := int64(0)
+	if useMoneyBudget {
+		requestedAmountMicros = LegacyQuotaToMoneyMicros(amount)
+		if requestedAmountMicros <= 0 {
+			return nil, errors.New("amount_micros must be > 0")
+		}
+	}
 
 	returnValue := &SubscriptionPreConsumeResult{}
 
@@ -995,11 +1093,11 @@ func PreConsumeUserSubscription(requestId string, userId int, modelName string, 
 			if err := tx.Where("id = ?", existing.UserSubscriptionId).First(&sub).Error; err != nil {
 				return err
 			}
-			returnValue.UserSubscriptionId = sub.Id
-			returnValue.PreConsumed = existing.PreConsumed
-			returnValue.AmountTotal = sub.AmountTotal
-			returnValue.AmountUsedBefore = sub.AmountUsed
-			returnValue.AmountUsedAfter = sub.AmountUsed
+			preConsumedMicros := existing.PreConsumedAmountMicros
+			if preConsumedMicros <= 0 && existing.PreConsumed > 0 {
+				preConsumedMicros = LegacyQuotaToMoneyMicros(existing.PreConsumed)
+			}
+			fillSubscriptionPreConsumeResult(returnValue, &sub, existing.PreConsumed, preConsumedMicros, sub.AmountUsed, sub.AmountUsed, subscriptionAmountUsedMicros(&sub), subscriptionAmountUsedMicros(&sub))
 			return nil
 		}
 
@@ -1023,18 +1121,29 @@ func PreConsumeUserSubscription(requestId string, userId int, modelName string, 
 				return err
 			}
 			usedBefore := sub.AmountUsed
-			if sub.AmountTotal > 0 {
+			usedMicrosBefore := subscriptionAmountUsedMicros(&sub)
+			if useMoneyBudget {
+				totalMicros := subscriptionAmountTotalMicros(&sub)
+				if totalMicros > 0 {
+					remain := totalMicros - usedMicrosBefore
+					if remain < requestedAmountMicros {
+						continue
+					}
+				}
+			} else if sub.AmountTotal > 0 {
 				remain := sub.AmountTotal - usedBefore
 				if remain < amount {
 					continue
 				}
 			}
 			record := &SubscriptionPreConsumeRecord{
-				RequestId:          requestId,
-				UserId:             userId,
-				UserSubscriptionId: sub.Id,
-				PreConsumed:        amount,
-				Status:             "consumed",
+				RequestId:               requestId,
+				UserId:                  userId,
+				UserSubscriptionId:      sub.Id,
+				PreConsumed:             amount,
+				PreConsumedAmountMicros: requestedAmountMicros,
+				Currency:                normalizeSubscriptionCurrency(sub.Currency),
+				Status:                  "consumed",
 			}
 			if err := tx.Create(record).Error; err != nil {
 				var dup SubscriptionPreConsumeRecord
@@ -1042,24 +1151,29 @@ func PreConsumeUserSubscription(requestId string, userId int, modelName string, 
 					if dup.Status == "refunded" {
 						return errors.New("subscription pre-consume already refunded")
 					}
-					returnValue.UserSubscriptionId = sub.Id
-					returnValue.PreConsumed = dup.PreConsumed
-					returnValue.AmountTotal = sub.AmountTotal
-					returnValue.AmountUsedBefore = sub.AmountUsed
-					returnValue.AmountUsedAfter = sub.AmountUsed
+					dupMicros := dup.PreConsumedAmountMicros
+					if dupMicros <= 0 && dup.PreConsumed > 0 {
+						dupMicros = LegacyQuotaToMoneyMicros(dup.PreConsumed)
+					}
+					fillSubscriptionPreConsumeResult(returnValue, &sub, dup.PreConsumed, dupMicros, sub.AmountUsed, sub.AmountUsed, subscriptionAmountUsedMicros(&sub), subscriptionAmountUsedMicros(&sub))
 					return nil
 				}
 				return err
 			}
-			sub.AmountUsed += amount
+			usedAfter := usedBefore
+			usedMicrosAfter := usedMicrosBefore
+			if useMoneyBudget {
+				sub.AmountUsedMicros = usedMicrosBefore + requestedAmountMicros
+				sub.Currency = normalizeSubscriptionCurrency(sub.Currency)
+				usedMicrosAfter = sub.AmountUsedMicros
+			} else {
+				sub.AmountUsed += amount
+				usedAfter = sub.AmountUsed
+			}
 			if err := tx.Save(&sub).Error; err != nil {
 				return err
 			}
-			returnValue.UserSubscriptionId = sub.Id
-			returnValue.PreConsumed = amount
-			returnValue.AmountTotal = sub.AmountTotal
-			returnValue.AmountUsedBefore = usedBefore
-			returnValue.AmountUsedAfter = sub.AmountUsed
+			fillSubscriptionPreConsumeResult(returnValue, &sub, amount, requestedAmountMicros, usedBefore, usedAfter, usedMicrosBefore, usedMicrosAfter)
 			return nil
 		}
 		return fmt.Errorf("subscription quota insufficient, need=%d", amount)
@@ -1179,6 +1293,8 @@ func GetSubscriptionPlanInfoByUserSubscriptionId(userSubscriptionId int) (*Subsc
 }
 
 // Update subscription used amount by delta (positive consume more, negative refund).
+// In money billing mode the legacy delta is converted to settlement-currency micros
+// and only the money budget fields are mutated.
 func PostConsumeUserSubscriptionDelta(userSubscriptionId int, delta int64) error {
 	if userSubscriptionId <= 0 {
 		return errors.New("invalid userSubscriptionId")
@@ -1192,6 +1308,23 @@ func PostConsumeUserSubscriptionDelta(userSubscriptionId int, delta int64) error
 			Where("id = ?", userSubscriptionId).
 			First(&sub).Error; err != nil {
 			return err
+		}
+		if !ShouldWriteLegacyQuota() {
+			deltaMicros := legacyQuotaDeltaToMoneyMicros(delta)
+			if deltaMicros == 0 {
+				return nil
+			}
+			newUsedMicros := subscriptionAmountUsedMicros(&sub) + deltaMicros
+			if newUsedMicros < 0 {
+				newUsedMicros = 0
+			}
+			totalMicros := subscriptionAmountTotalMicros(&sub)
+			if totalMicros > 0 && newUsedMicros > totalMicros {
+				return fmt.Errorf("subscription used amount_micros exceeds total, used=%d total=%d", newUsedMicros, totalMicros)
+			}
+			sub.AmountUsedMicros = newUsedMicros
+			sub.Currency = normalizeSubscriptionCurrency(sub.Currency)
+			return tx.Save(&sub).Error
 		}
 		newUsed := sub.AmountUsed + delta
 		if newUsed < 0 {
