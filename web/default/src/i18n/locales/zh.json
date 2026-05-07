@@ -4413,18 +4413,7 @@
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
     "Zoom": "缩放",
-    "Image audit (audit_image)": "图片审核（audit_image）",
-    "When to enable:": "什么时候开：",
-    "How it works": "工作机制",
-    "OpenAI shape — public URL": "OpenAI 形式 — URL 透传",
-    "OpenAI shape — base64 (gateway uploads to COS)": "OpenAI 形式 — base64（网关代上传 COS）",
-    "Volcano Ark SDK shape": "火山方舟 SDK 形式",
-    "Parameter reference": "参数说明",
-    "Failure shapes": "错误码",
-    "When": "触发场景",
-    "What to do": "处理建议",
-    "Latency:": "延迟：",
-    "Op note:": "运维注意：",
-    "Each entry may be:": "支持以下入参："
+    "Real-person reference image?": "图片里是真人 / 人脸？",
+    "so the gateway sends the image to ARK's asset library audit first and substitutes asset://<id> upstream. Without this flag a real-person photo will trip Seedance's privacy filter and the request fails outright. Adds ~10–30 s before task_id is returned.": "网关会先把图片送 ARK 资产库审核、再把上游请求里的 image_url 换成 asset://<id>。不加这个开关时，真人照片会被 Seedance 的隐私检测直接拦掉。开启后 task_id 返回会延迟约 10–30 秒。"
   }
 }
