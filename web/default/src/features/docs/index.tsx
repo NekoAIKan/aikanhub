@@ -121,6 +121,102 @@ const CURL_WEB_SEARCH = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
     "duration": 11
   }'`
 
+// ----------------------------------------------------------------------------
+// Pixverse curl examples.
+// Same /v1/video/generations endpoint — only the model id and request shape
+// differ. Aspect ratio, quality, and duration come either from the model SKU
+// suffix (e.g. pixverse-v4.5-720p locks 720p) or from the request body /
+// metadata.
+// ----------------------------------------------------------------------------
+
+const CURL_PIXVERSE_T2V = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
+  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "pixverse-v4.5",
+    "prompt": "a corgi wearing sunglasses surfing on a sunset wave, cinematic 4K"
+  }'`
+
+const CURL_PIXVERSE_T2V_PINNED = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
+  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "pixverse-v4.5-720p",
+    "prompt": "a fluffy white cat napping in a sunlit window"
+  }'`
+
+const CURL_PIXVERSE_I2V = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
+  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "pixverse-v4.5",
+    "prompt": "gently animate the dog turning its head",
+    "images": ["https://example.com/dog.jpg"]
+  }'`
+
+const CURL_PIXVERSE_TRANSITION = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
+  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "pixverse-v4.5",
+    "prompt": "morph the dog into the cat smoothly",
+    "images": [
+      "https://example.com/start.jpg",
+      "https://example.com/end.jpg"
+    ]
+  }'`
+
+const CURL_PIXVERSE_FUSION = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
+  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "pixverse-v4.5",
+    "prompt": "@cat plays with @dog in a sunlit garden",
+    "images": [
+      "https://example.com/cat.jpg",
+      "https://example.com/dog.jpg"
+    ],
+    "metadata": {
+      "image_references": [
+        {"type": "subject", "img_id": 0, "ref_name": "cat"},
+        {"type": "subject", "img_id": 0, "ref_name": "dog"}
+      ]
+    }
+  }'`
+
+const PY_PIXVERSE_T2V = `# pip install openai
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.environ["AIKANHUB_TOKEN"],
+    base_url="${ENDPOINT_BASE}/v1",
+)
+
+video = client.videos.create(
+    model="pixverse-v4.5",
+    prompt="a corgi wearing sunglasses surfing on a sunset wave",
+)
+print(video.id)`
+
+const PY_PIXVERSE_I2V = `# pip install openai
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.environ["AIKANHUB_TOKEN"],
+    base_url="${ENDPOINT_BASE}/v1",
+)
+
+# images[] accepts URLs or data:image/...;base64,... — the gateway
+# uploads them to Pixverse and substitutes img_id automatically.
+video = client.videos.create(
+    model="pixverse-v4.5",
+    prompt="gently animate the dog turning its head",
+    extra_body={"images": ["https://example.com/dog.jpg"]},
+)
+print(video.id)`
+
 const CURL_POLL = `curl ${ENDPOINT_BASE}/v1/video/generations/$TASK_ID \\
   -H "Authorization: Bearer $AIKANHUB_TOKEN"`
 
@@ -767,6 +863,19 @@ export function Docs() {
           },
           { id: 'params', label: t('Full request parameters') },
           { id: 'media-limits', label: t('Input file limits') },
+        ],
+      },
+      {
+        label: t('Video API · Pixverse'),
+        items: [
+          { id: 'pixverse-overview', label: t('Pixverse overview') },
+          { id: 'pixverse-models', label: t('Pixverse models & pricing') },
+          { id: 'pixverse-mode-text', label: t('Text-to-video'), method: 'POST' },
+          { id: 'pixverse-mode-image', label: t('Image-to-video'), method: 'POST' },
+          { id: 'pixverse-mode-transition', label: t('First/last frame'), method: 'POST' },
+          { id: 'pixverse-mode-fusion', label: t('Multi-reference (fusion)'), method: 'POST', isNew: true },
+          { id: 'pixverse-params', label: t('Pixverse parameters') },
+          { id: 'pixverse-errors', label: t('Pixverse error codes') },
         ],
       },
       {
@@ -1707,6 +1816,351 @@ export function Docs() {
                       'Media inputs accept either a public URL or Base64 (data:image/png;base64,...). For large files, prefer URL to avoid oversized request bodies.'
                     )}
                   </Callout>
+                </Section>
+
+                {/* ============================ Pixverse ============================ */}
+                <Section
+                  id='pixverse-overview'
+                  title={t('Pixverse overview')}
+                  description={t(
+                    'Pixverse is a fast cinematic video generation model series. The gateway exposes its full API behind the same /v1/video/generations endpoint as Seedance — you only swap the model id.',
+                  )}
+                >
+                  <Callout type='tip'>
+                    <strong>{t('Choosing a model:')}</strong>{' '}
+                    {t('use')} <K>pixverse-v4.5</K>{' '}
+                    {t(
+                      'as the default; v5.5 / v5.6 are newer; c1 / v6 are billed per-second (advanced). Append a quality / duration suffix (e.g.',
+                    )}{' '}
+                    <K>pixverse-v4.5-720p</K>, <K>pixverse-v4.5-1080p-8s</K>
+                    {t(') to lock the output spec — handy for stable per-call pricing.')}
+                  </Callout>
+                  <Callout type='info'>
+                    <strong>{t('Four input modes (auto-detected from images[].length):')}</strong>
+                    <ul className='mt-2 list-disc space-y-1 pl-5'>
+                      <li>
+                        <strong>{t('Text-to-video')}</strong> — {t('no images.')}
+                      </li>
+                      <li>
+                        <strong>{t('Image-to-video')}</strong> —{' '}
+                        {t('one image (animates the still).')}
+                      </li>
+                      <li>
+                        <strong>{t('First/last frame (transition)')}</strong> —{' '}
+                        {t('two images (start and end).')}
+                      </li>
+                      <li>
+                        <strong>{t('Multi-reference (fusion)')}</strong> —{' '}
+                        {t('three or more images. Use')} <K>@ref_name</K>{' '}
+                        {t('in the prompt to bind a noun to a specific image.')}
+                      </li>
+                    </ul>
+                  </Callout>
+                  <Callout type='info'>
+                    <strong>{t('Image input — URL or Base64.')}</strong>{' '}
+                    {t(
+                      'The gateway uploads each image to Pixverse on your behalf and substitutes img_id automatically. Pre-uploaded img_ids can also be passed via metadata.',
+                    )}
+                  </Callout>
+                </Section>
+
+                <Section
+                  id='pixverse-models'
+                  title={t('Pixverse models & pricing')}
+                  description={t(
+                    'Each priced SKU is its own model id. The suffix locks output quality / duration so billing always matches what was generated.',
+                  )}
+                >
+                  <Callout type='warn'>
+                    {t(
+                      'When the model id pins quality/duration (e.g. pixverse-v4.5-720p), the adapter overrides any client-supplied size or duration. Bare ids (pixverse-v4.5) honour the client request and bill at the 540p / 5s tier — only use bare ids when you trust the caller.',
+                    )}
+                  </Callout>
+                  <div className='overflow-x-auto rounded-lg border'>
+                    <table className='w-full text-sm'>
+                      <thead className='bg-muted'>
+                        <tr className='text-left'>
+                          <th className='px-4 py-2 font-medium'>{t('Model id')}</th>
+                          <th className='px-4 py-2 font-medium'>{t('Quality')}</th>
+                          <th className='px-4 py-2 font-medium'>{t('Duration')}</th>
+                          <th className='px-4 py-2 font-medium'>{t('Price (USD/video)')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className='divide-y text-xs'>
+                        {[
+                          ['pixverse-v3.5 / v4 / v4.5 / v5', '540p', '5s', '$0.99'],
+                          ['  · -720p',                       '720p', '5s', '$1.32'],
+                          ['  · -1080p',                      '1080p','5s', '$2.64'],
+                          ['  · -8s',                         '540p', '8s', '$1.98'],
+                          ['  · -720p-8s',                    '720p', '8s', '$2.64'],
+                          ['  · -1080p-8s',                   '1080p','8s', '$5.28'],
+                          ['pixverse-v5.5',                   '540p', '5s', '$0.99'],
+                          ['  · -720p',                       '720p', '5s', '$1.32'],
+                          ['  · -1080p',                      '1080p','5s', '$2.64'],
+                          ['pixverse-v5.6',                   '540p', '5s', '$0.77'],
+                          ['  · -720p',                       '720p', '5s', '$0.99'],
+                          ['  · -1080p',                      '1080p','5s', '$1.65'],
+                          ['pixverse-c1 / pixverse-v6',       '—',    '—',   t('per-second; configure separately')],
+                        ].map((row, i) => (
+                          <tr key={i}>
+                            <td className='px-4 py-2 font-mono whitespace-pre'>{row[0]}</td>
+                            <td className='px-4 py-2'>{row[1]}</td>
+                            <td className='px-4 py-2'>{row[2]}</td>
+                            <td className='px-4 py-2'>{row[3]}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className='text-muted-foreground text-xs'>
+                    {t('Source:')}{' '}
+                    <a
+                      href='https://docs.platform.pixverse.ai/model-pricing-796039m0'
+                      target='_blank'
+                      rel='noreferrer noopener'
+                      className='text-primary hover:underline'
+                    >
+                      docs.platform.pixverse.ai · model-pricing
+                    </a>
+                  </p>
+                </Section>
+
+                <Section
+                  id='pixverse-mode-text'
+                  title={t('Text-to-video')}
+                  description={t('No images — pass model + prompt. Defaults: 540p, 5s, 16:9.')}
+                >
+                  <CodeTabs shell={CURL_PIXVERSE_T2V} python={PY_PIXVERSE_T2V} />
+                  <h3 className='pt-2 text-base font-medium'>
+                    {t('Pinning the spec via the model id')}
+                  </h3>
+                  <p className='text-muted-foreground text-sm'>
+                    {t(
+                      'A suffix on the model id locks both quality and billing — the caller cannot upgrade quality past what they paid for.',
+                    )}
+                  </p>
+                  <CodeBlock lang='shell' code={CURL_PIXVERSE_T2V_PINNED} />
+                </Section>
+
+                <Section
+                  id='pixverse-mode-image'
+                  title={t('Image-to-video')}
+                  description={t(
+                    'Pass exactly one image in images[]. The gateway uploads it to Pixverse before submitting.',
+                  )}
+                >
+                  <CodeTabs shell={CURL_PIXVERSE_I2V} python={PY_PIXVERSE_I2V} />
+                  <Callout type='info'>
+                    {t('Each entry in')} <K>images</K>{' '}
+                    {t(
+                      'may be an HTTP(S) URL, a data:image/...;base64,... URI, or a numeric string of an already-uploaded Pixverse img_id (skips re-upload).',
+                    )}
+                  </Callout>
+                </Section>
+
+                <Section
+                  id='pixverse-mode-transition'
+                  title={t('First/last frame (transition)')}
+                  description={t(
+                    'Two images: the first becomes the start frame, the second becomes the end frame. Pixverse interpolates between them.',
+                  )}
+                >
+                  <CodeBlock lang='shell' code={CURL_PIXVERSE_TRANSITION} />
+                </Section>
+
+                <Section
+                  id='pixverse-mode-fusion'
+                  title={
+                    <>
+                      {t('Multi-reference (fusion)')}
+                      <NewBadge />
+                    </>
+                  }
+                  description={t(
+                    'Three or more images. Each becomes a named reference; bind nouns in the prompt with @ref_name.',
+                  )}
+                >
+                  <CodeBlock lang='shell' code={CURL_PIXVERSE_FUSION} />
+                  <Callout type='tip'>
+                    {t('If')} <K>metadata.image_references</K>{' '}
+                    {t(
+                      'is omitted, the gateway auto-fills it as ref_name=img1, img2, ... all with type=subject. To use specific @-references in your prompt, supply image_references explicitly with type/img_id/ref_name. Pixverse upload-then-bind pre-uploaded img_ids by passing the upload-response id directly.',
+                    )}
+                  </Callout>
+                </Section>
+
+                <Section
+                  id='pixverse-params'
+                  title={t('Pixverse parameters')}
+                  description={t(
+                    'POST /v1/video/generations — fields specific to Pixverse on top of the standard task body.',
+                  )}
+                >
+                  <h3 className='text-base font-medium'>{t('Top-level fields')}</h3>
+                  <ParamTable
+                    fieldLabel={t('Field')}
+                    typeLabel={t('Type')}
+                    requiredLabel={t('Required')}
+                    descLabel={t('Description')}
+                    yes={t('yes')}
+                    no={t('no')}
+                    params={[
+                      {
+                        name: 'model',
+                        type: 'string',
+                        required: true,
+                        desc: t('A Pixverse model id (see Models & pricing).'),
+                      },
+                      {
+                        name: 'prompt',
+                        type: 'string',
+                        required: true,
+                        desc: t('Up to 2048 UTF-8 chars. Use @ref_name in fusion mode.'),
+                      },
+                      {
+                        name: 'images',
+                        type: 'string[]',
+                        desc: t(
+                          '0 → text-to-video, 1 → image-to-video, 2 → transition, 3+ → fusion. URLs, data URIs, or numeric img_ids.',
+                        ),
+                      },
+                      {
+                        name: 'size',
+                        type: 'string',
+                        desc: t(
+                          'WxH hint, e.g. 1280x720. Mapped to quality + aspect_ratio. Ignored when the model id pins quality.',
+                        ),
+                      },
+                      {
+                        name: 'duration',
+                        type: 'integer',
+                        desc: t(
+                          '1–15 (s). Defaults to 5. Ignored when the model id pins duration (e.g. -8s suffix).',
+                        ),
+                      },
+                      {
+                        name: 'metadata',
+                        type: 'object',
+                        desc: t('Pixverse-specific overrides — see below.'),
+                      },
+                    ]}
+                  />
+                  <h3 className='pt-4 text-base font-medium'>{t('metadata fields')}</h3>
+                  <ParamTable
+                    fieldLabel={t('Field')}
+                    typeLabel={t('Type')}
+                    requiredLabel={t('Required')}
+                    descLabel={t('Description')}
+                    yes={t('yes')}
+                    no={t('no')}
+                    params={[
+                      {
+                        name: 'quality',
+                        type: 'string',
+                        desc: t('"360p" | "540p" | "720p" | "1080p". Overrides default if model id is bare.'),
+                      },
+                      {
+                        name: 'aspect_ratio',
+                        type: 'string',
+                        desc: t('"16:9" | "9:16" | "1:1" | "4:3" | "3:4" | "2:3" | "3:2" | "21:9".'),
+                      },
+                      {
+                        name: 'motion_mode',
+                        type: 'string',
+                        desc: t('"normal" | "fast" (only 5s + ≤720p).'),
+                      },
+                      {
+                        name: 'negative_prompt',
+                        type: 'string',
+                        desc: t('Things to avoid in the output.'),
+                      },
+                      {
+                        name: 'seed',
+                        type: 'integer',
+                        desc: t('0–2147483647. Reproducibility seed.'),
+                      },
+                      {
+                        name: 'water_mark',
+                        type: 'boolean',
+                        desc: t('Include the Pixverse watermark on the output.'),
+                      },
+                      {
+                        name: 'generate_audio_switch',
+                        type: 'boolean',
+                        desc: t('Add generated audio to the video (model-dependent).'),
+                      },
+                      {
+                        name: 'style',
+                        type: 'string',
+                        desc: t('Pixverse style name (e.g. "anime", "3d_animation").'),
+                      },
+                      {
+                        name: 'img_id',
+                        type: 'integer',
+                        desc: t(
+                          'Image-to-video — skip the auto-upload by supplying a pre-uploaded Pixverse img_id directly.',
+                        ),
+                      },
+                      {
+                        name: 'first_frame_img / last_frame_img',
+                        type: 'integer',
+                        desc: t('Transition — pre-uploaded img_ids for explicit start/end frames.'),
+                      },
+                      {
+                        name: 'image_references',
+                        type: 'object[]',
+                        desc: t(
+                          'Fusion — array of {type, img_id, ref_name}. type is "subject" or "background"; ref_name is referenced as @name in the prompt.',
+                        ),
+                      },
+                    ]}
+                  />
+                </Section>
+
+                <Section
+                  id='pixverse-errors'
+                  title={t('Pixverse error codes')}
+                  description={t(
+                    'On failure the gateway forwards the upstream code/message. Some common ones:',
+                  )}
+                >
+                  <div className='overflow-hidden rounded-lg border'>
+                    <table className='w-full text-sm'>
+                      <thead className='bg-muted'>
+                        <tr className='text-left'>
+                          <th className='px-4 py-2 font-medium'>ErrCode</th>
+                          <th className='px-4 py-2 font-medium'>{t('Meaning')}</th>
+                          <th className='px-4 py-2 font-medium'>{t('Likely cause')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className='divide-y text-xs'>
+                        {[
+                          ['400013', t('Invalid field type or value'), t('Wrong shape for image_references / fusion (need objects, not ints).')],
+                          ['400017', t('Required field missing'),     t('e.g. image_references entry without img_id.')],
+                          ['1004',  t('Auth failed'),                  t('Channel API-KEY wrong or revoked.')],
+                          ['429xx', t('Rate limited'),                 t('Pixverse account / IP throttled — back off and retry.')],
+                          ['2013',  t('Parameter conflict'),           t('e.g. 1080p + 8s with a model that disallows it; fast motion + 1080p.')],
+                        ].map((row, i) => (
+                          <tr key={i}>
+                            <td className='px-4 py-2 font-mono'>{row[0]}</td>
+                            <td className='px-4 py-2'>{row[1]}</td>
+                            <td className='px-4 py-2 text-muted-foreground'>{row[2]}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className='text-muted-foreground text-xs'>
+                    {t('Full list:')}{' '}
+                    <a
+                      href='https://docs.platform.pixverse.ai/error-codes-796041m0'
+                      target='_blank'
+                      rel='noreferrer noopener'
+                      className='text-primary hover:underline'
+                    >
+                      docs.platform.pixverse.ai · error-codes
+                    </a>
+                  </p>
                 </Section>
 
                 {/* ============================ Tasks & results ============================ */}
