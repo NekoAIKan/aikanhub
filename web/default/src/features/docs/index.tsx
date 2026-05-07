@@ -217,90 +217,6 @@ video = client.videos.create(
 )
 print(video.id)`
 
-// ----------------------------------------------------------------------------
-// Image audit examples — same /v1/video/generations endpoint as the rest of
-// Seedance, only the metadata.audit_image flag is added. The gateway runs
-// every input image through Volcano ARK's asset library before submitting,
-// so real-person photos that would otherwise trip Seedance's privacy filter
-// pass through cleanly.
-// ----------------------------------------------------------------------------
-
-const CURL_AUDIT_URL = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "doubao-seedance-2-0-fast-260128",
-    "prompt": "gently animate the portrait",
-    "images": ["https://your.cdn/face.jpg"],
-    "metadata": { "audit_image": true }
-  }'`
-
-const CURL_AUDIT_BASE64 = `# Base64 path — gateway uploads to Tencent COS first.
-B64=$(base64 -i ./face.jpg | tr -d '\\n')
-{
-  echo -n '{"model":"doubao-seedance-2-0-fast-260128","prompt":"gently animate the portrait","metadata":{"audit_image":true},"images":["data:image/jpeg;base64,'
-  echo "$B64"
-  echo -n '"]}'
-} > /tmp/payload.json
-
-curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
-  -H "Content-Type: application/json" \\
-  --data-binary @/tmp/payload.json`
-
-const CURL_AUDIT_VOLC = `# Volcano Ark SDK shape — flag goes at the top level, not in metadata.
-curl -X POST ${ENDPOINT_BASE}/api/v3/contents/generations/tasks \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "doubao-seedance-2-0-fast-260128",
-    "audit_image": true,
-    "content": [
-      {"type": "text", "text": "gently animate the portrait"},
-      {"type": "image_url", "image_url": {"url": "https://your.cdn/face.jpg"}}
-    ]
-  }'`
-
-const PY_AUDIT_URL = `# pip install openai
-import os
-from openai import OpenAI
-
-client = OpenAI(
-    api_key=os.environ["AIKANHUB_TOKEN"],
-    base_url="${ENDPOINT_BASE}/v1",
-)
-
-video = client.videos.create(
-    model="doubao-seedance-2-0-fast-260128",
-    prompt="gently animate the portrait",
-    extra_body={
-        "images": ["https://your.cdn/face.jpg"],
-        "metadata": {"audit_image": True},
-    },
-)
-print(video.id)`
-
-const PY_AUDIT_BASE64 = `# pip install openai
-import base64, os
-from openai import OpenAI
-
-with open("face.jpg", "rb") as f:
-    b64 = base64.b64encode(f.read()).decode()
-
-client = OpenAI(
-    api_key=os.environ["AIKANHUB_TOKEN"],
-    base_url="${ENDPOINT_BASE}/v1",
-)
-video = client.videos.create(
-    model="doubao-seedance-2-0-fast-260128",
-    prompt="gently animate the portrait",
-    extra_body={
-        "images": [f"data:image/jpeg;base64,{b64}"],
-        "metadata": {"audit_image": True},
-    },
-)
-print(video.id)`
-
 const CURL_POLL = `curl ${ENDPOINT_BASE}/v1/video/generations/$TASK_ID \\
   -H "Authorization: Bearer $AIKANHUB_TOKEN"`
 
@@ -947,7 +863,6 @@ export function Docs() {
           },
           { id: 'params', label: t('Full request parameters') },
           { id: 'media-limits', label: t('Input file limits') },
-          { id: 'audit-image', label: t('Image audit (audit_image)'), method: 'POST', isNew: true },
         ],
       },
       {
@@ -1458,6 +1373,13 @@ export function Docs() {
                       'is sugar for the first frame — equivalent to passing a single image_url entry with role first_frame inside metadata.content. Use the full structure when you need finer control.'
                     )}
                   </Callout>
+                  <Callout type='warn'>
+                    <strong>{t('Real-person reference image?')}</strong>{' '}
+                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>{' '}
+                    {t(
+                      'so the gateway sends the image to ARK\'s asset library audit first and substitutes asset://<id> upstream. Without this flag a real-person photo will trip Seedance\'s privacy filter and the request fails outright. Adds ~10–30 s before task_id is returned.'
+                    )}
+                  </Callout>
                 </Section>
 
                 <Section
@@ -1477,6 +1399,13 @@ export function Docs() {
                     <K>last_frame</K>{' '}
                     {t("— otherwise the model can't infer the time order.")}
                   </p>
+                  <Callout type='warn'>
+                    <strong>{t('Real-person reference image?')}</strong>{' '}
+                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>{' '}
+                    {t(
+                      'so the gateway sends the image to ARK\'s asset library audit first and substitutes asset://<id> upstream. Without this flag a real-person photo will trip Seedance\'s privacy filter and the request fails outright. Adds ~10–30 s before task_id is returned.'
+                    )}
+                  </Callout>
                 </Section>
 
                 <Section
@@ -1509,6 +1438,13 @@ export function Docs() {
                     </a>
                     .
                   </Callout>
+                  <Callout type='warn'>
+                    <strong>{t('Real-person reference image?')}</strong>{' '}
+                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>{' '}
+                    {t(
+                      'so the gateway sends the image to ARK\'s asset library audit first and substitutes asset://<id> upstream. Without this flag a real-person photo will trip Seedance\'s privacy filter and the request fails outright. Adds ~10–30 s before task_id is returned.'
+                    )}
+                  </Callout>
                 </Section>
 
                 <Section
@@ -1529,6 +1465,13 @@ export function Docs() {
                       'Combine a reference video with reference image(s) and a prompt that describes the edit, e.g. "Replace the perfume in video1 with the cream from image1; keep camera motion intact".'
                     )}
                   </p>
+                  <Callout type='warn'>
+                    <strong>{t('Real-person reference image?')}</strong>{' '}
+                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>{' '}
+                    {t(
+                      'so the gateway sends the image to ARK\'s asset library audit first and substitutes asset://<id> upstream. Without this flag a real-person photo will trip Seedance\'s privacy filter and the request fails outright. Adds ~10–30 s before task_id is returned.'
+                    )}
+                  </Callout>
                 </Section>
 
                 <Section
@@ -1899,159 +1842,6 @@ export function Docs() {
                   <Callout type='info'>
                     {t(
                       'Media inputs accept either a public URL or Base64 (data:image/png;base64,...). For large files, prefer URL to avoid oversized request bodies.'
-                    )}
-                  </Callout>
-                </Section>
-
-                <Section
-                  id='audit-image'
-                  title={
-                    <>
-                      {t('Image audit (audit_image)')}
-                      <NewBadge />
-                    </>
-                  }
-                  description={t(
-                    'Opt-in flag that wraps every input image in Volcano ARK\'s asset library audit before submitting upstream. Real-person photos that would otherwise be blocked by Seedance\'s privacy filter pass through cleanly.',
-                  )}
-                >
-                  <Callout type='tip'>
-                    <strong>{t('When to enable:')}</strong>{' '}
-                    {t(
-                      "any time the input image contains a recognizable face, especially of a child or any real person. Without this flag the upstream returns InputImageSensitiveContentDetected.PrivacyInformation and the request fails outright. With the flag the gateway uploads, audits, and substitutes asset://<id> for you.",
-                    )}
-                  </Callout>
-
-                  <h3 className='text-base font-medium'>{t('How it works')}</h3>
-                  <ol className='text-muted-foreground list-decimal space-y-1 pl-6 text-sm'>
-                    <li>
-                      {t('If the image is')} <K>http(s)://...</K>{' '}
-                      {t('the gateway forwards the URL to')} <K>CreateAsset</K>{' '}
-                      {t('directly. Otherwise it decodes the')} <K>data:image/...;base64,...</K>{' '}
-                      {t('payload and uploads to Tencent COS to obtain a public URL first.')}
-                    </li>
-                    <li>
-                      {t('CreateAsset returns an')} <K>asset_id</K>;{' '}
-                      {t('the gateway polls')} <K>GetAsset</K>{' '}
-                      {t('every 3 s until')} <K>Status=Active</K>{' '}
-                      {t('(typical: 10–30 s).')}
-                    </li>
-                    <li>
-                      {t('Each')} <K>image_url</K>{' '}
-                      {t('in the upstream payload is rewritten to')} <K>asset://&lt;id&gt;</K>;{' '}
-                      {t('the original URL never reaches Seedance, so the privacy filter has nothing to flag.')}
-                    </li>
-                    <li>
-                      {t('Audit failure surfaces as')} <K>image_audit_failed</K>{' '}
-                      {t('with the upstream code/message, so you can distinguish moderation rejection from infra issues.')}
-                    </li>
-                  </ol>
-
-                  <h3 className='pt-4 text-base font-medium'>
-                    {t('OpenAI shape — public URL')}
-                  </h3>
-                  <CodeTabs shell={CURL_AUDIT_URL} python={PY_AUDIT_URL} />
-
-                  <h3 className='pt-4 text-base font-medium'>
-                    {t('OpenAI shape — base64 (gateway uploads to COS)')}
-                  </h3>
-                  <CodeTabs shell={CURL_AUDIT_BASE64} python={PY_AUDIT_BASE64} />
-
-                  <h3 className='pt-4 text-base font-medium'>
-                    {t('Volcano Ark SDK shape')}
-                  </h3>
-                  <p className='text-muted-foreground text-sm'>
-                    {t('When using the Ark SDK, the flag goes at the top level rather than inside metadata — the gateway middleware copies the entire request body into metadata so a single field works for both shapes.')}
-                  </p>
-                  <CodeBlock lang='shell' code={CURL_AUDIT_VOLC} />
-
-                  <h3 className='pt-4 text-base font-medium'>{t('Parameter reference')}</h3>
-                  <ParamTable
-                    fieldLabel={t('Field')}
-                    typeLabel={t('Type')}
-                    requiredLabel={t('Required')}
-                    descLabel={t('Description')}
-                    yes={t('yes')}
-                    no={t('no')}
-                    params={[
-                      {
-                        name: 'metadata.audit_image',
-                        type: 'boolean',
-                        desc: t(
-                          'Set true to enable. Accepts true / "true" / 1 / "yes" / "on". Absent or false → original passthrough behavior, byte-identical to today.',
-                        ),
-                      },
-                      {
-                        name: 'images[]',
-                        type: 'string[]',
-                        desc: (
-                          <>
-                            {t('Each entry may be:')}
-                            <ul className='mt-1 list-disc space-y-0.5 pl-5'>
-                              <li>
-                                <K>http(s)://...</K> — {t('passthrough; gateway hands it to CreateAsset as-is.')}
-                              </li>
-                              <li>
-                                <K>data:image/...;base64,...</K> — {t('decoded, uploaded to COS, then audited.')}
-                              </li>
-                              <li>
-                                <K>asset://&lt;id&gt;</K> — {t('treated as already-audited; no-op.')}
-                              </li>
-                              <li>
-                                {t('Bare base64 string (no data: prefix) — sniffed for MIME and uploaded.')}
-                              </li>
-                            </ul>
-                          </>
-                        ),
-                      },
-                    ]}
-                  />
-
-                  <h3 className='pt-4 text-base font-medium'>
-                    {t('Failure shapes')}
-                  </h3>
-                  <div className='overflow-hidden rounded-lg border'>
-                    <table className='w-full text-sm'>
-                      <thead className='bg-muted'>
-                        <tr className='text-left'>
-                          <th className='px-4 py-2 font-medium'>code</th>
-                          <th className='px-4 py-2 font-medium'>{t('When')}</th>
-                          <th className='px-4 py-2 font-medium'>{t('What to do')}</th>
-                        </tr>
-                      </thead>
-                      <tbody className='divide-y text-xs'>
-                        {[
-                          [
-                            'image_audit_failed',
-                            t('Audit terminated with Status=Failed (Volcano moderation rejected the image).'),
-                            t('Show the user the upstream Reason and ask them to retry with a different image.'),
-                          ],
-                          [
-                            'image_audit_error',
-                            t('Audit pipeline error before reaching a verdict — credentials missing, COS upload failed, ARK 5xx, etc.'),
-                            t('Retry-able. Check ARK / COS env vars and the gateway logs.'),
-                          ],
-                        ].map((row, i) => (
-                          <tr key={i}>
-                            <td className='px-4 py-2 font-mono'>{row[0]}</td>
-                            <td className='px-4 py-2'>{row[1]}</td>
-                            <td className='px-4 py-2 text-muted-foreground'>{row[2]}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <Callout type='warn'>
-                    <strong>{t('Latency:')}</strong>{' '}
-                    {t(
-                      'audit adds ~10–30 s synchronous wait before /v1/video/generations returns the task_id. Plan client timeouts accordingly. The video generation itself happens after the gateway has substituted the asset:// URI, so it is unaffected.',
-                    )}
-                  </Callout>
-                  <Callout type='info'>
-                    <strong>{t('Op note:')}</strong>{' '}
-                    {t(
-                      'this feature requires ARK_AK / ARK_SK and (when callers send base64) COS_BUCKET / COS_SECRET_ID / COS_SECRET_KEY in the gateway env. ARK_ASSETS_PROJECT must match the project of the API key the seedance channel uses, or the asset:// reference will not be findable at inference time.',
                     )}
                   </Callout>
                 </Section>
