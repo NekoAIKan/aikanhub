@@ -29,6 +29,17 @@ Verification:
 - Add money-denominated API token budget fields.
 - Migrate grants and admin balance entry points to money wallet transactions.
 
+### 2026-05-07: Money Pricing Display Anchor
+
+- Pricing API now exposes money pricing policy anchors: amount micros, currency, unit, and policy mode.
+- Video money policies use the lowest configured rule price as the public anchor and are no longer forced through legacy token-ratio display.
+- Pricing UI renders money-priced models as money-based entries with `/video`, `/request`, `/image`, or related money units instead of falling back to `/1M` token pricing.
+
+Verification:
+
+- `rtk go test ./model -run 'PricingUsesMoneyPolicy|MoneyPricingPolicy' -count=1 -timeout=180s`
+- `cd web/default && rtk bun run typecheck`
+
 ### 2026-05-07: Runtime Money Wallet Settlement Bridge
 
 - Wallet billing sessions now freeze money wallet balances in money mode, settle the frozen amount on success, release on refund, and adjust for actual usage differences.

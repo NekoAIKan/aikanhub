@@ -11,8 +11,13 @@ import {
   getDynamicPricingSummary,
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
-import { isTokenBasedModel } from '../lib/model-helpers'
-import { formatPrice, formatRequestPrice } from '../lib/price'
+import { hasMoneyPricing, isTokenBasedModel } from '../lib/model-helpers'
+import {
+  formatMoneyPricingAnchor,
+  formatPrice,
+  formatRequestPrice,
+  getMoneyPricingUnitLabel,
+} from '../lib/price'
 import type { PricingModel, TokenUnit } from '../types'
 
 export interface ModelCardProps {
@@ -32,6 +37,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const usdExchangeRate = props.usdExchangeRate ?? 1
   const showRechargePrice = props.showRechargePrice ?? false
   const isTokenBased = isTokenBasedModel(props.model)
+  const isMoneyPriced = hasMoneyPricing(props.model)
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
   const tags = parseTags(props.model.tags)
   const groups = props.model.enable_groups || []
@@ -118,6 +124,18 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
                     {t('Dynamic Pricing')}
                   </span>
                 )
+              ) : isMoneyPriced ? (
+                <span className='text-muted-foreground whitespace-nowrap'>
+                  <span className='text-foreground font-mono font-semibold'>
+                    {formatMoneyPricingAnchor(
+                      props.model,
+                      showRechargePrice,
+                      priceRate,
+                      usdExchangeRate
+                    )}
+                  </span>{' '}
+                  / {t(getMoneyPricingUnitLabel(props.model.money_pricing_unit))}
+                </span>
               ) : isTokenBased ? (
                 <>
                   <span className='text-muted-foreground whitespace-nowrap'>
@@ -214,7 +232,11 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           </span>
         )}
         <span className='text-muted-foreground text-xs font-medium'>
-          {isTokenBased ? t('Token-based') : t('Per Request')}
+          {isMoneyPriced
+            ? t('Money-based')
+            : isTokenBased
+              ? t('Token-based')
+              : t('Per Request')}
         </span>
         {isDynamicPricing && (
           <StatusBadge
@@ -233,9 +255,11 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             {item}
           </span>
         ))}
-        <span className='text-muted-foreground/50 text-xs'>
-          {tokenUnitLabel}
-        </span>
+        {!isMoneyPriced && (
+          <span className='text-muted-foreground/50 text-xs'>
+            {tokenUnitLabel}
+          </span>
+        )}
         {hiddenCount > 0 && (
           <span className='text-muted-foreground/40 text-xs'>
             +{hiddenCount}

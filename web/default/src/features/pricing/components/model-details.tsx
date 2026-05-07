@@ -34,10 +34,16 @@ import {
 import { parseTags } from '../lib/filters'
 import {
   getAvailableGroups,
+  hasMoneyPricing,
   replaceModelInPath,
   isTokenBasedModel,
 } from '../lib/model-helpers'
-import { formatGroupPrice, formatFixedPrice } from '../lib/price'
+import {
+  formatGroupPrice,
+  formatFixedPrice,
+  formatMoneyPricingAnchor,
+  getMoneyPricingUnitLabel,
+} from '../lib/price'
 import type { PricingModel, TokenUnit, PriceType } from '../types'
 import { DynamicPricingBreakdown } from './dynamic-pricing-breakdown'
 
@@ -61,6 +67,7 @@ function ModelHeader(props: { model: PricingModel }) {
     model.billing_mode === 'tiered_expr' &&
     Boolean(model.billing_expr) &&
     getDynamicPricingTiers(model).length === 0
+  const isMoneyPriced = hasMoneyPricing(model)
 
   return (
     <header className='pb-5'>
@@ -84,9 +91,11 @@ function ModelHeader(props: { model: PricingModel }) {
         )}
         <span className='text-muted-foreground/30'>·</span>
         <span className='text-muted-foreground/50'>
-          {model.quota_type === QUOTA_TYPE_VALUES.TOKEN
-            ? t('Token-based')
-            : t('Per Request')}
+          {isMoneyPriced
+            ? t('Money-based')
+            : model.quota_type === QUOTA_TYPE_VALUES.TOKEN
+              ? t('Token-based')
+              : t('Per Request')}
         </span>
         {model.billing_mode === 'tiered_expr' && model.billing_expr && (
           <>
@@ -131,6 +140,7 @@ function PriceSection(props: {
   const { model, priceRate, usdExchangeRate, tokenUnit, showRechargePrice } =
     props
   const isTokenBased = isTokenBasedModel(model)
+  const isMoneyPriced = hasMoneyPricing(model)
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
   const baseGroupKey = '_base'
   const baseGroupRatioMap = { [baseGroupKey]: 1 }
@@ -178,6 +188,27 @@ function PriceSection(props: {
         model.audio_ratio != null && model.audio_completion_ratio != null,
     },
   ]
+
+  if (isMoneyPriced) {
+    return (
+      <section className='border-b py-4'>
+        <SectionTitle>{t('Base Price')}</SectionTitle>
+        <div className='flex items-baseline justify-between'>
+          <span className='text-muted-foreground text-sm'>
+            {t(getMoneyPricingUnitLabel(model.money_pricing_unit))}
+          </span>
+          <span className='text-foreground font-mono text-sm font-semibold tabular-nums'>
+            {formatMoneyPricingAnchor(
+              model,
+              showRechargePrice,
+              priceRate,
+              usdExchangeRate
+            )}
+          </span>
+        </div>
+      </section>
+    )
+  }
 
   if (dynamicSummary) {
     if (dynamicSummary.isSpecialExpression) {

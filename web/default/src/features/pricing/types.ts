@@ -35,6 +35,10 @@ export type PricingModel = {
   billing_mode?: string
   /** Raw expression describing dynamic / tiered billing */
   billing_expr?: string
+  money_pricing_mode?: string
+  money_pricing_currency?: string
+  money_pricing_amount_micros?: number
+  money_pricing_unit?: string
   /** Pricing version returned by backend, useful for cache busting */
   pricing_version?: string
 }

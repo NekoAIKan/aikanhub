@@ -34,3 +34,11 @@ export function replaceModelInPath(path: string, modelName: string): string {
 export function isTokenBasedModel(model: PricingModel): boolean {
   return model.quota_type === QUOTA_TYPE_VALUES.TOKEN
 }
+
+export function hasMoneyPricing(model: PricingModel): boolean {
+  return (
+    typeof model.money_pricing_amount_micros === 'number' &&
+    Number.isFinite(model.money_pricing_amount_micros) &&
+    model.money_pricing_amount_micros > 0
+  )
+}
