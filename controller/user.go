@@ -953,9 +953,17 @@ func ManageUser(c *gin.Context) {
 				common.ApiErrorI18n(c, i18n.MsgUserQuotaChangeZero)
 				return
 			}
-			if err := model.IncreaseUserQuota(user.Id, req.Value, true); err != nil {
-				common.ApiError(c, err)
-				return
+			if model.ShouldWriteLegacyQuota() {
+				if err := model.IncreaseUserQuota(user.Id, req.Value, true); err != nil {
+					common.ApiError(c, err)
+					return
+				}
+			} else {
+				requestID := fmt.Sprintf("admin:add:%d:%d:%s", user.Id, adminId, common.GetUUID())
+				if err := model.AdjustWalletLegacyQuota(user.Id, req.Value, requestID, "admin_add"); err != nil {
+					common.ApiError(c, err)
+					return
+				}
 			}
 			model.RecordLogWithAdminInfo(user.Id, model.LogTypeManage,
 				fmt.Sprintf("管理员增加用户额度 %s", logger.LogQuota(req.Value)), adminInfo)
@@ -964,17 +972,33 @@ func ManageUser(c *gin.Context) {
 				common.ApiErrorI18n(c, i18n.MsgUserQuotaChangeZero)
 				return
 			}
-			if err := model.DecreaseUserQuota(user.Id, req.Value, true); err != nil {
-				common.ApiError(c, err)
-				return
+			if model.ShouldWriteLegacyQuota() {
+				if err := model.DecreaseUserQuota(user.Id, req.Value, true); err != nil {
+					common.ApiError(c, err)
+					return
+				}
+			} else {
+				requestID := fmt.Sprintf("admin:subtract:%d:%d:%s", user.Id, adminId, common.GetUUID())
+				if err := model.AdjustWalletLegacyQuota(user.Id, -req.Value, requestID, "admin_subtract"); err != nil {
+					common.ApiError(c, err)
+					return
+				}
 			}
 			model.RecordLogWithAdminInfo(user.Id, model.LogTypeManage,
 				fmt.Sprintf("管理员减少用户额度 %s", logger.LogQuota(req.Value)), adminInfo)
 		case "override":
 			oldQuota := user.Quota
-			if err := model.DB.Model(&model.User{}).Where("id = ?", user.Id).Update("quota", req.Value).Error; err != nil {
-				common.ApiError(c, err)
-				return
+			if model.ShouldWriteLegacyQuota() {
+				if err := model.DB.Model(&model.User{}).Where("id = ?", user.Id).Update("quota", req.Value).Error; err != nil {
+					common.ApiError(c, err)
+					return
+				}
+			} else {
+				requestID := fmt.Sprintf("admin:override:%d:%d:%s", user.Id, adminId, common.GetUUID())
+				if err := model.OverrideWalletLegacyQuota(user.Id, req.Value, requestID, "admin_override"); err != nil {
+					common.ApiError(c, err)
+					return
+				}
 			}
 			model.RecordLogWithAdminInfo(user.Id, model.LogTypeManage,
 				fmt.Sprintf("管理员覆盖用户额度从 %s 为 %s", logger.LogQuota(oldQuota), logger.LogQuota(req.Value)), adminInfo)

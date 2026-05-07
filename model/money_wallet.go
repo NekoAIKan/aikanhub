@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -16,6 +18,7 @@ const (
 	MoneyWalletTransactionRelease    = "release"
 	MoneyWalletTransactionRefund     = "refund"
 	MoneyWalletTransactionAdjustment = "adjustment"
+	MoneyWalletTransactionGrant      = "grant"
 )
 
 var (
@@ -56,6 +59,46 @@ type MoneyWalletTransaction struct {
 
 func normalizeMoneyCurrency(currency string) string {
 	return strings.ToUpper(strings.TrimSpace(currency))
+}
+
+func SettlementCurrency() string {
+	currency := normalizeMoneyCurrency(billing_setting.GetMoneyBillingSetting().SettlementCurrency)
+	if currency == "" {
+		return "USD"
+	}
+	return currency
+}
+
+func ShouldWriteLegacyQuota() bool {
+	return !billing_setting.IsMoneyBillingModeEnabled()
+}
+
+func LegacyQuotaToMoneyMicros(quota int64) int64 {
+	if quota <= 0 || common.QuotaPerUnit <= 0 {
+		return 0
+	}
+	return decimal.NewFromInt(quota).
+		Mul(decimal.NewFromInt(1_000_000)).
+		Div(decimal.NewFromFloat(common.QuotaPerUnit)).
+		Round(0).
+		IntPart()
+}
+
+func legacyQuotaDeltaToMoneyMicros(quota int64) int64 {
+	if quota == 0 {
+		return 0
+	}
+	if quota < 0 {
+		return -LegacyQuotaToMoneyMicros(-quota)
+	}
+	return LegacyQuotaToMoneyMicros(quota)
+}
+
+func absMicros(amount int64) int64 {
+	if amount < 0 {
+		return -amount
+	}
+	return amount
 }
 
 func validateMoneyWalletRequest(currency string, requestID string) (string, error) {
@@ -341,4 +384,55 @@ func ReleaseFrozenWallet(userID int, currency string, preauthRequestID string, r
 
 func RefundWallet(userID int, currency string, amountMicros int64, requestID string, metadata string) error {
 	return CreditWallet(userID, currency, amountMicros, requestID, MoneyWalletTransactionRefund, metadata)
+}
+
+func GrantUserQuotaOrMoneyWithTx(tx *gorm.DB, userID int, quota int, requestID string, metadata string) error {
+	if quota <= 0 {
+		return nil
+	}
+	if ShouldWriteLegacyQuota() {
+		return tx.Model(&User{}).Where("id = ?", userID).Update("quota", gorm.Expr("quota + ?", quota)).Error
+	}
+	amountMicros := LegacyQuotaToMoneyMicros(int64(quota))
+	if amountMicros <= 0 {
+		return nil
+	}
+	return CreditWalletWithTx(tx, userID, SettlementCurrency(), amountMicros, requestID, MoneyWalletTransactionGrant, metadata)
+}
+
+func GrantUserQuotaOrMoney(userID int, quota int, requestID string, metadata string) error {
+	return DB.Transaction(func(tx *gorm.DB) error {
+		return GrantUserQuotaOrMoneyWithTx(tx, userID, quota, requestID, metadata)
+	})
+}
+
+func AdjustWalletLegacyQuota(userID int, quotaDelta int, requestID string, metadata string) error {
+	amountMicros := legacyQuotaDeltaToMoneyMicros(int64(quotaDelta))
+	if amountMicros == 0 {
+		return ErrMoneyWalletInvalidAmount
+	}
+	return AdjustWallet(userID, SettlementCurrency(), amountMicros, requestID, metadata)
+}
+
+func OverrideWalletLegacyQuota(userID int, targetQuota int, requestID string, metadata string) error {
+	if targetQuota < 0 {
+		return ErrMoneyWalletInvalidAmount
+	}
+	targetMicros := LegacyQuotaToMoneyMicros(int64(targetQuota))
+	return DB.Transaction(func(tx *gorm.DB) error {
+		currency := SettlementCurrency()
+		wallet, err := ensureMoneyWallet(tx, userID, currency)
+		if err != nil {
+			return err
+		}
+		delta := targetMicros - wallet.AvailableMicros
+		if delta == 0 {
+			return nil
+		}
+		existing, err := existingMoneyWalletTransaction(tx, requestID, MoneyWalletTransactionAdjustment)
+		if err != nil || existing != nil {
+			return err
+		}
+		return recordMoneyWalletTransaction(tx, wallet, MoneyWalletTransactionAdjustment, requestID, "", absMicros(delta), delta, 0, metadata)
+	})
 }

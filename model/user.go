@@ -369,12 +369,12 @@ func (user *User) TransferAffQuotaToQuota(quota int) error {
 		return errors.New("邀请额度不足！")
 	}
 
-	// 更新用户额度
 	user.AffQuota -= quota
-	user.Quota += quota
-
-	// 保存用户状态
-	if err := tx.Save(user).Error; err != nil {
+	if err := tx.Model(&User{}).Where("id = ?", user.Id).Update("aff_quota", user.AffQuota).Error; err != nil {
+		return err
+	}
+	requestID := fmt.Sprintf("aff_transfer:%d:%s", user.Id, common.GetUUID())
+	if err := GrantUserQuotaOrMoneyWithTx(tx, user.Id, quota, requestID, "affiliate_transfer"); err != nil {
 		return err
 	}
 
@@ -466,6 +466,10 @@ func (user *User) Insert(inviterId int) error {
 		}
 	}
 	policy := applyOnboardingPolicy(user)
+	onboardingQuota := policy.NewUserQuota
+	if !ShouldWriteLegacyQuota() {
+		user.Quota = 0
+	}
 	//user.SetAccessToken(common.GetUUID())
 	user.AffCode = common.GetRandomString(4)
 
@@ -482,6 +486,12 @@ func (user *User) Insert(inviterId int) error {
 	}
 	if err := CreateDefaultTokenForUser(user); err != nil {
 		return err
+	}
+	if onboardingQuota > 0 && !ShouldWriteLegacyQuota() {
+		requestID := fmt.Sprintf("onboarding:user:%d", user.Id)
+		if err := GrantUserQuotaOrMoney(user.Id, onboardingQuota, requestID, "onboarding"); err != nil {
+			return err
+		}
 	}
 
 	// 用户创建成功后，根据角色初始化边栏配置
@@ -505,7 +515,7 @@ func (user *User) Insert(inviterId int) error {
 	recordDefaultTokenPolicyLog(user.Id, policy)
 	if inviterId != 0 {
 		if common.QuotaForInvitee > 0 {
-			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
+			_ = GrantUserQuotaOrMoney(user.Id, common.QuotaForInvitee, fmt.Sprintf("invitee:user:%d:inviter:%d", user.Id, inviterId), "invitee")
 			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
 		}
 		if common.QuotaForInviter > 0 {
@@ -528,7 +538,11 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 			return err
 		}
 	}
-	applyOnboardingPolicy(user)
+	policy := applyOnboardingPolicy(user)
+	onboardingQuota := policy.NewUserQuota
+	if !ShouldWriteLegacyQuota() {
+		user.Quota = 0
+	}
 	user.AffCode = common.GetRandomString(4)
 
 	// 初始化用户设置
@@ -543,6 +557,12 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 	}
 	if err := CreateDefaultTokenForUserWithTx(tx, user); err != nil {
 		return err
+	}
+	if onboardingQuota > 0 && !ShouldWriteLegacyQuota() {
+		requestID := fmt.Sprintf("onboarding:user:%d", user.Id)
+		if err := GrantUserQuotaOrMoneyWithTx(tx, user.Id, onboardingQuota, requestID, "onboarding"); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -570,7 +590,7 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 	recordDefaultTokenPolicyLog(user.Id, onboarding_setting.GetPolicy())
 	if inviterId != 0 {
 		if common.QuotaForInvitee > 0 {
-			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
+			_ = GrantUserQuotaOrMoney(user.Id, common.QuotaForInvitee, fmt.Sprintf("invitee:user:%d:inviter:%d", user.Id, inviterId), "invitee")
 			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
 		}
 		if common.QuotaForInviter > 0 {

@@ -29,6 +29,19 @@ Verification:
 - Add money-denominated API token budget fields.
 - Migrate grants and admin balance entry points to money wallet transactions.
 
+### 2026-05-07: Grant Flow Money Mode
+
+- Added shared grant helpers that convert legacy quota grants into settlement-currency money micros when money billing mode is enabled.
+- Money mode now routes redemption, check-in, onboarding, invitee reward, affiliate transfer, and admin add/subtract/override balance changes to the money wallet instead of `User.Quota`.
+- Legacy mode keeps the existing quota write behavior for compatibility.
+- Added coverage for money-mode grant helper, redemption, check-in, affiliate transfer, onboarding, and admin wallet adjustment flows.
+
+Verification:
+
+- `rtk go test ./model -run 'GrantUserQuotaOrMoney|RedeemCreditsMoney|CheckinCreditsMoney|TransferAffQuotaCreditsMoney|UserInsertOnboardingCreditsMoney|AdminLegacyQuotaWallet' -count=1 -timeout=180s`
+- `rtk go test ./model ./service ./controller ./setting/billing_setting ./setting/onboarding_setting -run 'Money|QuotaBackfill|Redeem|Checkin|TransferAff|Register|Token|Topup|Recharge|Onboarding' -count=1 -timeout=300s`
+- `rtk go test ./model -count=1 -timeout=300s`
+
 ### 2026-05-07: API Token Money Budgets
 
 - Added money-denominated API token budget fields: remaining amount, used amount, currency, and unlimited amount.

@@ -3,9 +3,7 @@ package service
 import (
 	"fmt"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -30,14 +28,7 @@ type QuotaMoneyBackfillApplyResult struct {
 }
 
 func QuotaToMoneyMicros(quota int64) int64 {
-	if quota <= 0 || common.QuotaPerUnit <= 0 {
-		return 0
-	}
-	return decimal.NewFromInt(quota).
-		Mul(decimal.NewFromInt(MoneyMicrosPerUnit)).
-		Div(decimal.NewFromFloat(common.QuotaPerUnit)).
-		Round(0).
-		IntPart()
+	return model.LegacyQuotaToMoneyMicros(quota)
 }
 
 func PreviewQuotaMoneyBackfill(currency string) (QuotaMoneyBackfillPreview, error) {
