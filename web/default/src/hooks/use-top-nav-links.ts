@@ -13,6 +13,7 @@ export type TopNavLink = {
 // Default navigation configuration
 const DEFAULT_HEADER_NAV_MODULES = {
   home: true,
+  services: true,
   console: true,
   pricing: { enabled: true, requireAuth: false },
   docs: true,
@@ -24,6 +25,7 @@ const DEFAULT_HEADER_NAV_MODULES = {
  * Backend format example (stringified JSON):
  * {
  *   home: true,
+ *   services: true,
  *   console: true,
  *   pricing: { enabled: true, requireAuth: false },
  *   docs: true,
@@ -60,6 +62,18 @@ export function useTopNavLinks(): TopNavLink[] {
   // Home
   if (modules?.home !== false) {
     links.push({ title: t('Home'), href: '/' })
+  }
+
+  // Services
+  const services = modules?.services
+  if (
+    services === true ||
+    (services && typeof services === 'object' && services.enabled)
+  ) {
+    links.push({
+      title: t('Services'),
+      href: '/services/video-generation',
+    })
   }
 
   // Console -> /dashboard (new console path)
