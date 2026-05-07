@@ -29,6 +29,20 @@ Verification:
 - Add money-denominated API token budget fields.
 - Migrate grants and admin balance entry points to money wallet transactions.
 
+### 2026-05-07: API Token Money Budgets
+
+- Added money-denominated API token budget fields: remaining amount, used amount, currency, and unlimited amount.
+- Token create/update/status/usage endpoints now preserve and expose money budget fields while keeping legacy quota response fields for compatibility.
+- `ValidateUserToken` now checks token money budget exhaustion when `billing_setting.money_billing_mode=money`.
+- Token quota mutation helpers now reject writes in money mode.
+- Added token money budget debit/refund helpers with insufficient-budget protection.
+
+Verification:
+
+- `rtk go test ./model -run 'Token.*Money|TokenQuotaWrites|ValidateUserTokenUsesMoneyBudget' -count=1 -timeout=180s`
+- `rtk go test ./controller -run 'Token.*Money|GetTokenUsageIncludesMoney|GetTokenStatusIncludesMoney|AddTokenStoresMoney|UpdateTokenStoresMoney' -count=1 -timeout=180s`
+- `rtk go test ./model ./controller ./service ./setting/billing_setting -run 'Token|MoneyBillingMode|QuotaBackfill|MoneyWallet|RechargeMoneyMode' -count=1 -timeout=240s`
+
 ### 2026-05-07: Quota Backfill And Guard Rails
 
 - Added quota-to-money conversion helper using the historical `QuotaPerUnit` conversion.

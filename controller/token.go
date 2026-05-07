@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
@@ -29,6 +30,25 @@ func buildMaskedTokenResponses(tokens []*model.Token) []*model.Token {
 		maskedTokens = append(maskedTokens, buildMaskedTokenResponse(token))
 	}
 	return maskedTokens
+}
+
+func normalizeTokenCurrency(currency string) string {
+	currency = strings.ToUpper(strings.TrimSpace(currency))
+	if currency == "" {
+		return "USD"
+	}
+	return currency
+}
+
+func validateTokenMoneyBudget(token *model.Token) error {
+	if token.RemainAmountMicros < 0 {
+		return fmt.Errorf("remain_amount_micros 不能为负数")
+	}
+	if token.UsedAmountMicros < 0 {
+		return fmt.Errorf("used_amount_micros 不能为负数")
+	}
+	token.Currency = normalizeTokenCurrency(token.Currency)
+	return nil
 }
 
 func GetAllTokens(c *gin.Context) {
@@ -107,11 +127,16 @@ func GetTokenStatus(c *gin.Context) {
 		expiredAt = 0
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"object":          "credit_summary",
-		"total_granted":   token.RemainQuota,
-		"total_used":      0, // not supported currently
-		"total_available": token.RemainQuota,
-		"expires_at":      expiredAt * 1000,
+		"object":                        "credit_summary",
+		"total_granted":                 token.RemainQuota,
+		"total_used":                    0, // not supported currently
+		"total_available":               token.RemainQuota,
+		"total_granted_amount_micros":   token.RemainAmountMicros + token.UsedAmountMicros,
+		"total_used_amount_micros":      token.UsedAmountMicros,
+		"total_available_amount_micros": token.RemainAmountMicros,
+		"currency":                      normalizeTokenCurrency(token.Currency),
+		"unlimited_amount":              token.UnlimitedAmount,
+		"expires_at":                    expiredAt * 1000,
 	})
 }
 
@@ -151,15 +176,20 @@ func GetTokenUsage(c *gin.Context) {
 		"code":    true,
 		"message": "ok",
 		"data": gin.H{
-			"object":               "token_usage",
-			"name":                 token.Name,
-			"total_granted":        token.RemainQuota + token.UsedQuota,
-			"total_used":           token.UsedQuota,
-			"total_available":      token.RemainQuota,
-			"unlimited_quota":      token.UnlimitedQuota,
-			"model_limits":         token.GetModelLimitsMap(),
-			"model_limits_enabled": token.ModelLimitsEnabled,
-			"expires_at":           expiredAt,
+			"object":                        "token_usage",
+			"name":                          token.Name,
+			"total_granted":                 token.RemainQuota + token.UsedQuota,
+			"total_used":                    token.UsedQuota,
+			"total_available":               token.RemainQuota,
+			"unlimited_quota":               token.UnlimitedQuota,
+			"total_granted_amount_micros":   token.RemainAmountMicros + token.UsedAmountMicros,
+			"total_used_amount_micros":      token.UsedAmountMicros,
+			"total_available_amount_micros": token.RemainAmountMicros,
+			"currency":                      normalizeTokenCurrency(token.Currency),
+			"unlimited_amount":              token.UnlimitedAmount,
+			"model_limits":                  token.GetModelLimitsMap(),
+			"model_limits_enabled":          token.ModelLimitsEnabled,
+			"expires_at":                    expiredAt,
 		},
 	})
 }
@@ -186,6 +216,10 @@ func AddToken(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgTokenQuotaExceedMax, map[string]any{"Max": maxQuotaValue})
 			return
 		}
+	}
+	if err := validateTokenMoneyBudget(&token); err != nil {
+		common.ApiError(c, err)
+		return
 	}
 	// 检查用户令牌数量是否已达上限
 	maxTokens := operation_setting.GetMaxUserTokens()
@@ -216,6 +250,10 @@ func AddToken(c *gin.Context) {
 		ExpiredTime:        token.ExpiredTime,
 		RemainQuota:        token.RemainQuota,
 		UnlimitedQuota:     token.UnlimitedQuota,
+		RemainAmountMicros: token.RemainAmountMicros,
+		UsedAmountMicros:   token.UsedAmountMicros,
+		Currency:           token.Currency,
+		UnlimitedAmount:    token.UnlimitedAmount,
 		ModelLimitsEnabled: token.ModelLimitsEnabled,
 		ModelLimits:        token.ModelLimits,
 		AllowIps:           token.AllowIps,
@@ -271,6 +309,10 @@ func UpdateToken(c *gin.Context) {
 			return
 		}
 	}
+	if err := validateTokenMoneyBudget(&token); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	cleanToken, err := model.GetTokenByIds(token.Id, userId)
 	if err != nil {
 		common.ApiError(c, err)
@@ -281,7 +323,12 @@ func UpdateToken(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgTokenExpiredCannotEnable)
 			return
 		}
-		if cleanToken.Status == common.TokenStatusExhausted && cleanToken.RemainQuota <= 0 && !cleanToken.UnlimitedQuota {
+		if billing_setting.IsMoneyBillingModeEnabled() {
+			if cleanToken.Status == common.TokenStatusExhausted && cleanToken.RemainAmountMicros <= 0 && !cleanToken.UnlimitedAmount {
+				common.ApiErrorI18n(c, i18n.MsgTokenExhaustedCannotEable)
+				return
+			}
+		} else if cleanToken.Status == common.TokenStatusExhausted && cleanToken.RemainQuota <= 0 && !cleanToken.UnlimitedQuota {
 			common.ApiErrorI18n(c, i18n.MsgTokenExhaustedCannotEable)
 			return
 		}
@@ -294,6 +341,10 @@ func UpdateToken(c *gin.Context) {
 		cleanToken.ExpiredTime = token.ExpiredTime
 		cleanToken.RemainQuota = token.RemainQuota
 		cleanToken.UnlimitedQuota = token.UnlimitedQuota
+		cleanToken.RemainAmountMicros = token.RemainAmountMicros
+		cleanToken.UsedAmountMicros = token.UsedAmountMicros
+		cleanToken.Currency = token.Currency
+		cleanToken.UnlimitedAmount = token.UnlimitedAmount
 		cleanToken.ModelLimitsEnabled = token.ModelLimitsEnabled
 		cleanToken.ModelLimits = token.ModelLimits
 		cleanToken.AllowIps = token.AllowIps

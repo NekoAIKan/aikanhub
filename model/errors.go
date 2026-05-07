@@ -16,8 +16,9 @@ var (
 
 // Token auth errors
 var (
-	ErrTokenNotProvided = errors.New("token not provided")
-	ErrTokenInvalid     = errors.New("token invalid")
+	ErrTokenNotProvided             = errors.New("token not provided")
+	ErrTokenInvalid                 = errors.New("token invalid")
+	ErrTokenMoneyBudgetInsufficient = errors.New("token money budget insufficient")
 )
 
 // Redemption errors
