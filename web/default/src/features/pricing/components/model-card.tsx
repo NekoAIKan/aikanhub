@@ -134,7 +134,8 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
                       usdExchangeRate
                     )}
                   </span>{' '}
-                  / {t(getMoneyPricingUnitLabel(props.model.money_pricing_unit))}
+                  /{' '}
+                  {t(getMoneyPricingUnitLabel(props.model.money_pricing_unit))}
                 </span>
               ) : isTokenBased ? (
                 <>
