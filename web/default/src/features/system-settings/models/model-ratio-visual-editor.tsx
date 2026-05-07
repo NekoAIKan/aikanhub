@@ -11,9 +11,12 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table'
+import { useQuery } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   Table,
   TableBody,
@@ -28,6 +31,7 @@ import {
   DataTablePagination,
 } from '@/components/data-table'
 import { StatusBadge } from '@/components/status-badge'
+import { getEnabledModels } from '@/features/channels/api'
 import {
   combineBillingExpr,
   splitBillingExprAndRequestRules,
@@ -66,6 +70,7 @@ type ModelRow = {
 }
 
 const STORAGE_KEY = 'model-ratio-column-visibility'
+const ACTIVE_FILTER_STORAGE_KEY = 'model-ratio-only-active-channels'
 
 const formatValue = (value?: string) => {
   if (!value || value === '') return '—'
@@ -131,6 +136,33 @@ export const ModelRatioVisualEditor = memo(
     useEffect(() => {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(columnVisibility))
     }, [columnVisibility])
+
+    // Toggle: only show models that are bound to at least one enabled channel.
+    // Default ON for less-cluttered admin view; admins who add new chat models
+    // can flip it off briefly to see (and edit) all configured pricing rows.
+    const [onlyActiveChannels, setOnlyActiveChannels] = useState<boolean>(
+      () => localStorage.getItem(ACTIVE_FILTER_STORAGE_KEY) !== 'false'
+    )
+    useEffect(() => {
+      localStorage.setItem(
+        ACTIVE_FILTER_STORAGE_KEY,
+        onlyActiveChannels ? 'true' : 'false'
+      )
+    }, [onlyActiveChannels])
+
+    // Active-channel models come from `abilities` (distinct model name across
+    // every enabled channel). Querying lazily so the table still works even
+    // if the endpoint errors — see the resolved `enabledModelSet` below.
+    const { data: enabledModelsData, isLoading: enabledLoading } = useQuery({
+      queryKey: ['channel', 'models_enabled'],
+      queryFn: getEnabledModels,
+      staleTime: 60_000,
+      enabled: onlyActiveChannels,
+    })
+    const enabledModelSet = useMemo(
+      () => new Set(enabledModelsData?.data || []),
+      [enabledModelsData]
+    )
 
     const models = useMemo(() => {
       const priceMap = safeJsonParse<Record<string, number>>(modelPrice, {
@@ -251,7 +283,13 @@ export const ModelRatioVisualEditor = memo(
         }
       })
 
-      return modelData.sort((a, b) => a.name.localeCompare(b.name))
+      const sorted = modelData.sort((a, b) => a.name.localeCompare(b.name))
+      // Apply active-channel filter LAST so the underlying pricing data is
+      // never lost — saves still operate on the full maps in handleSave.
+      if (onlyActiveChannels && !enabledLoading && enabledModelSet.size > 0) {
+        return sorted.filter((row) => enabledModelSet.has(row.name))
+      }
+      return sorted
     }, [
       modelPrice,
       modelRatio,
@@ -263,6 +301,9 @@ export const ModelRatioVisualEditor = memo(
       audioCompletionRatio,
       billingMode,
       billingExpr,
+      onlyActiveChannels,
+      enabledLoading,
+      enabledModelSet,
     ])
 
     const handleEdit = useCallback((model: ModelRow) => {
@@ -700,11 +741,29 @@ export const ModelRatioVisualEditor = memo(
 
     return (
       <div className='space-y-4'>
-        <div className='flex items-center justify-between gap-4'>
-          <DataTableToolbar
-            table={table}
-            searchPlaceholder={t('Search models...')}
-          />
+        <div className='flex flex-wrap items-center justify-between gap-4'>
+          <div className='flex flex-wrap items-center gap-4'>
+            <DataTableToolbar
+              table={table}
+              searchPlaceholder={t('Search models...')}
+            />
+            <div className='flex items-center gap-2'>
+              <Switch
+                id='only-active-channels'
+                checked={onlyActiveChannels}
+                onCheckedChange={setOnlyActiveChannels}
+              />
+              <Label
+                htmlFor='only-active-channels'
+                className='cursor-pointer text-sm font-normal'
+                title={t(
+                  'Hide rows for models that are not bound to any enabled channel. Pricing data is preserved — toggle off to edit.'
+                )}
+              >
+                {t('Only active channels')}
+              </Label>
+            </div>
+          </div>
           <Button onClick={handleAdd}>
             <Plus className='mr-2 h-4 w-4' />
             {t('Add model')}
@@ -715,7 +774,11 @@ export const ModelRatioVisualEditor = memo(
           <div className='text-muted-foreground rounded-lg border border-dashed p-8 text-center'>
             {table.getState().globalFilter
               ? t('No models match your search')
-              : t('No models configured. Click "Add model" to get started.')}
+              : onlyActiveChannels
+                ? t(
+                    'No priced models are bound to an enabled channel. Toggle off "Only active channels" to see all configured pricing.'
+                  )
+                : t('No models configured. Click "Add model" to get started.')}
           </div>
         ) : (
           <div className='overflow-hidden rounded-md border'>

@@ -4373,6 +4373,9 @@
     "Pinning the spec via the model id": "用模型 ID 后缀锁规格",
     "Source:": "出处：",
     "Full list:": "完整列表：",
-    "Pixverse": "Pixverse"
+    "Pixverse": "Pixverse",
+    "Only active channels": "仅显示已启用渠道的模型",
+    "Hide rows for models that are not bound to any enabled channel. Pricing data is preserved — toggle off to edit.": "隐藏未绑定任何启用渠道的模型。价格数据仍保留——关闭开关即可编辑。",
+    "No priced models are bound to an enabled channel. Toggle off \"Only active channels\" to see all configured pricing.": "暂无已定价且绑定启用渠道的模型。关闭「仅显示已启用渠道的模型」可查看全部定价配置。"
   }
 }
