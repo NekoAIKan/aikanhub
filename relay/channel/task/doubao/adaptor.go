@@ -18,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/imageaudit"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
@@ -261,6 +262,16 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if err != nil {
 		return nil, errors.Wrap(err, "convert request payload failed")
 	}
+
+	// audit_image=true → run every image_url through ARK Assets audit before
+	// submitting upstream. Each URL becomes asset://<id>. Unset / false keeps
+	// the original passthrough behaviour.
+	if shouldAuditImages(req.Metadata) {
+		if err := a.auditImageContent(c, body); err != nil {
+			return nil, err
+		}
+	}
+
 	if info.IsModelMapped {
 		body.Model = info.UpstreamModelName
 	} else {
@@ -271,6 +282,58 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		return nil, err
 	}
 	return bytes.NewReader(data), nil
+}
+
+// shouldAuditImages reports whether the caller asked for the audit pipeline.
+// The flag is read from req.Metadata so it works for both request shapes:
+//
+//   - OpenAI-form  POST /v1/videos with `metadata.audit_image: true`
+//   - Volcano-form POST /api/v3/contents/generations/tasks with `audit_image: true`
+//     at the top level (the volcArkSubmitConvert middleware copies the entire
+//     raw body into metadata, so the flag is reachable here either way).
+//
+// Truthy values: bool true, "true", "1", "yes", "on" (case-insensitive).
+// Anything else (including absent) → false → original passthrough.
+func shouldAuditImages(metadata map[string]any) bool {
+	if metadata == nil {
+		return false
+	}
+	switch v := metadata["audit_image"].(type) {
+	case bool:
+		return v
+	case string:
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "true", "1", "yes", "on":
+			return true
+		}
+	case float64:
+		return v != 0
+	case int:
+		return v != 0
+	}
+	return false
+}
+
+// auditImageContent walks body.Content, replaces every image_url URL with the
+// audited asset:// URI, and short-circuits with a clear error on the first
+// audit failure. Audit failures (Status=Failed) carry a stable error code so
+// API clients can distinguish moderation rejection from infrastructure issues.
+func (a *TaskAdaptor) auditImageContent(c *gin.Context, body *requestPayload) error {
+	for i := range body.Content {
+		item := &body.Content[i]
+		if item.Type != "image_url" || item.ImageURL == nil || item.ImageURL.URL == "" {
+			continue
+		}
+		audited, err := imageaudit.EnsureAuditedCached(c.Request.Context(), item.ImageURL.URL)
+		if err != nil {
+			if imageaudit.IsAuditFailure(err) {
+				return errors.Wrap(err, "image_audit_failed")
+			}
+			return errors.Wrap(err, "image_audit_error")
+		}
+		item.ImageURL.URL = audited
+	}
+	return nil
 }
 
 // DoRequest delegates to common helper.
