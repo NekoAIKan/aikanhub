@@ -1,0 +1,12 @@
+FROM golang:1.25-alpine AS builder
+WORKDIR /src
+COPY . .
+RUN go build -o /out/epay-gateway ./epay
+
+FROM alpine:3.22
+RUN adduser -D -H epay-gateway
+USER epay-gateway
+WORKDIR /app
+COPY --from=builder /out/epay-gateway /app/epay-gateway
+EXPOSE 3001
+ENTRYPOINT ["/app/epay-gateway"]
