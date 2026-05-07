@@ -430,6 +430,26 @@ func GetSelf(c *gin.Context) {
 		"sidebar_modules":         userSetting.SidebarModules, // 正确提取sidebar_modules字段
 		"permissions":             permissions,                // 新增权限字段
 	}
+	if !model.ShouldWriteLegacyQuota() {
+		currency := model.SettlementCurrency()
+		var wallet model.MoneyWallet
+		if err := model.DB.Where("user_id = ? AND currency = ?", user.Id, currency).First(&wallet).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				common.ApiError(c, err)
+				return
+			}
+			wallet = model.MoneyWallet{UserId: user.Id, Currency: currency}
+		}
+		responseData["money_billing_mode"] = "money"
+		responseData["money_wallet"] = gin.H{
+			"currency":              currency,
+			"available_micros":      wallet.AvailableMicros,
+			"frozen_micros":         wallet.FrozenMicros,
+			"lifetime_topup_micros": wallet.LifetimeTopupMicros,
+		}
+		responseData["money_balance_amount_micros"] = wallet.AvailableMicros
+		responseData["money_currency"] = currency
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

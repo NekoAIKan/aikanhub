@@ -1,5 +1,6 @@
 import { Activity, BarChart3, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { formatMoneyMicros } from '@/lib/currency'
 import { formatCompactNumber, formatQuota } from '@/lib/format'
 import { getRoleLabel } from '@/lib/roles'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -59,11 +60,21 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
   const displayName = getDisplayName(profile)
   const initials = getUserInitials(profile)
   const roleLabel = getRoleLabel(profile.role)
+  const hasMoneyWallet =
+    profile.money_billing_mode === 'money' &&
+    typeof profile.money_balance_amount_micros === 'number'
   const stats = [
     {
       label: t('Current Balance'),
-      value: formatQuota(profile.quota),
-      description: t('Remaining quota'),
+      value: hasMoneyWallet
+        ? formatMoneyMicros(
+            profile.money_balance_amount_micros,
+            profile.money_currency
+          )
+        : formatQuota(profile.quota),
+      description: hasMoneyWallet
+        ? t('Available money balance')
+        : t('Remaining quota'),
       icon: WalletCards,
     },
     {

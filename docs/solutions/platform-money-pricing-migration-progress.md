@@ -99,6 +99,7 @@ Verification:
 - Subscription plan creation converts legacy quota budgets into settlement-currency micros when explicit money budget fields are absent.
 - Quota-to-money backfill apply now fills API token money budgets and subscription money budgets, not only user wallets.
 - Async task refund/recalculation helpers now adjust money wallets and token money budgets in money mode.
+- `/api/user/self` now includes money wallet summary fields in money mode, and the profile header renders the money balance instead of legacy quota.
 - Fixed a SQLite transaction deadlock risk by reading DB time through the active transaction in `CreateUserSubscriptionFromPlanTx`.
 
 Verification:
@@ -106,6 +107,8 @@ Verification:
 - `rtk go test ./model -run 'Subscription.*Money|PreConsumeUserSubscriptionUsesMoney|PostConsumeUserSubscriptionDeltaUsesMoney' -count=1 -timeout=120s`
 - `rtk go test ./service -run 'TaskQuota|Recalculate|QuotaBackfill|MoneyBillingSession|Subscription|Token' -count=1 -timeout=300s`
 - `rtk go test ./model ./service ./controller ./setting/billing_setting -run 'Money|Subscription|QuotaBackfill|Token|Billing|Redeem|Checkin|TransferAff|Recharge|Pricing|Task' -count=1 -timeout=360s`
+- `rtk go test ./controller -run 'GetSelf.*Money|GetSelfIncludesResolvedBillingVisibilityMode' -count=1 -timeout=180s`
+- `cd web/default && rtk bun run i18n:sync && rtk bun run typecheck && rtk bun run format:check`
 
 ### Current Focus
 
@@ -118,4 +121,4 @@ Verification:
 - API token and subscription budgets are money-denominated.
 - Redemption, invite, affiliate, check-in, onboarding, admin adjustment, and transfer flows write money wallet transactions.
 - Pricing pages show money units and examples.
-- Historical quota reports remain readable and clearly labeled as legacy data.
+- Usage logs/reports need broader money-native display fields; historical quota reports remain readable and should be clearly labeled as legacy data.
