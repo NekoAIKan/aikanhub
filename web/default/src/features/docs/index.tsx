@@ -1375,9 +1375,9 @@ export function Docs() {
                   </Callout>
                   <Callout type='warn'>
                     <strong>{t('Real-person reference image?')}</strong>{' '}
-                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>{' '}
+                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>
                     {t(
-                      'so the gateway sends the image to ARK\'s asset library audit first and substitutes asset://<id> upstream. Without this flag a real-person photo will trip Seedance\'s privacy filter and the request fails outright. Adds ~10–30 s before task_id is returned.'
+                      ', otherwise the request will be rejected by the upstream privacy filter. Adds ~10–30 s before task_id is returned.'
                     )}
                   </Callout>
                 </Section>
@@ -1401,9 +1401,9 @@ export function Docs() {
                   </p>
                   <Callout type='warn'>
                     <strong>{t('Real-person reference image?')}</strong>{' '}
-                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>{' '}
+                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>
                     {t(
-                      'so the gateway sends the image to ARK\'s asset library audit first and substitutes asset://<id> upstream. Without this flag a real-person photo will trip Seedance\'s privacy filter and the request fails outright. Adds ~10–30 s before task_id is returned.'
+                      ', otherwise the request will be rejected by the upstream privacy filter. Adds ~10–30 s before task_id is returned.'
                     )}
                   </Callout>
                 </Section>
@@ -1440,9 +1440,9 @@ export function Docs() {
                   </Callout>
                   <Callout type='warn'>
                     <strong>{t('Real-person reference image?')}</strong>{' '}
-                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>{' '}
+                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>
                     {t(
-                      'so the gateway sends the image to ARK\'s asset library audit first and substitutes asset://<id> upstream. Without this flag a real-person photo will trip Seedance\'s privacy filter and the request fails outright. Adds ~10–30 s before task_id is returned.'
+                      ', otherwise the request will be rejected by the upstream privacy filter. Adds ~10–30 s before task_id is returned.'
                     )}
                   </Callout>
                 </Section>
@@ -1467,9 +1467,9 @@ export function Docs() {
                   </p>
                   <Callout type='warn'>
                     <strong>{t('Real-person reference image?')}</strong>{' '}
-                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>{' '}
+                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>
                     {t(
-                      'so the gateway sends the image to ARK\'s asset library audit first and substitutes asset://<id> upstream. Without this flag a real-person photo will trip Seedance\'s privacy filter and the request fails outright. Adds ~10–30 s before task_id is returned.'
+                      ', otherwise the request will be rejected by the upstream privacy filter. Adds ~10–30 s before task_id is returned.'
                     )}
                   </Callout>
                 </Section>
