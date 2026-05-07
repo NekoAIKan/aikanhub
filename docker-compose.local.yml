@@ -37,6 +37,20 @@ services:
       - NODE_NAME=${NODE_NAME:-aikanhub-dev-1}
       - UPDATE_TASK=${UPDATE_TASK:-true}
       - STREAMING_TIMEOUT=${STREAMING_TIMEOUT:-300}
+      # 图片审核（imageaudit 包）
+      - ARK_AK=${ARK_AK:-}
+      - ARK_SK=${ARK_SK:-}
+      - ARK_ASSETS_PROJECT=${ARK_ASSETS_PROJECT:-default}
+      - ARK_ASSETS_GROUP_NAME=${ARK_ASSETS_GROUP_NAME:-aikanhub-audit}
+      - ARK_ASSETS_GROUP_ID=${ARK_ASSETS_GROUP_ID:-}
+      - ARK_ASSETS_POLL_INTERVAL=${ARK_ASSETS_POLL_INTERVAL:-3}
+      - ARK_ASSETS_POLL_TIMEOUT=${ARK_ASSETS_POLL_TIMEOUT:-300}
+      - COS_BUCKET=${COS_BUCKET:-}
+      - COS_REGION=${COS_REGION:-ap-shanghai}
+      - COS_SECRET_ID=${COS_SECRET_ID:-}
+      - COS_SECRET_KEY=${COS_SECRET_KEY:-}
+      - COS_OBJECT_PREFIX=${COS_OBJECT_PREFIX:-aikanhub-audit/}
+      - COS_PUBLIC_HOST=${COS_PUBLIC_HOST:-}
     depends_on:
       redis:
         condition: service_healthy
