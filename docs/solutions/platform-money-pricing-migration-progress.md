@@ -29,6 +29,20 @@ Verification:
 - Add money-denominated API token budget fields.
 - Migrate grants and admin balance entry points to money wallet transactions.
 
+### 2026-05-07: Runtime Money Wallet Settlement Bridge
+
+- Wallet billing sessions now freeze money wallet balances in money mode, settle the frozen amount on success, release on refund, and adjust for actual usage differences.
+- Token pre-consume and post-consume paths now use token money budgets in money mode.
+- Legacy `PreConsumeQuota` / `PostConsumeQuota` fallbacks avoid `User.Quota` writes in money mode by adjusting money wallet balances.
+- Trust-bypass preconsume is disabled in money mode so paid requests freeze funds before upstream submission.
+- Added service coverage for exact settlement, over-estimate refund, and under-estimate supplement charge.
+
+Verification:
+
+- `rtk go test ./service -run 'MoneyBillingSession|QuotaBackfill|MoneyWallet|Token' -count=1 -timeout=240s`
+- `rtk go test ./service ./model ./controller ./setting/billing_setting -run 'Money|QuotaBackfill|Token|Billing|PostConsume|PreConsume|Redeem|Checkin|TransferAff|Recharge' -count=1 -timeout=360s`
+- `rtk go test ./service -count=1 -timeout=360s`
+
 ### 2026-05-07: Grant Flow Money Mode
 
 - Added shared grant helpers that convert legacy quota grants into settlement-currency money micros when money billing mode is enabled.

@@ -31,6 +31,31 @@ func ReturnPreConsumedQuota(c *gin.Context, relayInfo *relaycommon.RelayInfo) {
 // PreConsumeQuota checks if the user has enough quota to pre-consume.
 // It returns the pre-consumed quota if successful, or an error if not.
 func PreConsumeQuota(c *gin.Context, preConsumedQuota int, relayInfo *relaycommon.RelayInfo) *types.NewAPIError {
+	if !model.ShouldWriteLegacyQuota() {
+		requiredMicros := model.LegacyQuotaToMoneyMicros(int64(preConsumedQuota))
+		availableMicros, err := model.GetMoneyWalletAvailableMicros(relayInfo.UserId, model.SettlementCurrency())
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
+		}
+		if requiredMicros > 0 && availableMicros < requiredMicros {
+			return types.NewErrorWithStatusCode(fmt.Errorf("用户余额不足, 剩余 amount_micros: %d, 需要预扣 amount_micros: %d", availableMicros, requiredMicros), types.ErrorCodeInsufficientUserQuota, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
+		}
+		if preConsumedQuota > 0 {
+			err := PreConsumeTokenQuota(relayInfo, preConsumedQuota)
+			if err != nil {
+				return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
+			}
+			requestID := fmt.Sprintf("preconsume:%s:%d", relayInfo.RequestId, preConsumedQuota)
+			err = model.AdjustWalletLegacyQuota(relayInfo.UserId, -preConsumedQuota, requestID, "preconsume")
+			if err != nil {
+				return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+			}
+			logger.LogInfo(c, fmt.Sprintf("用户 %d 预扣金额 amount_micros=%d", relayInfo.UserId, requiredMicros))
+		}
+		relayInfo.UserQuota = preConsumedQuota
+		relayInfo.FinalPreConsumedQuota = preConsumedQuota
+		return nil
+	}
 	userQuota, err := model.GetUserQuota(relayInfo.UserId, false)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())

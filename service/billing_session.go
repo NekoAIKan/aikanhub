@@ -45,10 +45,6 @@ func (s *BillingSession) Settle(actualQuota int) error {
 		return nil
 	}
 	delta := actualQuota - s.preConsumedQuota
-	if delta == 0 {
-		s.settled = true
-		return nil
-	}
 	// 1) 调整资金来源（仅在尚未提交时执行，防止重复调用）
 	if !s.fundingSettled {
 		if err := s.funding.Settle(delta); err != nil {
@@ -59,9 +55,18 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	// 2) 调整令牌额度
 	var tokenErr error
 	if !s.relayInfo.IsPlayground {
-		if delta > 0 {
+		if !model.ShouldWriteLegacyQuota() {
+			amountMicros := model.LegacyQuotaToMoneyMicros(int64(absInt(delta)))
+			if amountMicros > 0 {
+				if delta > 0 {
+					tokenErr = model.DecreaseTokenMoneyBudget(s.relayInfo.TokenId, s.relayInfo.TokenKey, amountMicros)
+				} else if delta < 0 {
+					tokenErr = model.IncreaseTokenMoneyBudget(s.relayInfo.TokenId, s.relayInfo.TokenKey, amountMicros)
+				}
+			}
+		} else if delta > 0 {
 			tokenErr = model.DecreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, delta)
-		} else {
+		} else if delta < 0 {
 			tokenErr = model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, -delta)
 		}
 		if tokenErr != nil {
@@ -115,7 +120,13 @@ func (s *BillingSession) Refund(c *gin.Context) {
 		}
 		// 2) 退还令牌额度
 		if tokenConsumed > 0 && !isPlayground {
-			if err := model.IncreaseTokenQuota(tokenId, tokenKey, tokenConsumed); err != nil {
+			var err error
+			if !model.ShouldWriteLegacyQuota() {
+				err = model.IncreaseTokenMoneyBudget(tokenId, tokenKey, model.LegacyQuotaToMoneyMicros(int64(tokenConsumed)))
+			} else {
+				err = model.IncreaseTokenQuota(tokenId, tokenKey, tokenConsumed)
+			}
+			if err != nil {
 				common.SysLog("error refunding token quota: " + err.Error())
 			}
 		}
@@ -232,8 +243,14 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 func (s *BillingSession) reserveFunding(delta int) error {
 	switch funding := s.funding.(type) {
 	case *WalletFunding:
-		if err := model.DecreaseUserQuota(funding.userId, delta, false); err != nil {
-			return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		if !model.ShouldWriteLegacyQuota() {
+			if err := model.AdjustWalletLegacyQuota(funding.userId, -delta, funding.requestScopedID(fmt.Sprintf("reserve:%d", s.preConsumedQuota+delta)), "billing_reserve"); err != nil {
+				return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+			}
+		} else {
+			if err := model.DecreaseUserQuota(funding.userId, delta, false); err != nil {
+				return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+			}
 		}
 		funding.consumed += delta
 		return nil
@@ -256,7 +273,13 @@ func (s *BillingSession) reserveFunding(delta int) error {
 func (s *BillingSession) rollbackFundingReserve(delta int) {
 	switch funding := s.funding.(type) {
 	case *WalletFunding:
-		if err := model.IncreaseUserQuota(funding.userId, delta, false); err != nil {
+		var err error
+		if !model.ShouldWriteLegacyQuota() {
+			err = model.AdjustWalletLegacyQuota(funding.userId, delta, funding.requestScopedID(fmt.Sprintf("reserve-rollback:%d", s.preConsumedQuota+delta)), "billing_reserve_rollback")
+		} else {
+			err = model.IncreaseUserQuota(funding.userId, delta, false)
+		}
+		if err != nil {
 			common.SysLog("error rolling back wallet funding reserve: " + err.Error())
 		} else {
 			funding.consumed -= delta
@@ -280,6 +303,9 @@ func (s *BillingSession) reserveToken(delta int) error {
 
 // shouldTrust 统一信任额度检查，适用于钱包和订阅。
 func (s *BillingSession) shouldTrust(c *gin.Context) bool {
+	if !model.ShouldWriteLegacyQuota() {
+		return false
+	}
 	// 异步任务（ForcePreConsume=true）必须预扣全额，不允许信任旁路
 	if s.relayInfo.ForcePreConsume {
 		return false
@@ -348,6 +374,28 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 
 	// 钱包路径需要先检查用户额度
 	tryWallet := func() (*BillingSession, *types.NewAPIError) {
+		if !model.ShouldWriteLegacyQuota() {
+			requiredMicros := model.LegacyQuotaToMoneyMicros(int64(preConsumedQuota))
+			availableMicros, err := model.GetMoneyWalletAvailableMicros(relayInfo.UserId, model.SettlementCurrency())
+			if err != nil {
+				return nil, types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
+			}
+			if requiredMicros > 0 && availableMicros < requiredMicros {
+				return nil, types.NewErrorWithStatusCode(
+					fmt.Errorf("用户余额不足, 剩余 amount_micros: %d, 需要预扣 amount_micros: %d", availableMicros, requiredMicros),
+					types.ErrorCodeInsufficientUserQuota, http.StatusForbidden,
+					types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
+			}
+			relayInfo.UserQuota = preConsumedQuota
+			session := &BillingSession{
+				relayInfo: relayInfo,
+				funding:   NewWalletFunding(relayInfo.UserId, relayInfo.RequestId),
+			}
+			if apiErr := session.preConsume(c, preConsumedQuota); apiErr != nil {
+				return nil, apiErr
+			}
+			return session, nil
+		}
 		userQuota, err := model.GetUserQuota(relayInfo.UserId, false)
 		if err != nil {
 			return nil, types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
@@ -368,7 +416,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 
 		session := &BillingSession{
 			relayInfo: relayInfo,
-			funding:   &WalletFunding{userId: relayInfo.UserId},
+			funding:   NewWalletFunding(relayInfo.UserId, relayInfo.RequestId),
 		}
 		if apiErr := session.preConsume(c, preConsumedQuota); apiErr != nil {
 			return nil, apiErr

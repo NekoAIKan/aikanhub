@@ -133,6 +133,22 @@ func ensureMoneyWallet(tx *gorm.DB, userID int, currency string) (*MoneyWallet, 
 	return wallet, nil
 }
 
+func GetMoneyWalletAvailableMicros(userID int, currency string) (int64, error) {
+	currency = normalizeMoneyCurrency(currency)
+	if currency == "" {
+		currency = SettlementCurrency()
+	}
+	var wallet MoneyWallet
+	err := DB.Where("user_id = ? AND currency = ?", userID, currency).First(&wallet).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return wallet.AvailableMicros, nil
+}
+
 func existingMoneyWalletTransaction(tx *gorm.DB, requestID string, txType string) (*MoneyWalletTransaction, error) {
 	var transaction MoneyWalletTransaction
 	err := tx.Where("request_id = ? AND type = ?", requestID, txType).First(&transaction).Error

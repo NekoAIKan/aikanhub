@@ -1,8 +1,10 @@
 package service
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 )
 
@@ -27,14 +29,50 @@ type FundingSource interface {
 // ---------------------------------------------------------------------------
 
 type WalletFunding struct {
-	userId   int
-	consumed int // 实际预扣的用户额度
+	userId           int
+	requestId        string
+	currency         string
+	preauthRequestId string
+	consumed         int // 实际预扣的用户额度
 }
 
 func (w *WalletFunding) Source() string { return BillingSourceWallet }
 
+func NewWalletFunding(userID int, requestID string) *WalletFunding {
+	if requestID == "" {
+		requestID = common.GetUUID()
+	}
+	return &WalletFunding{
+		userId:    userID,
+		requestId: requestID,
+		currency:  model.SettlementCurrency(),
+	}
+}
+
+func (w *WalletFunding) preauthID() string {
+	if w.preauthRequestId == "" {
+		w.preauthRequestId = fmt.Sprintf("billing:%s:wallet:preauth", w.requestId)
+	}
+	return w.preauthRequestId
+}
+
+func (w *WalletFunding) requestScopedID(suffix string) string {
+	return fmt.Sprintf("billing:%s:wallet:%s", w.requestId, suffix)
+}
+
 func (w *WalletFunding) PreConsume(amount int) error {
 	if amount <= 0 {
+		return nil
+	}
+	if !model.ShouldWriteLegacyQuota() {
+		amountMicros := model.LegacyQuotaToMoneyMicros(int64(amount))
+		if amountMicros <= 0 {
+			return nil
+		}
+		if err := model.FreezeWallet(w.userId, w.currency, amountMicros, w.preauthID(), "billing_preconsume"); err != nil {
+			return err
+		}
+		w.consumed = amount
 		return nil
 	}
 	if err := model.DecreaseUserQuota(w.userId, amount, false); err != nil {
@@ -46,7 +84,24 @@ func (w *WalletFunding) PreConsume(amount int) error {
 
 func (w *WalletFunding) Settle(delta int) error {
 	if delta == 0 {
+		if !model.ShouldWriteLegacyQuota() && w.preauthRequestId != "" {
+			return model.SettleFrozenWallet(w.userId, w.currency, w.preauthID(), model.LegacyQuotaToMoneyMicros(int64(w.consumed)), w.requestScopedID("settle"), "billing_settle")
+		}
 		return nil
+	}
+	if !model.ShouldWriteLegacyQuota() {
+		finalQuota := w.consumed + delta
+		if finalQuota < 0 {
+			finalQuota = 0
+		}
+		finalMicros := model.LegacyQuotaToMoneyMicros(int64(finalQuota))
+		if w.preauthRequestId == "" {
+			if finalMicros <= 0 {
+				return nil
+			}
+			return model.AdjustWallet(w.userId, w.currency, -finalMicros, w.requestScopedID("settle-direct"), "billing_settle_direct")
+		}
+		return model.SettleFrozenWallet(w.userId, w.currency, w.preauthID(), finalMicros, w.requestScopedID("settle"), "billing_settle")
 	}
 	if delta > 0 {
 		return model.DecreaseUserQuota(w.userId, delta, false)
@@ -57,6 +112,12 @@ func (w *WalletFunding) Settle(delta int) error {
 func (w *WalletFunding) Refund() error {
 	if w.consumed <= 0 {
 		return nil
+	}
+	if !model.ShouldWriteLegacyQuota() {
+		if w.preauthRequestId == "" {
+			return nil
+		}
+		return model.ReleaseFrozenWallet(w.userId, w.currency, w.preauthID(), w.requestScopedID("release"), "billing_refund")
 	}
 	// IncreaseUserQuota 是 quota += N 的非幂等操作，不能重试，否则会多退额度。
 	// 订阅的 RefundSubscriptionPreConsume 有 requestId 幂等保护所以可以重试。

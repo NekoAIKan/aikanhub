@@ -391,6 +391,16 @@ func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
 	if err != nil {
 		return err
 	}
+	if !model.ShouldWriteLegacyQuota() {
+		amountMicros := model.LegacyQuotaToMoneyMicros(int64(quota))
+		if amountMicros <= 0 {
+			return nil
+		}
+		if !token.UnlimitedAmount && token.RemainAmountMicros < amountMicros {
+			return fmt.Errorf("token money budget is not enough, token remain amount_micros: %d, need amount_micros: %d", token.RemainAmountMicros, amountMicros)
+		}
+		return model.DecreaseTokenMoneyBudget(relayInfo.TokenId, relayInfo.TokenKey, amountMicros)
+	}
 	if !relayInfo.TokenUnlimited && token.RemainQuota < quota {
 		return fmt.Errorf("token quota is not enough, token remain quota: %s, need quota: %s", logger.FormatQuota(token.RemainQuota), logger.FormatQuota(quota))
 	}
@@ -399,6 +409,13 @@ func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
 		return err
 	}
 	return nil
+}
+
+func absInt(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQuota int, sendEmail bool) (err error) {
@@ -417,7 +434,12 @@ func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQu
 		}
 	} else {
 		// Wallet
-		if quota > 0 {
+		if !model.ShouldWriteLegacyQuota() {
+			if quota != 0 {
+				requestID := fmt.Sprintf("postconsume:%s:%d", relayInfo.RequestId, quota)
+				err = model.AdjustWalletLegacyQuota(relayInfo.UserId, -quota, requestID, "postconsume")
+			}
+		} else if quota > 0 {
 			err = model.DecreaseUserQuota(relayInfo.UserId, quota, false)
 		} else {
 			err = model.IncreaseUserQuota(relayInfo.UserId, -quota, false)
@@ -428,7 +450,16 @@ func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQu
 	}
 
 	if !relayInfo.IsPlayground {
-		if quota > 0 {
+		if !model.ShouldWriteLegacyQuota() {
+			amountMicros := model.LegacyQuotaToMoneyMicros(int64(absInt(quota)))
+			if amountMicros > 0 {
+				if quota > 0 {
+					err = model.DecreaseTokenMoneyBudget(relayInfo.TokenId, relayInfo.TokenKey, amountMicros)
+				} else {
+					err = model.IncreaseTokenMoneyBudget(relayInfo.TokenId, relayInfo.TokenKey, amountMicros)
+				}
+			}
+		} else if quota > 0 {
 			err = model.DecreaseTokenQuota(relayInfo.TokenId, relayInfo.TokenKey, quota)
 		} else {
 			err = model.IncreaseTokenQuota(relayInfo.TokenId, relayInfo.TokenKey, -quota)
