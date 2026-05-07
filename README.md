@@ -24,7 +24,7 @@ AIKanHub 是一个聚合视频生成模型 API 的网关。开发者用统一的
 
 ## 快速开始（本地）
 
-需要 Docker。`docker-compose.local.yml` 会启动本地 PostgreSQL 和 Redis，避免本地测试误连生产 Neon/NDB。
+需要 Docker。`docker-compose.local.yml` 会启动应用和 Redis；数据库使用 `.env.local` 里的 Neon 本地开发分支。
 
 ```bash
 # 1. 克隆
@@ -33,7 +33,7 @@ cd aikanhub
 
 # 2. 准备环境变量
 cp .env.local.example .env.local
-# .env.local 默认使用本地 Postgres；不要填生产 Neon/NDB 连接串
+# 把 SQL_DSN 填成 Neon 本地开发分支连接串；不要填生产 Neon/NDB 连接串
 
 # 3. 启动（首次会 build 镜像，约 5-10 分钟）
 docker compose -f docker-compose.local.yml --env-file .env.local up -d

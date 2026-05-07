@@ -24,7 +24,7 @@ AIKanHub is an API gateway that aggregates video generation models. Developers u
 
 ## Quick Start (local)
 
-Requires Docker. `docker-compose.local.yml` starts local PostgreSQL and Redis so local tests do not touch production Neon/NDB data.
+Requires Docker. `docker-compose.local.yml` starts the app and Redis; the database comes from the Neon local development branch configured in `.env.local`.
 
 ```bash
 # 1. Clone
@@ -33,7 +33,7 @@ cd aikanhub
 
 # 2. Configure env
 cp .env.local.example .env.local
-# .env.local defaults to local Postgres; do not paste production Neon/NDB credentials
+# Set SQL_DSN to the Neon local development branch; do not paste production Neon/NDB credentials
 
 # 3. Start (first build takes ~5-10 min)
 docker compose -f docker-compose.local.yml --env-file .env.local up -d

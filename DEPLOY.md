@@ -7,10 +7,10 @@
 | 工具/服务 | 用途 | 备注 |
 |---|---|---|
 | Docker 24+ + Docker Compose v2 | 跑应用容器 | 安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/) 即可 |
-| 本地 PostgreSQL 容器 | 本地开发数据库 | `docker-compose.local.yml` 自动启动，避免误连生产 Neon/NDB |
+| Neon 本地开发分支 | 本地开发数据库 | 通过 `.env.local` 的 `SQL_DSN` 配置，避免误连生产 Neon/NDB |
 | 火山引擎 Ark API key | Seedance 2.0 上游 | 在 [火山引擎控制台](https://console.volcengine.com/ark) 申请，形如 `ark-xxxxxxxx` |
 
-可选：生产环境可使用 Neon / 托管 PostgreSQL，自有域名 + TLS（如要对外提供服务）。
+可选：生产环境可使用独立 Neon / 托管 PostgreSQL，自有域名 + TLS（如要对外提供服务）。
 
 ## 二、4 步本地启动
 
@@ -23,16 +23,16 @@ cd aikanhub
 
 ### 步骤 2：准备本地环境变量
 
-本地开发默认使用 Docker Compose 内置 PostgreSQL，**不要填生产 Neon/NDB 连接串**。
+本地开发默认使用专用 Neon PostgreSQL 分支，**不要填生产 Neon/NDB 连接串**。
 
 ```bash
 cp .env.local.example .env.local
 ```
 
-默认会使用：
+把 `SQL_DSN` 填成 Neon 本地开发分支连接串。连接串只放在本地 `.env.local`，不要提交到仓库。
 
 ```bash
-SQL_DSN=postgresql://aikanhub:aikanhub_dev_password@postgres:5432/aikanhub?sslmode=disable
+SQL_DSN=
 ```
 
 其他字段（Redis 密码、SESSION_SECRET 等）已生成本地默认值，**生产部署前务必改 SESSION_SECRET**：
@@ -120,7 +120,7 @@ docker compose -f docker-compose.local.yml --env-file .env.local logs app | grep
 # 停服（保留 Redis 数据）
 docker compose -f docker-compose.local.yml --env-file .env.local down
 
-# 完全重置（删除本地 Postgres 和 Redis volume；不影响生产 Neon/NDB）
+# 完全重置（删除本地 Redis volume；不会删除 Neon 数据）
 docker compose -f docker-compose.local.yml --env-file .env.local down -v
 
 # 只重启 app（保留 redis 容器，最快）
@@ -129,9 +129,9 @@ docker compose -f docker-compose.local.yml --env-file .env.local restart app
 
 ### 备份
 
-- **本地 PostgreSQL**：数据在 Docker volume `aikanhub_postgres_data`，`down -v` 会删除
+- **Neon 本地开发分支**：数据保存在 Neon；`docker compose down -v` 不会删除数据库数据
 - **Redis**：本地缓存，不需要备份
-- **应用配置**：在 admin 后台「系统设置」改的内容存在本地 PostgreSQL `options` 表里
+- **应用配置**：在 admin 后台「系统设置」改的内容存在 Neon 本地开发分支的 `options` 表里
 - **`.env.local`**：本地文件，请自行妥善保管（含 ark key 等敏感信息）
 
 ---
@@ -140,7 +140,7 @@ docker compose -f docker-compose.local.yml --env-file .env.local restart app
 
 ### Q1：启动时 SLOW SQL 刷屏
 
-**正常**——首次启动 GORM AutoMigrate 会跑 schema 检查查询。本地 PostgreSQL 通常很快；如果你临时改成远程数据库，延迟会更明显。
+**正常**——首次启动 GORM AutoMigrate 会跑 schema 检查查询。Neon 免费层如果处于休眠状态，第一次连接会更慢。
 
 > 如果重启依然刷屏，说明 schema-hash 没存进去：检查 `Option` 表里 `SchemaMigrationHash` 是否有值。可以临时用 `SKIP_AUTO_MIGRATION_HASH_CHECK=true` 强制再跑一次。
 
