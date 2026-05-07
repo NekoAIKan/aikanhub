@@ -9,8 +9,9 @@ var (
 
 // User auth errors
 var (
-	ErrInvalidCredentials   = errors.New("invalid credentials")
-	ErrUserEmptyCredentials = errors.New("empty credentials")
+	ErrInvalidCredentials            = errors.New("invalid credentials")
+	ErrUserEmptyCredentials          = errors.New("empty credentials")
+	ErrQuotaWriteDisabledInMoneyMode = errors.New("quota write is disabled in money billing mode")
 )
 
 // Token auth errors

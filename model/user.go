@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/onboarding_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
@@ -972,6 +973,9 @@ func IncreaseUserQuota(id int, quota int, db bool) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
+	if billing_setting.IsMoneyBillingModeEnabled() {
+		return ErrQuotaWriteDisabledInMoneyMode
+	}
 	gopool.Go(func() {
 		err := cacheIncrUserQuota(id, int64(quota))
 		if err != nil {
@@ -996,6 +1000,9 @@ func increaseUserQuota(id int, quota int) (err error) {
 func DecreaseUserQuota(id int, quota int, db bool) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
+	}
+	if billing_setting.IsMoneyBillingModeEnabled() {
+		return ErrQuotaWriteDisabledInMoneyMode
 	}
 	gopool.Go(func() {
 		err := cacheDecrUserQuota(id, int64(quota))
