@@ -1794,7 +1794,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "相关项目",
     "footer.defaultCopyright": "版权所有。",
-    "footer.new\u0061pi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
+    "footer.newapi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
     "for balance changes.": "页可看到余额变化。",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "对于 2025 年 5 月 10 日之后添加的渠道，在部署时无需从模型名称中移除 \".\"",
     "for full attribution.": "查看完整归属说明。",
@@ -4412,6 +4412,19 @@
     "Your Turnstile site key": "您的 Turnstile 站点密钥",
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Image audit (audit_image)": "图片审核（audit_image）",
+    "When to enable:": "什么时候开：",
+    "How it works": "工作机制",
+    "OpenAI shape — public URL": "OpenAI 形式 — URL 透传",
+    "OpenAI shape — base64 (gateway uploads to COS)": "OpenAI 形式 — base64（网关代上传 COS）",
+    "Volcano Ark SDK shape": "火山方舟 SDK 形式",
+    "Parameter reference": "参数说明",
+    "Failure shapes": "错误码",
+    "When": "触发场景",
+    "What to do": "处理建议",
+    "Latency:": "延迟：",
+    "Op note:": "运维注意：",
+    "Each entry may be:": "支持以下入参："
   }
 }
