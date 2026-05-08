@@ -72,13 +72,30 @@ func (c *AlipayClient) PagePayForm(order *Order) (string, error) {
 }
 
 func renderAutoSubmitForm(action string, params map[string]string) string {
+	action = alipayFormActionURL(action, params)
 	form := "<!doctype html><html><head><meta charset=\"utf-8\"><title>Redirecting to Alipay</title></head><body>"
 	form += "<form id=\"alipaysubmit\" name=\"alipaysubmit\" action=\"" + html.EscapeString(action) + "\" method=\"POST\">"
-	for key, value := range params {
-		form += "<input type=\"hidden\" name=\"" + html.EscapeString(key) + "\" value=\"" + html.EscapeString(value) + "\"/>"
+	if bizContent := params["biz_content"]; bizContent != "" {
+		form += "<input type=\"hidden\" name=\"biz_content\" value=\"" + html.EscapeString(bizContent) + "\"/>"
 	}
 	form += "</form><script>document.getElementById('alipaysubmit').submit();</script></body></html>"
 	return form
+}
+
+func alipayFormActionURL(base string, params map[string]string) string {
+	parsed, err := url.Parse(base)
+	if err != nil {
+		return base
+	}
+	query := parsed.Query()
+	for key, value := range params {
+		if key == "biz_content" || value == "" {
+			continue
+		}
+		query.Set(key, value)
+	}
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
 }
 
 func stringsJoinURL(base string, path string) string {
