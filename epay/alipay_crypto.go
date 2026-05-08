@@ -141,10 +141,10 @@ func NewAlipayKeyPair(cfg Config) (*AlipayKeyPair, error) {
 	return &AlipayKeyPair{Private: privateKey, Public: publicKey}, nil
 }
 
-func alipaySigningContent(params map[string]string) string {
+func alipaySigningContent(params map[string]string, includeSignType bool) string {
 	keys := make([]string, 0, len(params))
 	for k, v := range params {
-		if k == "sign" || k == "sign_type" || v == "" {
+		if k == "sign" || (!includeSignType && k == "sign_type") || v == "" {
 			continue
 		}
 		keys = append(keys, k)
@@ -170,7 +170,7 @@ func signAlipayParamsWithKey(params map[string]string, privateKey *rsa.PrivateKe
 	if privateKey == nil {
 		return "", fmt.Errorf("missing Alipay private key")
 	}
-	digest := sha256.Sum256([]byte(alipaySigningContent(params)))
+	digest := sha256.Sum256([]byte(alipaySigningContent(params, true)))
 	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, digest[:])
 	if err != nil {
 		return "", fmt.Errorf("sign Alipay params: %w", err)
@@ -204,9 +204,15 @@ func verifyAlipayParamsWithKey(values url.Values, publicKey *rsa.PublicKey) erro
 	if err != nil {
 		return fmt.Errorf("decode Alipay sign: %w", err)
 	}
-	digest := sha256.Sum256([]byte(alipaySigningContent(params)))
-	if err := rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, digest[:], signature); err != nil {
+	if err := verifyAlipaySignature(params, publicKey, signature, true); err == nil {
+		return nil
+	} else if fallbackErr := verifyAlipaySignature(params, publicKey, signature, false); fallbackErr != nil {
 		return fmt.Errorf("verify Alipay sign: %w", err)
 	}
 	return nil
+}
+
+func verifyAlipaySignature(params map[string]string, publicKey *rsa.PublicKey, signature []byte, includeSignType bool) error {
+	digest := sha256.Sum256([]byte(alipaySigningContent(params, includeSignType)))
+	return rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, digest[:], signature)
 }
