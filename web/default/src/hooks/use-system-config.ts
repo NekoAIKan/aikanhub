@@ -188,13 +188,7 @@ export function useSystemConfig(options: UseSystemConfigOptions = {}) {
       logo,
       () => {
         setLoadedLogoUrl(logo)
-        // Only sync favicon when admin set a custom logo URL.
-        // For the default /logo.png we keep the static index.html link to
-        // /favicon.ico, which has a branded background that reads on dark tabs
-        // (the page logo PNG is transparent and disappears in dark Chrome themes).
-        if (logo !== DEFAULT_LOGO) {
-          applyFaviconToDom(logo)
-        }
+        applyFaviconToDom(logo)
       },
       () => {
         if (logo !== DEFAULT_LOGO) {
