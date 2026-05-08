@@ -1794,7 +1794,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "相关项目",
     "footer.defaultCopyright": "版权所有。",
-    "footer.new\u0061pi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
+    "footer.newapi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
     "for balance changes.": "页可看到余额变化。",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "对于 2025 年 5 月 10 日之后添加的渠道，在部署时无需从模型名称中移除 \".\"",
     "for full attribution.": "查看完整归属说明。",
@@ -4412,6 +4412,8 @@
     "Your Turnstile site key": "您的 Turnstile 站点密钥",
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Real-person reference image?": "图片里是真人 / 人脸？",
+    ", otherwise the request will be rejected by the upstream privacy filter. Adds ~10–30 s before task_id is returned.": "，否则上游会因隐私检测拒绝请求。开启后 task_id 返回会延迟约 10–30 秒。"
   }
 }

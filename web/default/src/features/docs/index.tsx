@@ -1390,6 +1390,13 @@ export function Docs() {
                       'is sugar for the first frame — equivalent to passing a single image_url entry with role first_frame inside metadata.content. Use the full structure when you need finer control.'
                     )}
                   </Callout>
+                  <Callout type='warn'>
+                    <strong>{t('Real-person reference image?')}</strong>{' '}
+                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>
+                    {t(
+                      ', otherwise the request will be rejected by the upstream privacy filter. Adds ~10–30 s before task_id is returned.'
+                    )}
+                  </Callout>
                 </Section>
 
                 <Section
@@ -1409,6 +1416,13 @@ export function Docs() {
                     <K>last_frame</K>{' '}
                     {t("— otherwise the model can't infer the time order.")}
                   </p>
+                  <Callout type='warn'>
+                    <strong>{t('Real-person reference image?')}</strong>{' '}
+                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>
+                    {t(
+                      ', otherwise the request will be rejected by the upstream privacy filter. Adds ~10–30 s before task_id is returned.'
+                    )}
+                  </Callout>
                 </Section>
 
                 <Section
@@ -1441,6 +1455,13 @@ export function Docs() {
                     </a>
                     .
                   </Callout>
+                  <Callout type='warn'>
+                    <strong>{t('Real-person reference image?')}</strong>{' '}
+                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>
+                    {t(
+                      ', otherwise the request will be rejected by the upstream privacy filter. Adds ~10–30 s before task_id is returned.'
+                    )}
+                  </Callout>
                 </Section>
 
                 <Section
@@ -1461,6 +1482,13 @@ export function Docs() {
                       'Combine a reference video with reference image(s) and a prompt that describes the edit, e.g. "Replace the perfume in video1 with the cream from image1; keep camera motion intact".'
                     )}
                   </p>
+                  <Callout type='warn'>
+                    <strong>{t('Real-person reference image?')}</strong>{' '}
+                    {t('Add')} <K>"metadata": &#123; "audit_image": true &#125;</K>
+                    {t(
+                      ', otherwise the request will be rejected by the upstream privacy filter. Adds ~10–30 s before task_id is returned.'
+                    )}
+                  </Callout>
                 </Section>
 
                 <Section
