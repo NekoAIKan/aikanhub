@@ -39,21 +39,35 @@ EPAY_PID=kittyvibe
 EPAY_KEY=<openssl rand -hex 32>
 PUBLIC_BASE_URL=https://pay.kittyvibe.ai
 ALLOWED_NOTIFY_HOSTS=kittyvibe.ai
+
+ORDER_STORE_TYPE=file
+ORDER_STORE_PATH=/var/lib/epay-gateway/orders.json
+DATABASE_URL=
+
 ALIPAY_APP_ID=202100...
 ALIPAY_APP_PRIVATE_KEY=<PEM or base64 DER>
 ALIPAY_PUBLIC_KEY=<PEM or base64 DER>
 ALIPAY_SELLER_ID=<required seller id in production>
 ALIPAY_GATEWAY=https://openapi.alipay.com/gateway.do
-ORDER_STORE_PATH=/var/lib/epay-gateway/orders.json
 LISTEN_ADDR=:3001
 ```
 
 `ALIPAY_SELLER_ID` may only be empty when `ALIPAY_SANDBOX=true`.
 Keep the gateway bound behind the reverse proxy and enable edge/WAF rate limiting for `POST /alipay/notify` and `POST /submit.php`.
 
+For Neon/Postgres-backed order storage:
+
+```text
+ORDER_STORE_TYPE=postgres
+DATABASE_URL=<Neon pooled connection string with sslmode=require>
+```
+
+`ORDER_STORE_TYPE=neon` is accepted as an alias for `postgres`. `ORDER_STORE_PATH` is only used by the file store.
+
 Run locally:
 
 ```bash
 go test ./epay
+TEST_DATABASE_URL=<Neon pooled connection string> go test ./epay -run TestPostgresOrderStoreContract -count=1
 go run ./epay
 ```

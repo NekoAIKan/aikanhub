@@ -29,6 +29,30 @@ func TestConfigValidateAllowsMissingSellerIDInSandbox(t *testing.T) {
 	require.NoError(t, cfg.Validate())
 }
 
+func TestConfigValidateRequiresDatabaseURLForPostgresStore(t *testing.T) {
+	cfg := validTestConfig(t)
+	cfg.OrderStoreType = OrderStoreTypePostgres
+	cfg.DatabaseURL = ""
+
+	require.ErrorContains(t, cfg.Validate(), "DATABASE_URL")
+}
+
+func TestConfigValidateTreatsNeonAsPostgresStore(t *testing.T) {
+	cfg := validTestConfig(t)
+	cfg.OrderStoreType = OrderStoreTypeNeon
+	cfg.DatabaseURL = ""
+
+	require.ErrorContains(t, cfg.Validate(), "DATABASE_URL")
+}
+
+func TestConfigValidateAcceptsFileOrderStoreWithoutDatabaseURL(t *testing.T) {
+	cfg := validTestConfig(t)
+	cfg.OrderStoreType = OrderStoreTypeFile
+	cfg.DatabaseURL = ""
+
+	require.NoError(t, cfg.Validate())
+}
+
 func TestConfigAllowsOnlyConfiguredCallbackHosts(t *testing.T) {
 	cfg := validTestConfig(t)
 

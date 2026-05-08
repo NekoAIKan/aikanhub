@@ -14,9 +14,14 @@ const (
 	defaultAlipayGateway         = "https://openapi.alipay.com/gateway.do"
 	defaultAlipaySandboxGateway  = "https://openapi-sandbox.dl.alipaydev.com/gateway.do"
 	defaultOrderStorePath        = "epay-orders.json"
+	defaultOrderStoreType        = OrderStoreTypeFile
 	defaultAllowedNotifyHost     = "kittyvibe.ai"
 	defaultCallbackRetryInterval = 30 * time.Second
 	defaultHTTPTimeout           = 10 * time.Second
+
+	OrderStoreTypeFile     = "file"
+	OrderStoreTypeNeon     = "neon"
+	OrderStoreTypePostgres = "postgres"
 )
 
 type Config struct {
@@ -31,7 +36,9 @@ type Config struct {
 	AlipaySellerID        string
 	AlipaySandbox         bool
 	AlipayGateway         string
+	OrderStoreType        string
 	OrderStorePath        string
+	DatabaseURL           string
 	HTTPTimeout           time.Duration
 	CallbackRetryInterval time.Duration
 }
@@ -55,7 +62,9 @@ func LoadConfigFromEnv() (Config, error) {
 		AlipaySellerID:        strings.TrimSpace(os.Getenv("ALIPAY_SELLER_ID")),
 		AlipaySandbox:         sandbox,
 		AlipayGateway:         strings.TrimRight(getenvDefault("ALIPAY_GATEWAY", alipayGateway), "/"),
+		OrderStoreType:        strings.ToLower(getenvDefault("ORDER_STORE_TYPE", defaultOrderStoreType)),
 		OrderStorePath:        getenvDefault("ORDER_STORE_PATH", defaultOrderStorePath),
+		DatabaseURL:           strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		HTTPTimeout:           parseDurationEnv("HTTP_TIMEOUT", defaultHTTPTimeout),
 		CallbackRetryInterval: parseDurationEnv("CALLBACK_RETRY_INTERVAL", defaultCallbackRetryInterval),
 	}
@@ -93,7 +102,27 @@ func (c Config) Validate() error {
 	if len(c.AllowedNotifyHosts) == 0 {
 		return fmt.Errorf("ALLOWED_NOTIFY_HOSTS must include at least one host")
 	}
+	switch c.normalizedOrderStoreType() {
+	case OrderStoreTypeFile:
+	case OrderStoreTypePostgres:
+		if strings.TrimSpace(c.DatabaseURL) == "" {
+			return fmt.Errorf("DATABASE_URL is required when ORDER_STORE_TYPE=postgres")
+		}
+	default:
+		return fmt.Errorf("unsupported ORDER_STORE_TYPE %q", c.OrderStoreType)
+	}
 	return nil
+}
+
+func (c Config) normalizedOrderStoreType() string {
+	storeType := strings.ToLower(strings.TrimSpace(c.OrderStoreType))
+	if storeType == "" {
+		return OrderStoreTypeFile
+	}
+	if storeType == OrderStoreTypeNeon {
+		return OrderStoreTypePostgres
+	}
+	return storeType
 }
 
 func (c Config) IsAllowedCallbackURL(raw string) (*url.URL, error) {
