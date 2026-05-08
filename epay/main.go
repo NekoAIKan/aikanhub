@@ -22,9 +22,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("invalid config: %v", err)
 	}
-	store, err := NewFileOrderStore(cfg.OrderStorePath)
+	store, err := NewOrderStore(cfg)
 	if err != nil {
 		log.Fatalf("open order store: %v", err)
+	}
+	if closer, ok := store.(interface{ Close() error }); ok {
+		defer func() {
+			if err := closer.Close(); err != nil {
+				log.Printf("close order store failed: %v", err)
+			}
+		}()
 	}
 	gateway, err := NewGateway(cfg, store, log.Default())
 	if err != nil {
