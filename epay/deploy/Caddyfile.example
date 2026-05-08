@@ -1,0 +1,7 @@
+pay.kittyvibe.ai {
+  request_body {
+    max_size 64KB
+  }
+
+  reverse_proxy 127.0.0.1:3001
+}
