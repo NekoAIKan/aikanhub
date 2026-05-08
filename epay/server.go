@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,25 +13,36 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+const maxFormBodyBytes int64 = 64 * 1024
+
 type Gateway struct {
-	cfg      Config
-	store    OrderStore
-	alipay   *AlipayClient
-	callback *CallbackSender
-	logger   *log.Logger
+	cfg             Config
+	store           OrderStore
+	alipay          *AlipayClient
+	alipayPublicKey *rsa.PublicKey
+	callback        *CallbackSender
+	logger          *log.Logger
 }
 
-func NewGateway(cfg Config, store OrderStore, logger *log.Logger) *Gateway {
+func NewGateway(cfg Config, store OrderStore, logger *log.Logger) (*Gateway, error) {
 	if logger == nil {
 		logger = log.Default()
 	}
-	return &Gateway{
-		cfg:      cfg,
-		store:    store,
-		alipay:   NewAlipayClient(cfg),
-		callback: NewCallbackSender(cfg),
-		logger:   logger,
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
+	keys, err := NewAlipayKeyPair(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &Gateway{
+		cfg:             cfg,
+		store:           store,
+		alipay:          NewAlipayClientWithKey(cfg, keys.Private),
+		alipayPublicKey: keys.Public,
+		callback:        NewCallbackSender(cfg),
+		logger:          logger,
+	}, nil
 }
 
 func (g *Gateway) Routes() http.Handler {
@@ -51,8 +64,8 @@ func (g *Gateway) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form", http.StatusBadRequest)
+	if err := parseLimitedForm(w, r); err != nil {
+		writeFormError(w, err, "invalid form")
 		return
 	}
 	params := firstFormValues(r.PostForm)
@@ -119,11 +132,15 @@ func (g *Gateway) handleAlipayNotify(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if err := r.ParseForm(); err != nil {
+	if err := parseLimitedForm(w, r); err != nil {
+		if isRequestBodyTooLarge(err) {
+			http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		_, _ = w.Write([]byte("fail"))
 		return
 	}
-	notification, err := VerifyAlipayNotification(r.PostForm, g.cfg)
+	notification, err := VerifyAlipayNotificationWithKey(r.PostForm, g.cfg, g.alipayPublicKey)
 	if err != nil {
 		g.logger.Printf("Alipay notify verify failed error=%v", err)
 		_, _ = w.Write([]byte("fail"))
@@ -188,6 +205,24 @@ func firstFormValues(values url.Values) map[string]string {
 		}
 	}
 	return params
+}
+
+func parseLimitedForm(w http.ResponseWriter, r *http.Request) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxFormBodyBytes)
+	return r.ParseForm()
+}
+
+func writeFormError(w http.ResponseWriter, err error, fallback string) {
+	if isRequestBodyTooLarge(err) {
+		http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	http.Error(w, fallback, http.StatusBadRequest)
+}
+
+func isRequestBodyTooLarge(err error) bool {
+	var maxBytesError *http.MaxBytesError
+	return errors.As(err, &maxBytesError)
 }
 
 func normalizeAmount(raw string) (string, error) {

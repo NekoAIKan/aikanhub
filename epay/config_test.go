@@ -13,6 +13,22 @@ func TestConfigValidateRequiresHTTPSPublicBaseURL(t *testing.T) {
 	require.ErrorContains(t, cfg.Validate(), "PUBLIC_BASE_URL")
 }
 
+func TestConfigValidateRequiresSellerIDInProduction(t *testing.T) {
+	cfg := validTestConfig(t)
+	cfg.AlipaySellerID = ""
+	cfg.AlipaySandbox = false
+
+	require.ErrorContains(t, cfg.Validate(), "ALIPAY_SELLER_ID")
+}
+
+func TestConfigValidateAllowsMissingSellerIDInSandbox(t *testing.T) {
+	cfg := validTestConfig(t)
+	cfg.AlipaySellerID = ""
+	cfg.AlipaySandbox = true
+
+	require.NoError(t, cfg.Validate())
+}
+
 func TestConfigAllowsOnlyConfiguredCallbackHosts(t *testing.T) {
 	cfg := validTestConfig(t)
 

@@ -14,7 +14,8 @@ func TestSubmitRejectsInvalidEPaySignature(t *testing.T) {
 	cfg := validTestConfig(t)
 	store, err := NewFileOrderStore(cfg.OrderStorePath)
 	require.NoError(t, err)
-	gateway := NewGateway(cfg, store, nil)
+	gateway, err := NewGateway(cfg, store, nil)
+	require.NoError(t, err)
 
 	form := signedEPayForm(cfg, nil)
 	form.Set("sign", "bad")
@@ -28,11 +29,40 @@ func TestSubmitRejectsInvalidEPaySignature(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "invalid sign")
 }
 
+func TestSubmitRejectsOversizedFormBody(t *testing.T) {
+	cfg := validTestConfig(t)
+	store, err := NewFileOrderStore(cfg.OrderStorePath)
+	require.NoError(t, err)
+	gateway, err := NewGateway(cfg, store, nil)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/submit.php", strings.NewReader("pid="+strings.Repeat("a", 70*1024)))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	gateway.Routes().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+	require.Contains(t, rec.Body.String(), "request too large")
+}
+
+func TestGatewayRejectsInvalidAlipayKeysAtStartup(t *testing.T) {
+	cfg := validTestConfig(t)
+	cfg.AlipayPublicKey = "not-a-valid-key"
+	store, err := NewFileOrderStore(cfg.OrderStorePath)
+	require.NoError(t, err)
+
+	_, err = NewGateway(cfg, store, nil)
+
+	require.ErrorContains(t, err, "Alipay public key")
+}
+
 func TestSubmitAcceptsSignedOrderAndReturnsAlipayForm(t *testing.T) {
 	cfg := validTestConfig(t)
 	store, err := NewFileOrderStore(cfg.OrderStorePath)
 	require.NoError(t, err)
-	gateway := NewGateway(cfg, store, nil)
+	gateway, err := NewGateway(cfg, store, nil)
+	require.NoError(t, err)
 
 	form := signedEPayForm(cfg, nil)
 	req := httptest.NewRequest(http.MethodPost, "/submit.php", strings.NewReader(form.Encode()))
@@ -77,7 +107,8 @@ func TestAlipayNotifyCallbacksNewAPIOnce(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	gateway := NewGateway(cfg, store, nil)
+	gateway, err := NewGateway(cfg, store, nil)
+	require.NoError(t, err)
 	notify := signedAlipayNotify(t, cfg, nil)
 
 	for i := 0; i < 2; i++ {
@@ -112,7 +143,8 @@ func TestAlipayNotifyRejectsAmountMismatch(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	gateway := NewGateway(cfg, store, nil)
+	gateway, err := NewGateway(cfg, store, nil)
+	require.NoError(t, err)
 	notify := signedAlipayNotify(t, cfg, map[string]string{"total_amount": "7.31"})
 	req := httptest.NewRequest(http.MethodPost, "/alipay/notify", strings.NewReader(notify.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -126,4 +158,21 @@ func TestAlipayNotifyRejectsAmountMismatch(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, OrderStatusCreated, order.Status)
+}
+
+func TestAlipayNotifyRejectsOversizedFormBody(t *testing.T) {
+	cfg := validTestConfig(t)
+	store, err := NewFileOrderStore(cfg.OrderStorePath)
+	require.NoError(t, err)
+	gateway, err := NewGateway(cfg, store, nil)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/alipay/notify", strings.NewReader("sign="+strings.Repeat("a", 70*1024)))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	gateway.Routes().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+	require.Contains(t, rec.Body.String(), "request too large")
 }

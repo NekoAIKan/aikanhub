@@ -124,6 +124,23 @@ func parseRSAPublicKey(raw string) (*rsa.PublicKey, error) {
 	}
 }
 
+type AlipayKeyPair struct {
+	Private *rsa.PrivateKey
+	Public  *rsa.PublicKey
+}
+
+func NewAlipayKeyPair(cfg Config) (*AlipayKeyPair, error) {
+	privateKey, err := parseRSAPrivateKey(cfg.AlipayAppPrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("parse Alipay app private key: %w", err)
+	}
+	publicKey, err := parseRSAPublicKey(cfg.AlipayPublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("parse Alipay public key: %w", err)
+	}
+	return &AlipayKeyPair{Private: privateKey, Public: publicKey}, nil
+}
+
 func alipaySigningContent(params map[string]string) string {
 	keys := make([]string, 0, len(params))
 	for k, v := range params {
@@ -146,6 +163,13 @@ func signAlipayParams(params map[string]string, privateKeyRaw string) (string, e
 	if err != nil {
 		return "", err
 	}
+	return signAlipayParamsWithKey(params, privateKey)
+}
+
+func signAlipayParamsWithKey(params map[string]string, privateKey *rsa.PrivateKey) (string, error) {
+	if privateKey == nil {
+		return "", fmt.Errorf("missing Alipay private key")
+	}
 	digest := sha256.Sum256([]byte(alipaySigningContent(params)))
 	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, digest[:])
 	if err != nil {
@@ -155,6 +179,17 @@ func signAlipayParams(params map[string]string, privateKeyRaw string) (string, e
 }
 
 func verifyAlipayParams(values url.Values, publicKeyRaw string) error {
+	publicKey, err := parseRSAPublicKey(publicKeyRaw)
+	if err != nil {
+		return err
+	}
+	return verifyAlipayParamsWithKey(values, publicKey)
+}
+
+func verifyAlipayParamsWithKey(values url.Values, publicKey *rsa.PublicKey) error {
+	if publicKey == nil {
+		return fmt.Errorf("missing Alipay public key")
+	}
 	signatureRaw := values.Get("sign")
 	if signatureRaw == "" {
 		return fmt.Errorf("missing Alipay sign")
@@ -164,10 +199,6 @@ func verifyAlipayParams(values url.Values, publicKeyRaw string) error {
 		if len(vals) > 0 {
 			params[key] = vals[0]
 		}
-	}
-	publicKey, err := parseRSAPublicKey(publicKeyRaw)
-	if err != nil {
-		return err
 	}
 	signature, err := base64.StdEncoding.DecodeString(signatureRaw)
 	if err != nil {

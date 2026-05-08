@@ -29,6 +29,7 @@ type Config struct {
 	AlipayAppPrivateKey   string
 	AlipayPublicKey       string
 	AlipaySellerID        string
+	AlipaySandbox         bool
 	AlipayGateway         string
 	OrderStorePath        string
 	HTTPTimeout           time.Duration
@@ -52,6 +53,7 @@ func LoadConfigFromEnv() (Config, error) {
 		AlipayAppPrivateKey:   strings.TrimSpace(os.Getenv("ALIPAY_APP_PRIVATE_KEY")),
 		AlipayPublicKey:       strings.TrimSpace(os.Getenv("ALIPAY_PUBLIC_KEY")),
 		AlipaySellerID:        strings.TrimSpace(os.Getenv("ALIPAY_SELLER_ID")),
+		AlipaySandbox:         sandbox,
 		AlipayGateway:         strings.TrimRight(getenvDefault("ALIPAY_GATEWAY", alipayGateway), "/"),
 		OrderStorePath:        getenvDefault("ORDER_STORE_PATH", defaultOrderStorePath),
 		HTTPTimeout:           parseDurationEnv("HTTP_TIMEOUT", defaultHTTPTimeout),
@@ -81,6 +83,9 @@ func (c Config) Validate() error {
 	}
 	if strings.TrimSpace(c.AlipayPublicKey) == "" {
 		return fmt.Errorf("ALIPAY_PUBLIC_KEY is required")
+	}
+	if !c.AlipaySandbox && strings.TrimSpace(c.AlipaySellerID) == "" {
+		return fmt.Errorf("ALIPAY_SELLER_ID is required unless ALIPAY_SANDBOX=true")
 	}
 	if parsed, err := url.Parse(c.AlipayGateway); err != nil || parsed.Scheme != "https" || parsed.Host == "" {
 		return fmt.Errorf("ALIPAY_GATEWAY must be an https URL")

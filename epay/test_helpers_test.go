@@ -23,6 +23,7 @@ func validTestConfig(t *testing.T) Config {
 		AlipayAppPrivateKey:   privateKey,
 		AlipayPublicKey:       publicKey,
 		AlipaySellerID:        "2088000000000000",
+		AlipaySandbox:         false,
 		AlipayGateway:         "https://openapi.alipay.com/gateway.do",
 		OrderStorePath:        t.TempDir() + "/orders.json",
 		HTTPTimeout:           defaultHTTPTimeout,

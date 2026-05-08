@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rsa"
 	"fmt"
 	"net/url"
 )
@@ -16,10 +17,18 @@ type AlipayNotification struct {
 }
 
 func VerifyAlipayNotification(values url.Values, cfg Config) (*AlipayNotification, error) {
+	publicKey, err := parseRSAPublicKey(cfg.AlipayPublicKey)
+	if err != nil {
+		return nil, err
+	}
+	return VerifyAlipayNotificationWithKey(values, cfg, publicKey)
+}
+
+func VerifyAlipayNotificationWithKey(values url.Values, cfg Config, publicKey *rsa.PublicKey) (*AlipayNotification, error) {
 	if values.Get("sign_type") != "RSA2" {
 		return nil, fmt.Errorf("unsupported Alipay sign_type")
 	}
-	if err := verifyAlipayParams(values, cfg.AlipayPublicKey); err != nil {
+	if err := verifyAlipayParamsWithKey(values, publicKey); err != nil {
 		return nil, err
 	}
 	notification := &AlipayNotification{

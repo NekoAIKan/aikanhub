@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rsa"
 	"fmt"
 	"html"
 	"net/url"
@@ -12,12 +13,17 @@ import (
 const alipayPagePayMethod = "alipay.trade.page.pay"
 
 type AlipayClient struct {
-	cfg Config
-	now func() time.Time
+	cfg        Config
+	privateKey *rsa.PrivateKey
+	now        func() time.Time
 }
 
 func NewAlipayClient(cfg Config) *AlipayClient {
 	return &AlipayClient{cfg: cfg, now: time.Now}
+}
+
+func NewAlipayClientWithKey(cfg Config, privateKey *rsa.PrivateKey) *AlipayClient {
+	return &AlipayClient{cfg: cfg, privateKey: privateKey, now: time.Now}
 }
 
 func (c *AlipayClient) PagePayParams(order *Order) (map[string]string, error) {
@@ -44,7 +50,12 @@ func (c *AlipayClient) PagePayParams(order *Order) (map[string]string, error) {
 		"biz_content": string(bizContent),
 	}
 
-	signature, err := signAlipayParams(params, c.cfg.AlipayAppPrivateKey)
+	var signature string
+	if c.privateKey != nil {
+		signature, err = signAlipayParamsWithKey(params, c.privateKey)
+	} else {
+		signature, err = signAlipayParams(params, c.cfg.AlipayAppPrivateKey)
+	}
 	if err != nil {
 		return nil, err
 	}

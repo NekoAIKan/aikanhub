@@ -42,11 +42,14 @@ ALLOWED_NOTIFY_HOSTS=kittyvibe.ai
 ALIPAY_APP_ID=202100...
 ALIPAY_APP_PRIVATE_KEY=<PEM or base64 DER>
 ALIPAY_PUBLIC_KEY=<PEM or base64 DER>
-ALIPAY_SELLER_ID=<optional seller id>
+ALIPAY_SELLER_ID=<required seller id in production>
 ALIPAY_GATEWAY=https://openapi.alipay.com/gateway.do
 ORDER_STORE_PATH=/var/lib/epay-gateway/orders.json
 LISTEN_ADDR=:3001
 ```
+
+`ALIPAY_SELLER_ID` may only be empty when `ALIPAY_SANDBOX=true`.
+Keep the gateway bound behind the reverse proxy and enable edge/WAF rate limiting for `POST /alipay/notify` and `POST /submit.php`.
 
 Run locally:
 
