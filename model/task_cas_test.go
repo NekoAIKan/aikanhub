@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -22,7 +23,7 @@ func TestMain(m *testing.M) {
 	if dsn := os.Getenv("TEST_POSTGRES_DSN"); dsn != "" {
 		db, err = gorm.Open(postgres.New(postgres.Config{
 			DSN:                  dsn,
-			PreferSimpleProtocol: true,
+			PreferSimpleProtocol: shouldUseSimplePostgresProtocol(),
 		}), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
 		common.UsingPostgreSQL = true
 		common.UsingSQLite = false
@@ -50,6 +51,7 @@ func TestMain(m *testing.M) {
 		panic("failed to get sql.DB: " + err.Error())
 	}
 	sqlDB.SetMaxOpenConns(1)
+	setPostgresModelTestSchema(db)
 
 	if err := db.AutoMigrate(
 		&Task{},
@@ -78,6 +80,33 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(m.Run())
+}
+
+func shouldUseSimplePostgresProtocol() bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv("TEST_POSTGRES_SIMPLE_PROTOCOL")))
+	return value != "0" && value != "false" && value != "no"
+}
+
+func setPostgresModelTestSchema(db *gorm.DB) {
+	if !common.UsingPostgreSQL {
+		return
+	}
+	schema := strings.TrimSpace(os.Getenv("TEST_POSTGRES_SCHEMA"))
+	if schema == "" {
+		return
+	}
+	for _, r := range schema {
+		if r != '_' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
+			panic("invalid TEST_POSTGRES_SCHEMA: only letters, digits, and underscore are allowed")
+		}
+	}
+	quotedSchema := `"` + schema + `"`
+	if err := db.Exec("CREATE SCHEMA IF NOT EXISTS " + quotedSchema).Error; err != nil {
+		panic("failed to create postgres test schema: " + err.Error())
+	}
+	if err := db.Exec("SET search_path TO " + quotedSchema).Error; err != nil {
+		panic("failed to set postgres test schema: " + err.Error())
+	}
 }
 
 func ensureModelTestSchema(t *testing.T, values ...interface{}) {

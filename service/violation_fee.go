@@ -119,11 +119,18 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, relayInfo *relaycommon.RelayIn
 
 	groupRatio := relayInfo.PriceData.GroupRatioInfo.GroupRatio
 	feeQuota := calcViolationFeeQuota(settings.ViolationDeductionAmount, groupRatio)
+	feeAmountMicros := model.LegacyQuotaDeltaToMoneyMicros(int64(feeQuota))
+	if quote, applied, quoteErr := quoteRuntimeViolationFee(relayInfo); quoteErr != nil {
+		logger.LogError(ctx, fmt.Sprintf("failed to quote violation fee with money pricing: %s", quoteErr.Error()))
+	} else if applied {
+		feeAmountMicros = quote.RetailAmountMicros
+		feeQuota = compatibilityQuotaFromMoneyAmount(quote.RetailAmountMicros)
+	}
 	if feeQuota <= 0 {
 		return false
 	}
 
-	if err := PostConsumeQuota(relayInfo, feeQuota, 0, true); err != nil {
+	if err := PostConsumeQuotaWithMoneyAmount(relayInfo, feeQuota, feeAmountMicros, 0, true); err != nil {
 		logger.LogError(ctx, fmt.Sprintf("failed to charge violation fee: %s", err.Error()))
 		return false
 	}
@@ -146,6 +153,7 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, relayInfo *relaycommon.RelayIn
 		"upstream_error_code":  fmt.Sprintf("%v", oai.Code),
 		"violation_fee_marker": CSAMViolationMarker,
 	}
+	injectRuntimeMoneyPricingInfo(other, relayInfo)
 
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
 		ChannelId:      relayInfo.ChannelId,
