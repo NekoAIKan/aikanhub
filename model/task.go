@@ -356,23 +356,6 @@ func GetByTaskId(userId int, taskId string) (*Task, bool, error) {
 	return task, exist, err
 }
 
-// GetTaskByTaskID looks a task up by its public ID without owner check.
-// Reserved for admin-only flows (the video proxy when an admin previews
-// any user's generated video on /usage-logs); never call it from a path
-// the customer can reach without role >= RoleAdminUser.
-func GetTaskByTaskID(taskId string) (*Task, bool, error) {
-	if taskId == "" {
-		return nil, false, nil
-	}
-	var task *Task
-	err := DB.Where("task_id = ?", taskId).First(&task).Error
-	exist, err := RecordExist(err)
-	if err != nil {
-		return nil, false, err
-	}
-	return task, exist, err
-}
-
 func GetByTaskIds(userId int, taskIds []any) ([]*Task, error) {
 	if len(taskIds) == 0 {
 		return nil, nil
