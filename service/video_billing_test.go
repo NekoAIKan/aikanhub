@@ -446,6 +446,125 @@ func TestSeedanceFixturePricingMatrix(t *testing.T) {
 	}
 }
 
+// TestPixverseC1PerSecondPricingMatrix locks the customer-facing prices
+// the operator hands to the Pixverse C1 profile (¥7=$1, 1.20× markup).
+// Numbers map to the official Pixverse rate sheet (cr/sec ÷ 200 × 7 ×
+// 1.2 ÷ 7 — the ¥/$ rate cancels because credits are CNY-denominated;
+// the multiplier vs. raw upstream is just markup × upstream-credit-cost
+// ÷ 200). If the resolver, formula, or QuotaPerUnit drifts, this test
+// fires with a per-cell delta.
+func TestPixverseC1PerSecondPricingMatrix(t *testing.T) {
+	resetProfitSettingForVideoBillingTest(t)
+	const (
+		// Markup × upstream rate ÷ 200 gives $/sec; values rounded to 4 dp.
+		// Raw upstream (cr/sec): 360p=6/8, 540p=8/10, 720p=10/13, 1080p=19/24
+		// Retail $/sec at markup 1.2: cr/sec × 1.2 / 200
+		c1Rate360       = 0.036  // 6 × 1.2 / 200
+		c1Rate540       = 0.048  // 8 × 1.2 / 200
+		c1Rate720       = 0.060  // 10 × 1.2 / 200
+		c1Rate1080      = 0.114  // 19 × 1.2 / 200
+		c1Rate360Audio  = 0.048  // 8 × 1.2 / 200
+		c1Rate540Audio  = 0.060  // 10 × 1.2 / 200
+		c1Rate720Audio  = 0.078  // 13 × 1.2 / 200
+		c1Rate1080Audio = 0.144  // 24 × 1.2 / 200
+	)
+
+	profile := videobilling.VideoBillingProfile{
+		Mode:                            videobilling.ModePerSecond,
+		PricePerSecondByResolution:      map[string]float64{"360p": c1Rate360, "540p": c1Rate540, "720p": c1Rate720, "1080p": c1Rate1080},
+		PricePerSecondWithAudioByResolution: map[string]float64{"360p": c1Rate360Audio, "540p": c1Rate540Audio, "720p": c1Rate720Audio, "1080p": c1Rate1080Audio},
+		FallbackFPS:                     24,
+		FallbackWidth:                   960,
+		FallbackHeight:                  540,
+		FallbackDurationSeconds:         5,
+		ConservativeMultiplier:          1.0,
+		ResolutionAliases: map[string]videobilling.VideoResolution{
+			"360p":  {Width: 640, Height: 360},
+			"540p":  {Width: 960, Height: 540},
+			"720p":  {Width: 1280, Height: 720},
+			"1080p": {Width: 1920, Height: 1080},
+		},
+	}
+
+	cases := []struct {
+		name      string
+		input     VideoBillingInput
+		wantRate  float64
+		wantQuota int
+	}{
+		{
+			name: "540p / 5s no audio",
+			input: VideoBillingInput{
+				OutputSeconds: 5, Resolution: "540p", GroupRatio: 1, Width: 960, Height: 540,
+			},
+			wantRate:  c1Rate540,
+			wantQuota: int(5 * c1Rate540 * common.QuotaPerUnit),
+		},
+		{
+			name: "720p / 5s no audio",
+			input: VideoBillingInput{
+				OutputSeconds: 5, Resolution: "720p", GroupRatio: 1, Width: 1280, Height: 720,
+			},
+			wantRate:  c1Rate720,
+			wantQuota: int(5 * c1Rate720 * common.QuotaPerUnit),
+		},
+		{
+			name: "1080p / 10s no audio",
+			input: VideoBillingInput{
+				OutputSeconds: 10, Resolution: "1080p", GroupRatio: 1, Width: 1920, Height: 1080,
+			},
+			wantRate:  c1Rate1080,
+			wantQuota: int(10 * c1Rate1080 * common.QuotaPerUnit),
+		},
+		{
+			name: "1080p / 10s with audio",
+			input: VideoBillingInput{
+				OutputSeconds: 10, Resolution: "1080p", GroupRatio: 1, Width: 1920, Height: 1080, HasAudioInput: true,
+			},
+			wantRate:  c1Rate1080Audio,
+			wantQuota: int(10 * c1Rate1080Audio * common.QuotaPerUnit),
+		},
+		{
+			name: "720p / 5s with audio",
+			input: VideoBillingInput{
+				OutputSeconds: 5, Resolution: "720p", GroupRatio: 1, Width: 1280, Height: 720, HasAudioInput: true,
+			},
+			wantRate:  c1Rate720Audio,
+			wantQuota: int(5 * c1Rate720Audio * common.QuotaPerUnit),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := CalculateVideoBilling(profile, tc.input, false)
+			require.Equal(t, VideoBillingBasisPerSecond, got.Basis)
+			require.Equal(t, 0, got.Tokens, "per_second mode reports zero tokens")
+			require.Equal(t, 0.0, got.RetailUnitPrice, "per_second mode reports zero $/M")
+			require.InDelta(t, tc.wantRate, got.PricePerSecondUSD, 1e-9)
+			require.Equal(t, tc.wantQuota, got.Quota)
+		})
+	}
+}
+
+func TestPerSecondPreCharge(t *testing.T) {
+	resetProfitSettingForVideoBillingTest(t)
+	profile := videobilling.VideoBillingProfile{
+		Mode:                   videobilling.ModePerSecond,
+		PricePerSecond:         0.05,
+		ConservativeMultiplier: 1.25,
+		FallbackDurationSeconds: 5,
+	}
+
+	settle := CalculateVideoBilling(profile, VideoBillingInput{
+		OutputSeconds: 5, GroupRatio: 1,
+	}, false)
+	pre := CalculateVideoBilling(profile, VideoBillingInput{
+		OutputSeconds: 5, GroupRatio: 1,
+	}, true)
+	require.Equal(t, int(0.25*common.QuotaPerUnit), settle.Quota) // 5×0.05
+	require.Equal(t, int(0.3125*common.QuotaPerUnit), pre.Quota)  // 5×0.05×1.25
+}
+
 func resetProfitSettingForVideoBillingTest(t *testing.T) {
 	t.Helper()
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{

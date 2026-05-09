@@ -12,6 +12,11 @@ import (
 const (
 	VideoBillingBasisFormula       = "formula"
 	VideoBillingBasisUpstreamUsage = "upstream_usage"
+	// VideoBillingBasisPerSecond is the audit-trail tag emitted when a
+	// request was billed via the per_second mode (rate × duration).
+	// `Tokens` and `RetailUnitPrice` are 0 in this case — the meaningful
+	// fields are PricePerSecondUSD and OutputSeconds.
+	VideoBillingBasisPerSecond = "per_second"
 )
 
 type VideoBillingInput struct {
@@ -28,6 +33,10 @@ type VideoBillingInput struct {
 	Draft               bool
 	UpstreamTotalTokens int
 	HasReferenceMedia   bool
+	// HasAudioInput is set when the request opts into audio-on-output
+	// generation. Vendors that price audio separately (Pixverse C1) read
+	// this to pick the with-audio rate; vendors that don't ignore it.
+	HasAudioInput bool
 }
 
 type VideoBillingResult struct {
@@ -42,7 +51,11 @@ type VideoBillingResult struct {
 	FPS               int
 	Resolution        string
 	HasReferenceMedia bool
+	HasAudioInput     bool
 	RetailUnitPrice   float64
+	// PricePerSecondUSD is populated for per_second-mode results. Token
+	// fields (Tokens, RetailUnitPrice) are 0 in that case.
+	PricePerSecondUSD float64
 	UpstreamUnitCost  float64
 	MarkupPercent     float64
 	PricingHash       string
@@ -51,6 +64,13 @@ type VideoBillingResult struct {
 
 func CalculateVideoBilling(profile videobilling.VideoBillingProfile, input VideoBillingInput, preCharge bool) VideoBillingResult {
 	normalized := normalizeVideoBillingInput(profile, input)
+	if profile.Mode == videobilling.ModePerSecond {
+		return calculateVideoBillingPerSecond(profile, normalized, preCharge)
+	}
+	return calculateVideoBillingFormula(profile, normalized, preCharge)
+}
+
+func calculateVideoBillingFormula(profile videobilling.VideoBillingProfile, normalized VideoBillingInput, preCharge bool) VideoBillingResult {
 	basis := VideoBillingBasisFormula
 
 	tokens := ((normalized.InputSeconds + normalized.OutputSeconds) * normalized.Width * normalized.Height * normalized.FPS) / 1024
@@ -94,11 +114,56 @@ func CalculateVideoBilling(profile videobilling.VideoBillingProfile, input Video
 		FPS:               normalized.FPS,
 		Resolution:        normalized.Resolution,
 		HasReferenceMedia: normalized.HasReferenceMedia,
+		HasAudioInput:     normalized.HasAudioInput,
 		RetailUnitPrice:   retailUnitPrice,
 		UpstreamUnitCost:  upstreamUnitCost,
 		MarkupPercent:     markupPercent,
 		PricingHash:       pricingHash,
 		PricingVersion:    "video_formula:v1:" + pricingHash,
+	}
+}
+
+// calculateVideoBillingPerSecond is the linear $/sec billing path. No
+// token formula, no upstream-usage override, no min-token floor — those
+// concepts don't apply when the vendor publishes a flat per-second rate.
+// Pre-charge still honours ConservativeMultiplier so we don't undershoot
+// the user's quota during async tasks; settle re-runs without it.
+func calculateVideoBillingPerSecond(profile videobilling.VideoBillingProfile, normalized VideoBillingInput, preCharge bool) VideoBillingResult {
+	rate, upstreamRate, markupPercent := videobilling.ResolvePerSecondRate(profile, normalized.HasAudioInput, normalized.Resolution)
+	durationSeconds := normalized.OutputSeconds
+	if durationSeconds <= 0 {
+		durationSeconds = profile.FallbackDurationSeconds
+	}
+
+	rawCost := float64(durationSeconds) * rate
+	if normalized.Draft && profile.DraftMultiplier > 0 {
+		rawCost *= profile.DraftMultiplier
+	}
+	if preCharge && profile.ConservativeMultiplier > 0 {
+		rawCost *= profile.ConservativeMultiplier
+	}
+
+	quota := int(rawCost * common.QuotaPerUnit * normalized.GroupRatio)
+	pricingHash := videoPricingHash(profile, rate, upstreamRate, markupPercent)
+	return VideoBillingResult{
+		Tokens:            0,
+		RawCost:           rawCost,
+		Quota:             quota,
+		Basis:             VideoBillingBasisPerSecond,
+		InputSeconds:      normalized.InputSeconds,
+		OutputSeconds:     durationSeconds,
+		Width:             normalized.Width,
+		Height:            normalized.Height,
+		FPS:               normalized.FPS,
+		Resolution:        normalized.Resolution,
+		HasReferenceMedia: normalized.HasReferenceMedia,
+		HasAudioInput:     normalized.HasAudioInput,
+		RetailUnitPrice:   0,
+		PricePerSecondUSD: rate,
+		UpstreamUnitCost:  upstreamRate,
+		MarkupPercent:     markupPercent,
+		PricingHash:       pricingHash,
+		PricingVersion:    "video_per_second:v1:" + pricingHash,
 	}
 }
 
@@ -110,6 +175,10 @@ func videoPricingHash(profile videobilling.VideoBillingProfile, retailUnitPrice 
 		ProfileUnitPriceByResolution    map[string]float64                      `json:"profile_unit_price_by_resolution,omitempty"`
 		ProfileUnitPriceWithVideoByRes  map[string]float64                      `json:"profile_unit_price_with_video_by_resolution,omitempty"`
 		MinTokensWithVideo              int                                     `json:"min_tokens_with_video,omitempty"`
+		ProfilePricePerSecond           float64                                 `json:"profile_price_per_second,omitempty"`
+		ProfilePricePerSecondWithAudio  float64                                 `json:"profile_price_per_second_with_audio,omitempty"`
+		ProfilePricePerSecondByRes      map[string]float64                      `json:"profile_price_per_second_by_resolution,omitempty"`
+		ProfilePricePerSecAudioByRes    map[string]float64                      `json:"profile_price_per_second_with_audio_by_resolution,omitempty"`
 		RetailUnitPrice                 float64                                 `json:"retail_unit_price"`
 		UpstreamUnitCost                float64                                 `json:"upstream_unit_cost"`
 		MarkupPercent                   float64                                 `json:"markup_percent"`
@@ -129,6 +198,10 @@ func videoPricingHash(profile videobilling.VideoBillingProfile, retailUnitPrice 
 		ProfileUnitPriceByResolution:    profile.UnitPriceByResolution,
 		ProfileUnitPriceWithVideoByRes:  profile.UnitPriceWithVideoByResolution,
 		MinTokensWithVideo:              profile.MinTokensWithVideo,
+		ProfilePricePerSecond:           profile.PricePerSecond,
+		ProfilePricePerSecondWithAudio:  profile.PricePerSecondWithAudio,
+		ProfilePricePerSecondByRes:      profile.PricePerSecondByResolution,
+		ProfilePricePerSecAudioByRes:    profile.PricePerSecondWithAudioByResolution,
 		RetailUnitPrice:                 retailUnitPrice,
 		UpstreamUnitCost:                upstreamUnitCost,
 		MarkupPercent:                   markupPercent,

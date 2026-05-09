@@ -52,8 +52,11 @@ export type VideoBillingPricingPoint = {
   height: number
   duration_seconds: number
   has_video_input: boolean
+  has_audio_input?: boolean
   tokens: number
   unit_price_per_million: number
+  /** Populated for per_second-mode cells; rate × duration_seconds = price_usd */
+  price_per_second_usd?: number
   price_usd: number
   quota: number
   scenario?: string

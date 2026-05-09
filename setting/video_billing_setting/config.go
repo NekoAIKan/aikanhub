@@ -6,7 +6,17 @@ import (
 )
 
 const (
+	// ModeFormula bills per token: tokens are derived from the request
+	// shape (in/out seconds × W × H × FPS / 1024) and multiplied by a
+	// per-million-token unit price. Used by Volcano Seedance and similar
+	// vendors that publish $/M-token rates.
 	ModeFormula = "formula"
+
+	// ModePerSecond bills per output second at a $/sec rate that varies
+	// by resolution and (optionally) whether the request opts into audio
+	// generation. Used by Pixverse C1/V6 and similar vendors that publish
+	// $/sec rates without exposing internal token accounting.
+	ModePerSecond = "per_second"
 )
 
 type VideoResolution struct {
@@ -42,6 +52,28 @@ type VideoBillingProfile struct {
 	// falls below it. Mirrors vendors that set per-call minimums on
 	// video-input requests.
 	MinTokensWithVideo int `json:"min_tokens_with_video,omitempty"`
+
+	// ===== ModePerSecond fields =====
+	// All four are $/second (USD). The runtime never falls back to a
+	// magic default if none of these are set — see ResolveRetailUnitPrice
+	// docstring.
+
+	// PricePerSecond is the default $/sec rate when no resolution-keyed
+	// or audio-keyed override matches.
+	PricePerSecond float64 `json:"price_per_second,omitempty"`
+
+	// PricePerSecondWithAudio overrides PricePerSecond when the request
+	// opts into audio generation (`generate_audio_switch=true` in the
+	// request metadata, vendor-specific).
+	PricePerSecondWithAudio float64 `json:"price_per_second_with_audio,omitempty"`
+
+	// PricePerSecondByResolution maps a resolution alias to its $/sec
+	// rate. Highest priority for non-audio requests.
+	PricePerSecondByResolution map[string]float64 `json:"price_per_second_by_resolution,omitempty"`
+
+	// PricePerSecondWithAudioByResolution is the with-audio variant.
+	// Highest priority overall when both audio and resolution match.
+	PricePerSecondWithAudioByResolution map[string]float64 `json:"price_per_second_with_audio_by_resolution,omitempty"`
 
 	FallbackFPS                     int                        `json:"fallback_fps"`
 	FallbackWidth                   int                        `json:"fallback_width"`
@@ -92,5 +124,7 @@ func cloneProfile(profile VideoBillingProfile) VideoBillingProfile {
 	profile.ResolutionAliases = lo.Assign(profile.ResolutionAliases)
 	profile.UnitPriceByResolution = lo.Assign(profile.UnitPriceByResolution)
 	profile.UnitPriceWithVideoByResolution = lo.Assign(profile.UnitPriceWithVideoByResolution)
+	profile.PricePerSecondByResolution = lo.Assign(profile.PricePerSecondByResolution)
+	profile.PricePerSecondWithAudioByResolution = lo.Assign(profile.PricePerSecondWithAudioByResolution)
 	return profile
 }

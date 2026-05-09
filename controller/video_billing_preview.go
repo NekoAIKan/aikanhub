@@ -140,6 +140,9 @@ type calculateVideoBillingRequest struct {
 	Resolution      string `json:"resolution"`
 	DurationSeconds int    `json:"duration_seconds"`
 	HasVideoInput   bool   `json:"has_video_input"`
+	// HasAudioInput maps to per_second profiles whose with-audio rate
+	// differs from the no-audio rate. Ignored by formula profiles.
+	HasAudioInput bool `json:"has_audio_input"`
 	// Width/Height are optional; if omitted the resolution alias from
 	// the profile is used. They exist so callers integrating against
 	// vendors that publish e.g. 1280×704 can still query precisely.
@@ -151,14 +154,17 @@ type calculateVideoBillingRequest struct {
 type calculateVideoBillingResponse struct {
 	Model               string  `json:"model"`
 	ProfileFound        bool    `json:"profile_found"`
+	Mode                string  `json:"mode,omitempty"`
 	Resolution          string  `json:"resolution,omitempty"`
 	Width               int     `json:"width"`
 	Height              int     `json:"height"`
 	FPS                 int     `json:"fps"`
 	DurationSeconds     int     `json:"duration_seconds"`
 	HasVideoInput       bool    `json:"has_video_input"`
+	HasAudioInput       bool    `json:"has_audio_input,omitempty"`
 	Tokens              int     `json:"tokens"`
 	UnitPricePerMillion float64 `json:"unit_price_per_million"`
+	PricePerSecondUSD   float64 `json:"price_per_second_usd,omitempty"`
 	PriceUSD            float64 `json:"price_usd"`
 	Quota               int     `json:"quota"`
 	QuotaPerUnit        float64 `json:"quota_per_unit"`
@@ -199,12 +205,14 @@ func CalculateVideoBillingPrice(c *gin.Context) {
 		Resolution:      strings.TrimSpace(strings.ToLower(req.Resolution)),
 		DurationSeconds: req.DurationSeconds,
 		HasVideoInput:   req.HasVideoInput,
+		HasAudioInput:   req.HasAudioInput,
 		QuotaPerUnit:    common.QuotaPerUnit,
 	}
 	if !ok {
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": resp})
 		return
 	}
+	resp.Mode = profile.Mode
 
 	// Resolve dimensions: explicit width/height > resolution alias from
 	// profile > profile fallback. The runtime path normalises the same
@@ -239,6 +247,7 @@ func CalculateVideoBillingPrice(c *gin.Context) {
 		Resolution:        resp.Resolution,
 		GroupRatio:        1, // group ratio is private to the caller's account
 		HasReferenceMedia: req.HasVideoInput,
+		HasAudioInput:     req.HasAudioInput,
 	}
 	if req.HasVideoInput {
 		// Mirrors the request-side default in
@@ -254,7 +263,14 @@ func CalculateVideoBillingPrice(c *gin.Context) {
 	resp.FPS = result.FPS
 	resp.Tokens = result.Tokens
 	resp.UnitPricePerMillion = result.RetailUnitPrice
-	resp.PriceUSD = result.RawCost / 1_000_000
+	resp.PricePerSecondUSD = result.PricePerSecondUSD
+	// Per_second mode populates RawCost in real USD; formula mode
+	// populates it in `tokens × $/M tokens` and needs /1M to convert.
+	if profile.Mode == videobilling.ModePerSecond {
+		resp.PriceUSD = result.RawCost
+	} else {
+		resp.PriceUSD = result.RawCost / 1_000_000
+	}
 	resp.Quota = result.Quota
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": resp})

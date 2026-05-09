@@ -382,11 +382,19 @@ func (t *Task) NormalizeBillingContext() {
 		return
 	}
 	bc := t.PrivateData.BillingContext
-	if _, ok := videobilling.GetProfile(bc.OriginModelName); !ok {
+	profile, ok := videobilling.GetProfile(bc.OriginModelName)
+	if !ok {
 		return
 	}
 	if bc.BillingMode == "" {
-		bc.BillingMode = videobilling.ModeFormula
+		// Default to whatever mode the profile declares so settle-time
+		// AdjustBillingOnComplete can dispatch correctly. Falls back to
+		// ModeFormula for legacy profiles where Mode wasn't persisted.
+		if profile.Mode != "" {
+			bc.BillingMode = profile.Mode
+		} else {
+			bc.BillingMode = videobilling.ModeFormula
+		}
 	}
 	if bc.BillingProfile == "" {
 		bc.BillingProfile = bc.OriginModelName

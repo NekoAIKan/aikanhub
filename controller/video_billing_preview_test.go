@@ -308,6 +308,49 @@ func TestCalculateVideoBillingPrice_RejectsInvalid(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 
+	t.Run("per_second profile returns rate and zero tokens", func(t *testing.T) {
+		require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+			"profit_setting.upstream_cost_per_million_tokens": "0",
+			"profit_setting.default_markup_percent":           "0",
+			"profit_setting.apply_to_default_video_profiles":  "false",
+			"video_billing_setting.profiles": `{
+				"pixverse-c1": {
+					"mode": "per_second",
+					"price_per_second_by_resolution": {"540p": 0.048, "720p": 0.06, "1080p": 0.114},
+					"price_per_second_with_audio_by_resolution": {"540p": 0.06, "720p": 0.078, "1080p": 0.144},
+					"fallback_fps": 24,
+					"fallback_width": 960,
+					"fallback_height": 540,
+					"fallback_duration_seconds": 5,
+					"resolution_aliases": {"540p":{"width":960,"height":540},"720p":{"width":1280,"height":720},"1080p":{"width":1920,"height":1080}}
+				}
+			}`,
+		}))
+		rec := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(rec)
+		ctx.Request = httptest.NewRequest(http.MethodPost, "/api/pricing/calculate",
+			bytes.NewBufferString(`{"model":"pixverse-c1","resolution":"720p","duration_seconds":5,"has_audio_input":true}`))
+		ctx.Request.Header.Set("Content-Type", "application/json")
+
+		CalculateVideoBillingPrice(ctx)
+		require.Equal(t, http.StatusOK, rec.Code)
+		var resp struct {
+			Data struct {
+				Mode              string  `json:"mode"`
+				Tokens            int     `json:"tokens"`
+				PricePerSecondUSD float64 `json:"price_per_second_usd"`
+				PriceUSD          float64 `json:"price_usd"`
+				Quota             int     `json:"quota"`
+			} `json:"data"`
+		}
+		require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &resp))
+		require.Equal(t, "per_second", resp.Data.Mode)
+		require.Equal(t, 0, resp.Data.Tokens)
+		require.InDelta(t, 0.078, resp.Data.PricePerSecondUSD, 1e-9)
+		require.InDelta(t, 0.39, resp.Data.PriceUSD, 1e-6) // 5 × 0.078
+		require.Equal(t, int(0.39*common.QuotaPerUnit), resp.Data.Quota)
+	})
+
 	t.Run("calculator does not leak upstream cost or markup", func(t *testing.T) {
 		require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
 			"profit_setting.upstream_cost_per_million_tokens": "0.5",

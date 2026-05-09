@@ -66,8 +66,14 @@ type VideoBillingPricingPoint struct {
 	Height              int     `json:"height"`
 	DurationSeconds     int     `json:"duration_seconds"`
 	HasVideoInput       bool    `json:"has_video_input"`
+	// HasAudioInput is set by per_second-mode profiles where audio
+	// output is priced separately. Always false for formula-mode cells.
+	HasAudioInput       bool    `json:"has_audio_input,omitempty"`
 	Tokens              int     `json:"tokens"`
 	UnitPricePerMillion float64 `json:"unit_price_per_million"`
+	// PricePerSecondUSD is the per_second rate ($/sec) used to derive
+	// PriceUSD for this cell. Zero for formula-mode cells.
+	PricePerSecondUSD   float64 `json:"price_per_second_usd,omitempty"`
 	PriceUSD            float64 `json:"price_usd"`
 	Quota               int     `json:"quota"`
 	Scenario            string  `json:"scenario,omitempty"`

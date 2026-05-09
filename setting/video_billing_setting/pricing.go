@@ -64,3 +64,48 @@ func lookupResolutionPrice(table map[string]float64, resolution string) (float64
 	}
 	return 0, false
 }
+
+// ResolvePerSecondRate picks the per-second rate ($/sec) for a
+// (profile, has-audio, resolution) tuple. Lookup precedence:
+//
+//  1. has_audio → PricePerSecondWithAudioByResolution[resolution]
+//  2. has_audio → PricePerSecondWithAudio
+//  3. PricePerSecondByResolution[resolution]
+//  4. PricePerSecond
+//  5. profit_setting fallback applied if upstream cost is set in $/sec
+//     terms (the profit_setting field is generic; we apply it here as a
+//     last-resort markup over the upstream rate, mirroring the formula
+//     mode).
+//  6. 0 — request bills free.
+//
+// Symmetric with ResolveRetailUnitPrice; same OSS posture (no magic
+// default, operator must configure a rate or accept zero).
+func ResolvePerSecondRate(profile VideoBillingProfile, hasAudio bool, resolution string) (rate float64, upstreamRate float64, markupPercent float64) {
+	profit := profit_setting.GetProfitSetting()
+	upstreamRate = profit.UpstreamCostPerMillionTokens
+	if upstreamRate < 0 {
+		upstreamRate = 0
+	}
+	markupPercent = profit.DefaultMarkupPercent
+
+	res := strings.TrimSpace(strings.ToLower(resolution))
+
+	if hasAudio {
+		if price, ok := lookupResolutionPrice(profile.PricePerSecondWithAudioByResolution, res); ok {
+			return price, upstreamRate, markupPercent
+		}
+		if profile.PricePerSecondWithAudio > 0 {
+			return profile.PricePerSecondWithAudio, upstreamRate, markupPercent
+		}
+	}
+	if price, ok := lookupResolutionPrice(profile.PricePerSecondByResolution, res); ok {
+		return price, upstreamRate, markupPercent
+	}
+	if profile.PricePerSecond > 0 {
+		return profile.PricePerSecond, upstreamRate, markupPercent
+	}
+	if upstreamRate > 0 && profit.ApplyToDefaultVideoProfiles {
+		return upstreamRate * (1 + markupPercent/100), upstreamRate, markupPercent
+	}
+	return 0, upstreamRate, markupPercent
+}

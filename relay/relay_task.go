@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
 	taskdoubao "github.com/QuantumNous/new-api/relay/channel/task/doubao"
+	taskpixverse "github.com/QuantumNous/new-api/relay/channel/task/pixverse"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -182,7 +183,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	// 4. 价格计算：基础模型价格或视频公式价格
 	info.OriginModelName = modelName
 	videoProfileApplied := false
-	if profile, ok := videobilling.GetProfile(modelName); ok && profile.Mode == videobilling.ModeFormula {
+	if profile, ok := videobilling.GetProfile(modelName); ok && (profile.Mode == videobilling.ModeFormula || profile.Mode == videobilling.ModePerSecond) {
 		if taskErr := applyVideoProfileBilling(c, info, profile); taskErr != nil {
 			return nil, taskErr
 		}
@@ -272,6 +273,32 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	}, nil
 }
 
+// extractVideoBillingInputForChannel routes a task request through the
+// channel's vendor-specific extractor. Each adaptor knows where its
+// SDK conventions hide the billing-relevant signals (Doubao reads
+// reference video from `metadata.content[].video_url`; Pixverse reads
+// `metadata.generate_audio_switch`); the dispatcher just picks one.
+func extractVideoBillingInputForChannel(req relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo, profile videobilling.VideoBillingProfile, groupRatio float64) service.VideoBillingInput {
+	// `RelayInfo.ChannelType` is provided by the embedded *ChannelMeta,
+	// which is nil for callers that haven't run InitChannelMeta yet
+	// (notably tests). Read it via the helper which nil-checks.
+	if relayInfoChannelType(info) == constant.ChannelTypePixverse {
+		return taskpixverse.ExtractRequestBillingInput(req, profile, groupRatio)
+	}
+	// Doubao's extractor reads the standard fields (duration, resolution,
+	// content[]) without anything Doubao-specific in the read path itself,
+	// so it doubles as the safe default for task channels that don't ship
+	// their own extractor yet.
+	return taskdoubao.ExtractRequestBillingInput(req, profile, groupRatio)
+}
+
+func relayInfoChannelType(info *relaycommon.RelayInfo) int {
+	if info == nil || info.ChannelMeta == nil {
+		return 0
+	}
+	return info.ChannelType
+}
+
 func applyVideoProfileBilling(c *gin.Context, info *relaycommon.RelayInfo, profile videobilling.VideoBillingProfile) *dto.TaskError {
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
@@ -279,7 +306,7 @@ func applyVideoProfileBilling(c *gin.Context, info *relaycommon.RelayInfo, profi
 	}
 
 	groupRatioInfo := helper.HandleGroupRatio(c, info)
-	input := taskdoubao.ExtractRequestBillingInput(req, profile, groupRatioInfo.GroupRatio)
+	input := extractVideoBillingInputForChannel(req, info, profile, groupRatioInfo.GroupRatio)
 	result := service.CalculateVideoBilling(profile, input, true)
 	c.Set(service.ContextKeyVideoBillingResult, result)
 

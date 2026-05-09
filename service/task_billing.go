@@ -113,6 +113,12 @@ func ApplyVideoBillingResultToTaskBillingContext(bc *model.TaskBillingContext, r
 	if result.HasReferenceMedia {
 		bc.VideoParams["has_reference_media"] = true
 	}
+	if result.HasAudioInput {
+		bc.VideoParams["has_audio_input"] = true
+	}
+	if result.PricePerSecondUSD > 0 {
+		bc.VideoParams["price_per_second_usd"] = result.PricePerSecondUSD
+	}
 }
 
 func isVideoBillingAliasField(key string) bool {
