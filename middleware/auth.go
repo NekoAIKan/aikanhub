@@ -198,6 +198,20 @@ func TokenOrUserAuth() func(c *gin.Context) {
 		if id := session.Get("id"); id != nil {
 			if status, ok := session.Get("status").(int); ok && status == common.UserStatusEnabled {
 				c.Set("id", id)
+				// Mirror TokenAuth which sets `role` (line ~150) so
+				// downstream handlers can gate admin-only behaviour
+				// (e.g. video proxy bypassing per-user task ownership
+				// checks). Without this, session-authed admins look
+				// like role=0 to handlers that read c.GetInt("role").
+				if role, ok := session.Get("role").(int); ok {
+					c.Set("role", role)
+				}
+				if username := session.Get("username"); username != nil {
+					c.Set("username", username)
+				}
+				if group := session.Get("group"); group != nil {
+					c.Set("group", group)
+				}
 				c.Next()
 				return
 			}
