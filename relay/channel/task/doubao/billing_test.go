@@ -25,6 +25,7 @@ func testProfile() videobilling.VideoBillingProfile {
 		ReferenceConservativeMultiplier: 2,
 		DraftMultiplier:                 0.5,
 		ResolutionAliases: map[string]videobilling.VideoResolution{
+			"480p":     {Width: 832, Height: 480},
 			"720p":     {Width: 1280, Height: 720},
 			"1080p":    {Width: 1920, Height: 1080},
 			"1280x720": {Width: 1280, Height: 720},
@@ -87,6 +88,28 @@ func TestExtractRequestBillingInput(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// Top-level `resolution` on the OpenAI Videos shape must drive the precharge
+// billing estimate; otherwise we fall back to profile defaults and quote the
+// user against 720p instead of the 480p they asked for.
+func TestExtractRequestBillingInputUsesTopLevelResolution(t *testing.T) {
+	var req relaycommon.TaskSubmitReq
+	require.NoError(t, common.Unmarshal([]byte(`{
+		"model": "doubao-seedance-2-0-260128",
+		"prompt": "切换到面部特写，角色露出邪魅一笑。",
+		"duration": 4,
+		"resolution": "480p"
+	}`), &req))
+
+	got := ExtractRequestBillingInput(req, testProfile(), 1)
+	require.Equal(t, service.VideoBillingInput{
+		OutputSeconds: 4,
+		Width:         832,
+		Height:        480,
+		FPS:           24,
+		GroupRatio:    1,
+	}, got)
 }
 
 func TestExtractRequestBillingInputMarksReferenceMedia(t *testing.T) {

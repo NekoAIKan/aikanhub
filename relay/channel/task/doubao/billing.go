@@ -13,7 +13,7 @@ import (
 
 func ExtractRequestBillingInput(req relaycommon.TaskSubmitReq, profile videobilling.VideoBillingProfile, groupRatio float64) service.VideoBillingInput {
 	outputSeconds := firstPositiveInt(req.Duration, atoi(req.Seconds), intFromMap(req.Metadata, "duration"), intFromMap(req.Metadata, "seconds"))
-	width, height := resolveVideoDimensions(profile, firstString(req.Size, stringFromMap(req.Metadata, "size"), stringFromMap(req.Metadata, "resolution")))
+	width, height := resolveVideoDimensions(profile, firstString(req.Resolution, req.Size, stringFromMap(req.Metadata, "size"), stringFromMap(req.Metadata, "resolution")))
 	fps := firstPositiveInt(intFromMap(req.Metadata, "fps"), intFromMap(req.Metadata, "framespersecond"), profile.FallbackFPS)
 	draft := boolFromMap(req.Metadata, "draft")
 
