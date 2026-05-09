@@ -134,9 +134,18 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 		if relayInfo.SubscriptionPreConsumed > 0 {
 			other["subscription_pre_consumed"] = relayInfo.SubscriptionPreConsumed
 		}
+		if relayInfo.SubscriptionPreConsumedAmountMicros > 0 {
+			other["subscription_pre_consumed_amount_micros"] = relayInfo.SubscriptionPreConsumedAmountMicros
+		}
 		// post_delta: settlement delta applied after actual usage is known (can be negative for refund)
 		if relayInfo.SubscriptionPostDelta != 0 {
 			other["subscription_post_delta"] = relayInfo.SubscriptionPostDelta
+		}
+		if relayInfo.SubscriptionPostDeltaAmountMicros != 0 {
+			other["subscription_post_delta_amount_micros"] = relayInfo.SubscriptionPostDeltaAmountMicros
+		}
+		if relayInfo.SubscriptionCurrency != "" {
+			other["subscription_currency"] = relayInfo.SubscriptionCurrency
 		}
 		if relayInfo.SubscriptionPlanId != 0 {
 			other["subscription_plan_id"] = relayInfo.SubscriptionPlanId
@@ -161,6 +170,26 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 			other["subscription_total"] = relayInfo.SubscriptionAmountTotal
 			other["subscription_used"] = usedFinal
 			other["subscription_remain"] = remain
+		}
+		usedMicrosFinal := relayInfo.SubscriptionAmountUsedMicrosAfterPreConsume + relayInfo.SubscriptionPostDeltaAmountMicros
+		if usedMicrosFinal < 0 {
+			usedMicrosFinal = 0
+		}
+		if relayInfo.SubscriptionAmountTotalMicros > 0 {
+			remainMicros := relayInfo.SubscriptionAmountTotalMicros - usedMicrosFinal
+			if remainMicros < 0 {
+				remainMicros = 0
+			}
+			other["subscription_total_amount_micros"] = relayInfo.SubscriptionAmountTotalMicros
+			other["subscription_used_amount_micros"] = usedMicrosFinal
+			other["subscription_remain_amount_micros"] = remainMicros
+		}
+		consumedMicros := relayInfo.SubscriptionPreConsumedAmountMicros + relayInfo.SubscriptionPostDeltaAmountMicros
+		if consumedMicros < 0 {
+			consumedMicros = 0
+		}
+		if consumedMicros > 0 {
+			other["subscription_consumed_amount_micros"] = consumedMicros
 		}
 		if consumed > 0 {
 			other["subscription_consumed"] = consumed

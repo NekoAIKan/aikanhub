@@ -18,13 +18,17 @@ const (
 // BillingSetting is managed by config.GlobalConfig.Register.
 // DB keys: billing_setting.billing_mode, billing_setting.billing_expr
 type BillingSetting struct {
-	BillingMode map[string]string `json:"billing_mode"`
-	BillingExpr map[string]string `json:"billing_expr"`
+	BillingMode        map[string]string `json:"billing_mode"`
+	BillingExpr        map[string]string `json:"billing_expr"`
+	MoneyBillingMode   string            `json:"money_billing_mode"`
+	SettlementCurrency string            `json:"settlement_currency"`
 }
 
 var billingSetting = BillingSetting{
-	BillingMode: make(map[string]string),
-	BillingExpr: make(map[string]string),
+	BillingMode:        make(map[string]string),
+	BillingExpr:        make(map[string]string),
+	MoneyBillingMode:   MoneyBillingModeLegacy,
+	SettlementCurrency: "USD",
 }
 
 func init() {

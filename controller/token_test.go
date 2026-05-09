@@ -48,21 +48,21 @@ type sqliteColumnInfo struct {
 }
 
 type legacyToken struct {
-	Id                 int            `gorm:"primaryKey"`
-	UserId             int            `gorm:"index"`
-	Key                string         `gorm:"column:key;type:char(48);uniqueIndex"`
-	Status             int            `gorm:"default:1"`
-	Name               string         `gorm:"index"`
-	CreatedTime        int64          `gorm:"bigint"`
-	AccessedTime       int64          `gorm:"bigint"`
-	ExpiredTime        int64          `gorm:"bigint;default:-1"`
-	RemainQuota        int            `gorm:"default:0"`
+	Id                 int    `gorm:"primaryKey"`
+	UserId             int    `gorm:"index"`
+	Key                string `gorm:"column:key;type:char(48);uniqueIndex"`
+	Status             int    `gorm:"default:1"`
+	Name               string `gorm:"index"`
+	CreatedTime        int64  `gorm:"bigint"`
+	AccessedTime       int64  `gorm:"bigint"`
+	ExpiredTime        int64  `gorm:"bigint;default:-1"`
+	RemainQuota        int    `gorm:"default:0"`
 	UnlimitedQuota     bool
 	ModelLimitsEnabled bool
-	ModelLimits        string         `gorm:"type:text"`
-	AllowIps           *string        `gorm:"default:''"`
-	UsedQuota          int            `gorm:"default:0"`
-	Group              string         `gorm:"column:group;default:''"`
+	ModelLimits        string  `gorm:"type:text"`
+	AllowIps           *string `gorm:"default:''"`
+	UsedQuota          int     `gorm:"default:0"`
+	Group              string  `gorm:"column:group;default:''"`
 	CrossGroupRetry    bool
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
 }
@@ -503,6 +503,177 @@ func TestUpdateTokenMasksKeyInResponse(t *testing.T) {
 	}
 	if strings.Contains(recorder.Body.String(), token.Key) {
 		t.Fatalf("update response leaked raw token key: %s", recorder.Body.String())
+	}
+}
+
+func TestAddTokenStoresMoneyBudgetFields(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	body := map[string]any{
+		"name":                 "money-token",
+		"expired_time":         -1,
+		"remain_quota":         0,
+		"unlimited_quota":      false,
+		"remain_amount_micros": 1_250_000,
+		"used_amount_micros":   250_000,
+		"currency":             "cny",
+		"unlimited_amount":     false,
+		"model_limits_enabled": false,
+		"model_limits":         "",
+		"group":                "default",
+		"cross_group_retry":    false,
+	}
+
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPost, "/api/token/", body, 1)
+	AddToken(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected add token success, got message: %s", response.Message)
+	}
+
+	var token model.Token
+	if err := db.First(&token, "user_id = ? AND name = ?", 1, "money-token").Error; err != nil {
+		t.Fatalf("failed to load created token: %v", err)
+	}
+	if token.RemainAmountMicros != 1_250_000 {
+		t.Fatalf("expected remain amount 1250000, got %d", token.RemainAmountMicros)
+	}
+	if token.UsedAmountMicros != 250_000 {
+		t.Fatalf("expected used amount 250000, got %d", token.UsedAmountMicros)
+	}
+	if token.Currency != "CNY" {
+		t.Fatalf("expected currency CNY, got %q", token.Currency)
+	}
+}
+
+func TestUpdateTokenStoresMoneyBudgetFields(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	token := seedToken(t, db, 1, "money-editable-token", "money1234edit5678")
+
+	body := map[string]any{
+		"id":                   token.Id,
+		"name":                 "money-updated-token",
+		"expired_time":         -1,
+		"remain_quota":         0,
+		"unlimited_quota":      false,
+		"remain_amount_micros": 2_500_000,
+		"used_amount_micros":   500_000,
+		"currency":             "usd",
+		"unlimited_amount":     true,
+		"model_limits_enabled": false,
+		"model_limits":         "",
+		"group":                "default",
+		"cross_group_retry":    false,
+	}
+
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPut, "/api/token/", body, 1)
+	UpdateToken(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected update token success, got message: %s", response.Message)
+	}
+
+	var updated model.Token
+	if err := db.First(&updated, "id = ?", token.Id).Error; err != nil {
+		t.Fatalf("failed to load updated token: %v", err)
+	}
+	if updated.RemainAmountMicros != 2_500_000 {
+		t.Fatalf("expected remain amount 2500000, got %d", updated.RemainAmountMicros)
+	}
+	if updated.UsedAmountMicros != 500_000 {
+		t.Fatalf("expected used amount 500000, got %d", updated.UsedAmountMicros)
+	}
+	if updated.Currency != "USD" {
+		t.Fatalf("expected currency USD, got %q", updated.Currency)
+	}
+	if !updated.UnlimitedAmount {
+		t.Fatalf("expected unlimited amount to be true")
+	}
+}
+
+func TestGetTokenUsageIncludesMoneyBudgetFields(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	token := seedToken(t, db, 1, "usage-money-token", "usage1234money5678")
+	token.RemainAmountMicros = 750_000
+	token.UsedAmountMicros = 250_000
+	token.Currency = "USD"
+	token.UnlimitedAmount = true
+	if err := db.Save(token).Error; err != nil {
+		t.Fatalf("failed to update token money fields: %v", err)
+	}
+
+	ctx, recorder := newAuthenticatedContext(t, http.MethodGet, "/api/token/usage", nil, 1)
+	ctx.Request.Header.Set("Authorization", "Bearer sk-"+token.Key)
+	GetTokenUsage(ctx)
+
+	var response struct {
+		Code bool `json:"code"`
+		Data struct {
+			TotalGrantedAmountMicros   int64  `json:"total_granted_amount_micros"`
+			TotalUsedAmountMicros      int64  `json:"total_used_amount_micros"`
+			TotalAvailableAmountMicros int64  `json:"total_available_amount_micros"`
+			Currency                   string `json:"currency"`
+			UnlimitedAmount            bool   `json:"unlimited_amount"`
+		} `json:"data"`
+	}
+	if err := common.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode usage response: %v", err)
+	}
+	if !response.Code {
+		t.Fatalf("expected usage response code true: %s", recorder.Body.String())
+	}
+	if response.Data.TotalGrantedAmountMicros != 1_000_000 {
+		t.Fatalf("expected total granted amount 1000000, got %d", response.Data.TotalGrantedAmountMicros)
+	}
+	if response.Data.TotalUsedAmountMicros != 250_000 {
+		t.Fatalf("expected total used amount 250000, got %d", response.Data.TotalUsedAmountMicros)
+	}
+	if response.Data.TotalAvailableAmountMicros != 750_000 {
+		t.Fatalf("expected total available amount 750000, got %d", response.Data.TotalAvailableAmountMicros)
+	}
+	if response.Data.Currency != "USD" {
+		t.Fatalf("expected currency USD, got %q", response.Data.Currency)
+	}
+	if !response.Data.UnlimitedAmount {
+		t.Fatalf("expected unlimited_amount true")
+	}
+}
+
+func TestGetTokenStatusIncludesMoneyBudgetFields(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	token := seedToken(t, db, 1, "status-money-token", "status1234money5678")
+	token.RemainAmountMicros = 900_000
+	token.UsedAmountMicros = 100_000
+	token.Currency = "USD"
+	if err := db.Save(token).Error; err != nil {
+		t.Fatalf("failed to update token money fields: %v", err)
+	}
+
+	ctx, recorder := newAuthenticatedContext(t, http.MethodGet, "/dashboard/billing/credit_grants", nil, 1)
+	ctx.Set("token_id", token.Id)
+	GetTokenStatus(ctx)
+
+	var response struct {
+		TotalGrantedAmountMicros   int64  `json:"total_granted_amount_micros"`
+		TotalUsedAmountMicros      int64  `json:"total_used_amount_micros"`
+		TotalAvailableAmountMicros int64  `json:"total_available_amount_micros"`
+		Currency                   string `json:"currency"`
+	}
+	if err := common.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode status response: %v", err)
+	}
+	if response.TotalGrantedAmountMicros != 1_000_000 {
+		t.Fatalf("expected total granted amount 1000000, got %d", response.TotalGrantedAmountMicros)
+	}
+	if response.TotalUsedAmountMicros != 100_000 {
+		t.Fatalf("expected total used amount 100000, got %d", response.TotalUsedAmountMicros)
+	}
+	if response.TotalAvailableAmountMicros != 900_000 {
+		t.Fatalf("expected total available amount 900000, got %d", response.TotalAvailableAmountMicros)
+	}
+	if response.Currency != "USD" {
+		t.Fatalf("expected currency USD, got %q", response.Currency)
 	}
 }
 

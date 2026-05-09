@@ -71,13 +71,21 @@ func setupGrowthControllerTestDB(t *testing.T) *gorm.DB {
 	common.UsingPostgreSQL = false
 	common.UsingMySQL = false
 	common.RedisEnabled = false
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Log{}, &model.Option{}, &model.InviteCampaign{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Log{}, &model.Option{}, &model.InviteCampaign{}, &model.MoneyWallet{}, &model.MoneyWalletTransaction{}))
 	common.RegisterEnabled = true
 	common.PasswordRegisterEnabled = true
 	common.EmailVerificationEnabled = false
 	onboarding_setting.ResetForTest()
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_setting.money_billing_mode":  "legacy",
+		"billing_setting.settlement_currency": "USD",
+	}))
 	t.Cleanup(func() {
 		onboarding_setting.ResetForTest()
+		_ = config.GlobalConfig.LoadFromDB(map[string]string{
+			"billing_setting.money_billing_mode":  "legacy",
+			"billing_setting.settlement_currency": "USD",
+		})
 	})
 	return db
 }
@@ -397,4 +405,55 @@ func TestGetSelfIncludesResolvedBillingVisibilityMode(t *testing.T) {
 	require.True(t, response.Success)
 	require.Equal(t, "b2b", response.Data.Group)
 	require.Equal(t, "detailed", response.Data.BillingVisibilityMode)
+}
+
+func TestGetSelfIncludesMoneyWalletInMoneyMode(t *testing.T) {
+	db := setupGrowthControllerTestDB(t)
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_setting.money_billing_mode":  "money",
+		"billing_setting.settlement_currency": "USD",
+	}))
+	require.NoError(t, db.Create(&model.User{
+		Id:       91,
+		Username: "money-user",
+		Password: "password1",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
+		Group:    "default",
+		Quota:    12345,
+	}).Error)
+	require.NoError(t, model.CreditWallet(91, "USD", 2_500_000, "get-self-money-wallet", model.MoneyWalletTransactionTopup, "test"))
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/user/self", nil)
+	ctx.Set("id", 91)
+	ctx.Set("role", common.RoleCommonUser)
+
+	GetSelf(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Quota                    int    `json:"quota"`
+			MoneyBillingMode         string `json:"money_billing_mode"`
+			MoneyBalanceAmountMicros int64  `json:"money_balance_amount_micros"`
+			MoneyCurrency            string `json:"money_currency"`
+			MoneyWallet              struct {
+				Currency            string `json:"currency"`
+				AvailableMicros     int64  `json:"available_micros"`
+				FrozenMicros        int64  `json:"frozen_micros"`
+				LifetimeTopupMicros int64  `json:"lifetime_topup_micros"`
+			} `json:"money_wallet"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	require.Equal(t, 12345, response.Data.Quota)
+	require.Equal(t, "money", response.Data.MoneyBillingMode)
+	require.Equal(t, "USD", response.Data.MoneyCurrency)
+	require.Equal(t, int64(2_500_000), response.Data.MoneyBalanceAmountMicros)
+	require.Equal(t, int64(2_500_000), response.Data.MoneyWallet.AvailableMicros)
+	require.Equal(t, int64(2_500_000), response.Data.MoneyWallet.LifetimeTopupMicros)
 }

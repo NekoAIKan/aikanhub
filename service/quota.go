@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	moneypricing "github.com/QuantumNous/new-api/service/money_pricing"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -87,8 +88,98 @@ func calculateAudioQuota(info QuotaInfo) int {
 	return int(quota.Round(0).IntPart())
 }
 
+func textInputTokensFromUsage(promptTokens int, details dto.InputTokenDetails) int {
+	if details.TextTokens > 0 {
+		return details.TextTokens
+	}
+	textTokens := promptTokens - details.CachedTokens - details.CachedCreationTokens - details.AudioTokens - details.ImageTokens
+	if textTokens < 0 {
+		return 0
+	}
+	return textTokens
+}
+
+func textOutputTokensFromUsage(completionTokens int, details dto.OutputTokenDetails) int {
+	if details.TextTokens > 0 {
+		return details.TextTokens
+	}
+	textTokens := completionTokens - details.AudioTokens - details.ImageTokens - details.ReasoningTokens
+	if textTokens < 0 {
+		return 0
+	}
+	return textTokens
+}
+
+func moneyUsageFeaturesFromRealtimeUsage(relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage, profile *moneypricing.MoneyUsagePricingProfile, endpointType string, includeRequest bool) moneypricing.MoneyUsageFeatures {
+	features := moneypricing.MoneyUsageFeatures{
+		EndpointType: endpointType,
+		PublicModel:  relayInfo.OriginModelName,
+		Group:        relayInfo.UsingGroup,
+	}
+	if usage == nil || profile == nil {
+		return features
+	}
+	if includeRequest {
+		if _, ok := profile.Rates[moneypricing.UsageUnitRequest]; ok {
+			features.RequestCount = 1
+		}
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitInputToken]; ok {
+		features.InputTokens = int64(textInputTokensFromUsage(usage.InputTokens, usage.InputTokenDetails))
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitOutputToken]; ok {
+		features.OutputTokens = int64(textOutputTokensFromUsage(usage.OutputTokens, usage.OutputTokenDetails))
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitCachedInputToken]; ok {
+		features.CachedInputTokens = int64(usage.InputTokenDetails.CachedTokens)
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitCacheWriteToken]; ok {
+		features.CacheWriteTokens = int64(usage.InputTokenDetails.CachedCreationTokens)
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitAudioInputToken]; ok {
+		features.AudioInputTokens = int64(usage.InputTokenDetails.AudioTokens)
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitAudioOutputToken]; ok {
+		features.AudioOutputTokens = int64(usage.OutputTokenDetails.AudioTokens)
+	}
+	return features
+}
+
+func moneyUsageFeaturesFromAudioUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage, profile *moneypricing.MoneyUsagePricingProfile, endpointType string) moneypricing.MoneyUsageFeatures {
+	features := moneypricing.MoneyUsageFeatures{
+		EndpointType: endpointType,
+		PublicModel:  relayInfo.OriginModelName,
+		Group:        relayInfo.UsingGroup,
+	}
+	if usage == nil || profile == nil {
+		return features
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitRequest]; ok {
+		features.RequestCount = 1
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitInputToken]; ok {
+		features.InputTokens = int64(textInputTokensFromUsage(usage.PromptTokens, usage.PromptTokensDetails))
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitOutputToken]; ok {
+		features.OutputTokens = int64(textOutputTokensFromUsage(usage.CompletionTokens, usage.CompletionTokenDetails))
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitCachedInputToken]; ok {
+		features.CachedInputTokens = int64(usage.PromptTokensDetails.CachedTokens)
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitCacheWriteToken]; ok {
+		features.CacheWriteTokens = int64(usage.PromptTokensDetails.CachedCreationTokens)
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitAudioInputToken]; ok {
+		features.AudioInputTokens = int64(usage.PromptTokensDetails.AudioTokens)
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitAudioOutputToken]; ok {
+		features.AudioOutputTokens = int64(usage.CompletionTokenDetails.AudioTokens)
+	}
+	return features
+}
+
 func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage) error {
-	if relayInfo.UsePrice {
+	if relayInfo.UsePrice && !relayInfo.PriceData.MoneyPricingEnabled {
 		return nil
 	}
 	userQuota, err := model.GetUserQuota(relayInfo.UserId, false)
@@ -138,16 +229,55 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 	}
 
 	quota := calculateAudioQuota(quotaInfo)
-
-	if userQuota < quota {
-		return fmt.Errorf("user quota is not enough, user quota: %s, need quota: %s", logger.FormatQuota(userQuota), logger.FormatQuota(quota))
+	if moneyQuota, applied, quoteErr := applyRuntimeMoneyUsageQuote(relayInfo, usage.TotalTokens, func(profile *moneypricing.MoneyUsagePricingProfile, endpointType string) moneypricing.MoneyUsageFeatures {
+		return moneyUsageFeaturesFromRealtimeUsage(relayInfo, usage, profile, endpointType, false)
+	}); quoteErr != nil {
+		logger.LogError(ctx, "error applying realtime money usage pricing: "+quoteErr.Error())
+	} else if applied {
+		quota = moneyQuota
 	}
 
-	if !token.UnlimitedQuota && token.RemainQuota < quota {
-		return fmt.Errorf("token quota is not enough, token remain quota: %s, need quota: %s", logger.FormatQuota(token.RemainQuota), logger.FormatQuota(quota))
+	amountMicrosDelta := model.LegacyQuotaDeltaToMoneyMicros(int64(quota))
+	if relayInfo.PriceData.MoneyPricingEnabled && relayInfo.PriceData.MoneyActualAmountKnown {
+		amountMicrosDelta = relayInfo.PriceData.MoneyActualAmountMicros
 	}
 
-	err = PostConsumeQuota(relayInfo, quota, 0, false)
+	if relayInfo.Billing != nil {
+		if model.ShouldWriteLegacyQuota() {
+			targetQuota := relayInfo.Billing.GetPreConsumedQuota() + quota
+			if err := relayInfo.Billing.Reserve(targetQuota); err != nil {
+				return err
+			}
+		} else {
+			logger.LogInfo(ctx, "realtime streaming money usage deferred to billing session settlement")
+		}
+		return nil
+	}
+
+	if !model.ShouldWriteLegacyQuota() {
+		if relayInfo.BillingSource != BillingSourceSubscription && amountMicrosDelta > 0 {
+			availableMicros, err := model.GetMoneyWalletAvailableMicros(relayInfo.UserId, model.SettlementCurrency())
+			if err != nil {
+				return err
+			}
+			if availableMicros < amountMicrosDelta {
+				return fmt.Errorf("user money balance is not enough, available amount_micros: %d, need amount_micros: %d", availableMicros, amountMicrosDelta)
+			}
+		}
+		if !token.UnlimitedAmount && token.RemainAmountMicros < amountMicrosDelta {
+			return fmt.Errorf("token money budget is not enough, token remain amount_micros: %d, need amount_micros: %d", token.RemainAmountMicros, amountMicrosDelta)
+		}
+	} else {
+		if userQuota < quota {
+			return fmt.Errorf("user quota is not enough, user quota: %s, need quota: %s", logger.FormatQuota(userQuota), logger.FormatQuota(quota))
+		}
+
+		if !token.UnlimitedQuota && token.RemainQuota < quota {
+			return fmt.Errorf("token quota is not enough, token remain quota: %s, need quota: %s", logger.FormatQuota(token.RemainQuota), logger.FormatQuota(quota))
+		}
+	}
+
+	err = PostConsumeQuotaWithMoneyAmount(relayInfo, quota, amountMicrosDelta, 0, false)
 	if err != nil {
 		return err
 	}
@@ -204,6 +334,16 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	if tieredOk {
 		quota = tieredQuota
 	}
+	if moneyQuota, applied, quoteErr := applyRuntimeMoneyUsageQuote(relayInfo, usage.TotalTokens, func(profile *moneypricing.MoneyUsagePricingProfile, endpointType string) moneypricing.MoneyUsageFeatures {
+		return moneyUsageFeaturesFromRealtimeUsage(relayInfo, usage, profile, endpointType, true)
+	}); quoteErr != nil {
+		logger.LogError(ctx, "error applying realtime money usage pricing: "+quoteErr.Error())
+		if fallbackQuota, ok := fallbackRuntimeMoneyQuoteToPreconsume(relayInfo); ok {
+			quota = fallbackQuota
+		}
+	} else if applied {
+		quota = moneyQuota
+	}
 
 	totalTokens := usage.TotalTokens
 	var logContent string
@@ -240,6 +380,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	if tieredResult != nil {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
+	injectRuntimeMoneyPricingInfo(other, relayInfo)
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
 		PromptTokens:     usage.InputTokens,
@@ -325,6 +466,16 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	if tieredOk {
 		quota = tieredQuota
 	}
+	if moneyQuota, applied, quoteErr := applyRuntimeMoneyUsageQuote(relayInfo, usage.TotalTokens, func(profile *moneypricing.MoneyUsagePricingProfile, endpointType string) moneypricing.MoneyUsageFeatures {
+		return moneyUsageFeaturesFromAudioUsage(relayInfo, usage, profile, endpointType)
+	}); quoteErr != nil {
+		logger.LogError(ctx, "error applying audio money usage pricing: "+quoteErr.Error())
+		if fallbackQuota, ok := fallbackRuntimeMoneyQuoteToPreconsume(relayInfo); ok {
+			quota = fallbackQuota
+		}
+	} else if applied {
+		quota = moneyQuota
+	}
 
 	totalTokens := usage.TotalTokens
 	var logContent string
@@ -361,6 +512,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	if tieredResult != nil {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
+	injectRuntimeMoneyPricingInfo(other, relayInfo)
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
 		PromptTokens:     usage.PromptTokens,
@@ -378,6 +530,10 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 }
 
 func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
+	return PreConsumeTokenQuotaWithMoneyAmount(relayInfo, quota, model.LegacyQuotaToMoneyMicros(int64(quota)))
+}
+
+func PreConsumeTokenQuotaWithMoneyAmount(relayInfo *relaycommon.RelayInfo, quota int, amountMicros int64) error {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
@@ -391,6 +547,18 @@ func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
 	if err != nil {
 		return err
 	}
+	if !model.ShouldWriteLegacyQuota() {
+		if amountMicros <= 0 {
+			amountMicros = model.LegacyQuotaToMoneyMicros(int64(quota))
+		}
+		if amountMicros <= 0 {
+			return nil
+		}
+		if !token.UnlimitedAmount && token.RemainAmountMicros < amountMicros {
+			return fmt.Errorf("token money budget is not enough, token remain amount_micros: %d, need amount_micros: %d", token.RemainAmountMicros, amountMicros)
+		}
+		return model.DecreaseTokenMoneyBudget(relayInfo.TokenId, relayInfo.TokenKey, amountMicros)
+	}
 	if !relayInfo.TokenUnlimited && token.RemainQuota < quota {
 		return fmt.Errorf("token quota is not enough, token remain quota: %s, need quota: %s", logger.FormatQuota(token.RemainQuota), logger.FormatQuota(quota))
 	}
@@ -401,15 +569,31 @@ func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
 	return nil
 }
 
-func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQuota int, sendEmail bool) (err error) {
+func absInt(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
 
+func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQuota int, sendEmail bool) (err error) {
+	return PostConsumeQuotaWithMoneyAmount(relayInfo, quota, model.LegacyQuotaDeltaToMoneyMicros(int64(quota)), preConsumedQuota, sendEmail)
+}
+
+func PostConsumeQuotaWithMoneyAmount(relayInfo *relaycommon.RelayInfo, quota int, amountMicrosDelta int64, preConsumedQuota int, sendEmail bool) (err error) {
 	// 1) Consume from wallet quota OR subscription item
 	if relayInfo != nil && relayInfo.BillingSource == BillingSourceSubscription {
 		if relayInfo.SubscriptionId == 0 {
 			return errors.New("subscription id is missing")
 		}
 		delta := int64(quota)
-		if delta != 0 {
+		if !model.ShouldWriteLegacyQuota() && amountMicrosDelta != 0 {
+			if err := model.PostConsumeUserSubscriptionMoneyDelta(relayInfo.SubscriptionId, amountMicrosDelta); err != nil {
+				return err
+			}
+			relayInfo.SubscriptionPostDelta += delta
+			relayInfo.SubscriptionPostDeltaAmountMicros += amountMicrosDelta
+		} else if delta != 0 {
 			if err := model.PostConsumeUserSubscriptionDelta(relayInfo.SubscriptionId, delta); err != nil {
 				return err
 			}
@@ -417,7 +601,12 @@ func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQu
 		}
 	} else {
 		// Wallet
-		if quota > 0 {
+		if !model.ShouldWriteLegacyQuota() {
+			if amountMicrosDelta != 0 {
+				requestID := fmt.Sprintf("postconsume:%s:%d", relayInfo.RequestId, amountMicrosDelta)
+				err = model.AdjustWallet(relayInfo.UserId, model.SettlementCurrency(), -amountMicrosDelta, requestID, "postconsume")
+			}
+		} else if quota > 0 {
 			err = model.DecreaseUserQuota(relayInfo.UserId, quota, false)
 		} else {
 			err = model.IncreaseUserQuota(relayInfo.UserId, -quota, false)
@@ -428,7 +617,16 @@ func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQu
 	}
 
 	if !relayInfo.IsPlayground {
-		if quota > 0 {
+		if !model.ShouldWriteLegacyQuota() {
+			amountMicros := absMicros(amountMicrosDelta)
+			if amountMicros > 0 {
+				if amountMicrosDelta > 0 {
+					err = model.DecreaseTokenMoneyBudget(relayInfo.TokenId, relayInfo.TokenKey, amountMicros)
+				} else if amountMicrosDelta < 0 {
+					err = model.IncreaseTokenMoneyBudget(relayInfo.TokenId, relayInfo.TokenKey, amountMicros)
+				}
+			}
+		} else if quota > 0 {
 			err = model.DecreaseTokenQuota(relayInfo.TokenId, relayInfo.TokenKey, quota)
 		} else {
 			err = model.IncreaseTokenQuota(relayInfo.TokenId, relayInfo.TokenKey, -quota)

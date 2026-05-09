@@ -11,7 +11,7 @@ import (
 
 func setupInviteCampaignTestDB(t *testing.T) {
 	t.Helper()
-	require.NoError(t, DB.AutoMigrate(&InviteCampaign{}))
+	ensureModelTestSchema(t, &InviteCampaign{})
 	require.NoError(t, DB.Exec("DELETE FROM invite_campaigns").Error)
 	t.Cleanup(func() {
 		DB.Exec("DELETE FROM invite_campaigns")

@@ -25,6 +25,21 @@ type PriceData struct {
 	Quota                int // 按次计费的最终额度（MJ / Task）
 	QuotaToPreConsume    int // 按量计费的预消耗额度
 	GroupRatioInfo       GroupRatioInfo
+
+	MoneyPricingEnabled                  bool
+	MoneyEndpointType                    string
+	MoneyPricingMode                     string
+	MoneySettlementCurrency              string
+	MoneyPreConsumedAmountMicros         int64
+	MoneyPreConsumedAmountKnown          bool
+	MoneyActualAmountMicros              int64
+	MoneyActualAmountKnown               bool
+	MoneyPricingVersion                  string
+	MoneyPricingHash                     string
+	MoneyPricingFeaturesJSON             string
+	MoneyPricingActualFeaturesJSON       string
+	MoneyPricingUpstreamCostMicros       int64
+	MoneyPricingActualUpstreamCostMicros int64
 }
 
 func (p *PriceData) AddOtherRatio(key string, ratio float64) {
@@ -38,5 +53,5 @@ func (p *PriceData) AddOtherRatio(key string, ratio float64) {
 }
 
 func (p *PriceData) ToSetting() string {
-	return fmt.Sprintf("ModelPrice: %f, ModelRatio: %f, CompletionRatio: %f, CacheRatio: %f, GroupRatio: %f, UsePrice: %t, CacheCreationRatio: %f, CacheCreation5mRatio: %f, CacheCreation1hRatio: %f, QuotaToPreConsume: %d, ImageRatio: %f, AudioRatio: %f, AudioCompletionRatio: %f", p.ModelPrice, p.ModelRatio, p.CompletionRatio, p.CacheRatio, p.GroupRatioInfo.GroupRatio, p.UsePrice, p.CacheCreationRatio, p.CacheCreation5mRatio, p.CacheCreation1hRatio, p.QuotaToPreConsume, p.ImageRatio, p.AudioRatio, p.AudioCompletionRatio)
+	return fmt.Sprintf("ModelPrice: %f, ModelRatio: %f, CompletionRatio: %f, CacheRatio: %f, GroupRatio: %f, UsePrice: %t, CacheCreationRatio: %f, CacheCreation5mRatio: %f, CacheCreation1hRatio: %f, QuotaToPreConsume: %d, ImageRatio: %f, AudioRatio: %f, AudioCompletionRatio: %f, MoneyPricingEnabled: %t, MoneyPreConsumedAmountMicros: %d", p.ModelPrice, p.ModelRatio, p.CompletionRatio, p.CacheRatio, p.GroupRatioInfo.GroupRatio, p.UsePrice, p.CacheCreationRatio, p.CacheCreation5mRatio, p.CacheCreation1hRatio, p.QuotaToPreConsume, p.ImageRatio, p.AudioRatio, p.AudioCompletionRatio, p.MoneyPricingEnabled, p.MoneyPreConsumedAmountMicros)
 }

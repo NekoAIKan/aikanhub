@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
@@ -22,6 +23,10 @@ type Token struct {
 	ExpiredTime        int64          `json:"expired_time" gorm:"bigint;default:-1"` // -1 means never expired
 	RemainQuota        int            `json:"remain_quota" gorm:"default:0"`
 	UnlimitedQuota     bool           `json:"unlimited_quota"`
+	RemainAmountMicros int64          `json:"remain_amount_micros" gorm:"bigint;not null;default:0"`
+	UsedAmountMicros   int64          `json:"used_amount_micros" gorm:"bigint;not null;default:0"`
+	Currency           string         `json:"currency" gorm:"type:varchar(8);not null;default:'USD'"`
+	UnlimitedAmount    bool           `json:"unlimited_amount" gorm:"not null;default:false"`
 	ModelLimitsEnabled bool           `json:"model_limits_enabled"`
 	ModelLimits        string         `json:"model_limits" gorm:"type:text"`
 	AllowIps           *string        `json:"allow_ips" gorm:"default:''"`
@@ -29,6 +34,33 @@ type Token struct {
 	Group              string         `json:"group" gorm:"default:''"`
 	CrossGroupRetry    bool           `json:"cross_group_retry"` // 跨分组重试，仅auto分组有效
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
+}
+
+func (token *Token) normalizeMoneyFields() {
+	token.Currency = strings.ToUpper(strings.TrimSpace(token.Currency))
+	if token.Currency == "" {
+		token.Currency = "USD"
+	}
+}
+
+func (token *Token) BeforeCreate(tx *gorm.DB) error {
+	token.normalizeMoneyFields()
+	return nil
+}
+
+func (token *Token) BeforeSave(tx *gorm.DB) error {
+	token.normalizeMoneyFields()
+	return nil
+}
+
+func tokenKeyColumn() string {
+	if commonKeyCol != "" {
+		return commonKeyCol
+	}
+	if common.UsingPostgreSQL {
+		return `"key"`
+	}
+	return "`key`"
 }
 
 func (token *Token) Clean() {
@@ -166,7 +198,7 @@ func SearchUserTokens(userId int, keyword string, token string, offset int, limi
 		if err != nil {
 			return nil, 0, err
 		}
-		baseQuery = baseQuery.Where(commonKeyCol+" LIKE ? ESCAPE '!'", tokenPattern)
+		baseQuery = baseQuery.Where(tokenKeyColumn()+" LIKE ? ESCAPE '!'", tokenPattern)
 	}
 
 	// 先查匹配总数（用于分页，受 maxTokens 上限保护，避免全表 COUNT）
@@ -205,6 +237,19 @@ func ValidateUserToken(key string) (token *Token, err error) {
 				}
 			}
 			return token, ErrTokenInvalid
+		}
+		if billing_setting.IsMoneyBillingModeEnabled() {
+			if !token.UnlimitedAmount && token.RemainAmountMicros <= 0 {
+				if !common.RedisEnabled {
+					token.Status = common.TokenStatusExhausted
+					err := token.SelectUpdate()
+					if err != nil {
+						common.SysLog("failed to update token status" + err.Error())
+					}
+				}
+				return token, ErrTokenInvalid
+			}
+			return token, nil
 		}
 		if !token.UnlimitedQuota && token.RemainQuota <= 0 {
 			if !common.RedisEnabled {
@@ -272,7 +317,7 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 		// Don't return error - fall through to DB
 	}
 	fromDB = true
-	err = DB.Where(commonKeyCol+" = ?", key).First(&token).Error
+	err = DB.Where(tokenKeyColumn()+" = ?", key).First(&token).Error
 	return token, err
 }
 
@@ -294,7 +339,9 @@ func (token *Token) Update() (err error) {
 			})
 		}
 	}()
+	token.normalizeMoneyFields()
 	err = DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
+		"remain_amount_micros", "used_amount_micros", "currency", "unlimited_amount",
 		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry").Updates(token).Error
 	return err
 }
@@ -376,6 +423,9 @@ func IncreaseTokenQuota(tokenId int, key string, quota int) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
+	if billing_setting.IsMoneyBillingModeEnabled() {
+		return ErrQuotaWriteDisabledInMoneyMode
+	}
 	if common.RedisEnabled {
 		gopool.Go(func() {
 			err := cacheIncrTokenQuota(key, int64(quota))
@@ -406,6 +456,9 @@ func DecreaseTokenQuota(id int, key string, quota int) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
+	if billing_setting.IsMoneyBillingModeEnabled() {
+		return ErrQuotaWriteDisabledInMoneyMode
+	}
 	if common.RedisEnabled {
 		gopool.Go(func() {
 			err := cacheDecrTokenQuota(key, int64(quota))
@@ -430,6 +483,76 @@ func decreaseTokenQuota(id int, quota int) (err error) {
 		},
 	).Error
 	return err
+}
+
+func IncreaseTokenMoneyBudget(tokenId int, key string, amountMicros int64) (err error) {
+	if amountMicros < 0 {
+		return errors.New("amount_micros 不能为负数！")
+	}
+	if amountMicros == 0 {
+		return nil
+	}
+	if err := increaseTokenMoneyBudget(tokenId, amountMicros); err != nil {
+		return err
+	}
+	if common.RedisEnabled {
+		gopool.Go(func() {
+			err := cacheIncrTokenAmountMicros(key, amountMicros)
+			if err != nil {
+				common.SysLog("failed to increase token money budget: " + err.Error())
+			}
+		})
+	}
+	return nil
+}
+
+func increaseTokenMoneyBudget(id int, amountMicros int64) (err error) {
+	err = DB.Model(&Token{}).Where("id = ?", id).Updates(
+		map[string]interface{}{
+			"remain_amount_micros": gorm.Expr("remain_amount_micros + ?", amountMicros),
+			"used_amount_micros":   gorm.Expr("CASE WHEN used_amount_micros >= ? THEN used_amount_micros - ? ELSE 0 END", amountMicros, amountMicros),
+			"accessed_time":        common.GetTimestamp(),
+		},
+	).Error
+	return err
+}
+
+func DecreaseTokenMoneyBudget(id int, key string, amountMicros int64) (err error) {
+	if amountMicros < 0 {
+		return errors.New("amount_micros 不能为负数！")
+	}
+	if amountMicros == 0 {
+		return nil
+	}
+	if err := decreaseTokenMoneyBudget(id, amountMicros); err != nil {
+		return err
+	}
+	if common.RedisEnabled {
+		gopool.Go(func() {
+			err := cacheDecrTokenAmountMicros(key, amountMicros)
+			if err != nil {
+				common.SysLog("failed to decrease token money budget: " + err.Error())
+			}
+		})
+	}
+	return nil
+}
+
+func decreaseTokenMoneyBudget(id int, amountMicros int64) (err error) {
+	result := DB.Model(&Token{}).
+		Where("id = ? AND remain_amount_micros >= ?", id, amountMicros).
+		Updates(map[string]interface{}{
+			"remain_amount_micros": gorm.Expr("remain_amount_micros - ?", amountMicros),
+			"used_amount_micros":   gorm.Expr("used_amount_micros + ?", amountMicros),
+			"accessed_time":        common.GetTimestamp(),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrTokenMoneyBudgetInsufficient
+	}
+	return nil
 }
 
 // CountUserTokens returns total number of tokens for the given user, used for pagination
@@ -475,7 +598,7 @@ func BatchDeleteTokens(ids []int, userId int) (int, error) {
 
 func GetTokenKeysByIds(ids []int, userId int) ([]Token, error) {
 	var tokens []Token
-	err := DB.Select("id", commonKeyCol).
+	err := DB.Select("id", tokenKeyColumn()).
 		Where("user_id = ? AND id IN (?)", userId, ids).
 		Find(&tokens).Error
 	return tokens, err
@@ -493,7 +616,7 @@ func InvalidateUserTokensCache(userId int) error {
 	}
 	var tokens []Token
 	if err := DB.Unscoped().
-		Select("id", commonKeyCol).
+		Select("id", tokenKeyColumn()).
 		Where("user_id = ?", userId).
 		Find(&tokens).Error; err != nil {
 		return err

@@ -610,3 +610,25 @@ export function formatLocalCurrencyAmount(
 
   return formatCurrencyValue(amount, merged, meta)
 }
+
+/**
+ * Format an explicit money amount stored in micros (1e-6 major currency unit).
+ * Unlike quota display helpers, this respects the amount's own currency and
+ * never routes through token/credit display settings.
+ */
+export function formatMoneyMicros(
+  amountMicros: number | null | undefined,
+  currency = 'USD',
+  options?: CurrencyFormatOptions
+): string {
+  if (amountMicros == null || Number.isNaN(amountMicros)) return '-'
+
+  const currencyCode = (currency || 'USD').toUpperCase()
+  const merged = mergeOptions(options)
+  return formatCurrencyValue(amountMicros / 1_000_000, merged, {
+    kind: 'currency',
+    symbol: '',
+    currencyCode,
+    exchangeRate: 1,
+  })
+}

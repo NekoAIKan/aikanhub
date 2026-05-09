@@ -9,14 +9,16 @@ var (
 
 // User auth errors
 var (
-	ErrInvalidCredentials   = errors.New("invalid credentials")
-	ErrUserEmptyCredentials = errors.New("empty credentials")
+	ErrInvalidCredentials            = errors.New("invalid credentials")
+	ErrUserEmptyCredentials          = errors.New("empty credentials")
+	ErrQuotaWriteDisabledInMoneyMode = errors.New("quota write is disabled in money billing mode")
 )
 
 // Token auth errors
 var (
-	ErrTokenNotProvided = errors.New("token not provided")
-	ErrTokenInvalid     = errors.New("token invalid")
+	ErrTokenNotProvided             = errors.New("token not provided")
+	ErrTokenInvalid                 = errors.New("token invalid")
+	ErrTokenMoneyBudgetInsufficient = errors.New("token money budget insufficient")
 )
 
 // Redemption errors

@@ -1,14 +1,17 @@
 package helper
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	moneypricing "github.com/QuantumNous/new-api/service/money_pricing"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -65,9 +68,18 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.
 }
 
 func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) (types.PriceData, error) {
-	modelPrice, usePrice := ratio_setting.GetModelPrice(info.OriginModelName, false)
-
 	groupRatioInfo := HandleGroupRatio(c, info)
+
+	if !model.ShouldWriteLegacyQuota() {
+		if priceData, ok, err := modelPriceHelperMoneyUsage(info, promptTokens, meta, groupRatioInfo); err != nil || ok {
+			if err == nil {
+				info.PriceData = priceData
+			}
+			return priceData, err
+		}
+	}
+
+	modelPrice, usePrice := ratio_setting.GetModelPrice(info.OriginModelName, false)
 
 	// Check if this model uses tiered_expr billing
 	if billing_setting.GetBillingMode(info.OriginModelName) == billing_setting.BillingModeTieredExpr {
@@ -161,6 +173,93 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	}
 	info.PriceData = priceData
 	return priceData, nil
+}
+
+func modelPriceHelperMoneyUsage(info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta, groupRatioInfo types.GroupRatioInfo) (types.PriceData, bool, error) {
+	endpointType := endpointTypeForMoneyPricing(info)
+	policy, err := model.GetEnabledRetailPricingPolicy(info.OriginModelName, info.UsingGroup, endpointType)
+	if err != nil {
+		if errors.Is(err, model.ErrMoneyPricingPolicyNotFound) {
+			return types.PriceData{}, false, nil
+		}
+		return types.PriceData{}, true, err
+	}
+	profile, err := moneypricing.ValidateMoneyUsagePricingProfile(policy.BillingRuleJSON)
+	if err != nil {
+		return types.PriceData{}, true, err
+	}
+	features := estimatedMoneyUsageFeatures(info, profile, promptTokens, meta, endpointType)
+	quote, err := moneypricing.QuoteRetailPricingPolicy(policy, features, model.SettlementCurrency())
+	if err != nil {
+		return types.PriceData{}, true, err
+	}
+	preConsumedQuota := model.MoneyMicrosToLegacyQuota(quote.RetailAmountMicros)
+	if quote.RetailAmountMicros > 0 && preConsumedQuota == 0 {
+		preConsumedQuota = 1
+	}
+	freeModel := quote.RetailAmountMicros == 0
+	return types.PriceData{
+		FreeModel:                      freeModel,
+		UsePrice:                       true,
+		ModelPrice:                     float64(quote.RetailAmountMicros) / 1_000_000,
+		GroupRatioInfo:                 groupRatioInfo,
+		QuotaToPreConsume:              preConsumedQuota,
+		MoneyPricingEnabled:            true,
+		MoneyEndpointType:              endpointType,
+		MoneyPricingMode:               policy.PricingMode,
+		MoneySettlementCurrency:        quote.SettlementCurrency,
+		MoneyPreConsumedAmountMicros:   quote.RetailAmountMicros,
+		MoneyPreConsumedAmountKnown:    true,
+		MoneyPricingVersion:            quote.PricingVersion,
+		MoneyPricingHash:               quote.PricingHash,
+		MoneyPricingFeaturesJSON:       quote.FeaturesJSON,
+		MoneyPricingUpstreamCostMicros: quote.UpstreamCostMicros,
+	}, true, nil
+}
+
+func estimatedMoneyUsageFeatures(info *relaycommon.RelayInfo, profile *moneypricing.MoneyUsagePricingProfile, promptTokens int, meta *types.TokenCountMeta, endpointType string) moneypricing.MoneyUsageFeatures {
+	features := moneypricing.MoneyUsageFeatures{
+		EndpointType: endpointType,
+		PublicModel:  info.OriginModelName,
+		Group:        info.UsingGroup,
+	}
+	if profile == nil {
+		return features
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitRequest]; ok {
+		features.RequestCount = 1
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitInputToken]; ok {
+		features.InputTokens = int64(promptTokens)
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitOutputToken]; ok && meta != nil {
+		features.OutputTokens = int64(meta.MaxTokens)
+	}
+	return features
+}
+
+func endpointTypeForMoneyPricing(info *relaycommon.RelayInfo) string {
+	if info == nil {
+		return string(constant.EndpointTypeOpenAI)
+	}
+	switch info.GetFinalRequestRelayFormat() {
+	case types.RelayFormatClaude:
+		return string(constant.EndpointTypeAnthropic)
+	case types.RelayFormatGemini:
+		return string(constant.EndpointTypeGemini)
+	case types.RelayFormatEmbedding:
+		return string(constant.EndpointTypeEmbeddings)
+	case types.RelayFormatOpenAIImage:
+		return string(constant.EndpointTypeImageGeneration)
+	case types.RelayFormatOpenAIResponses:
+		return string(constant.EndpointTypeOpenAIResponse)
+	case types.RelayFormatOpenAIResponsesCompaction:
+		return string(constant.EndpointTypeOpenAIResponseCompact)
+	case types.RelayFormatRerank:
+		return string(constant.EndpointTypeJinaRerank)
+	default:
+		return string(constant.EndpointTypeOpenAI)
+	}
 }
 
 // ModelPriceHelperPerCall 按次/按量计费的 PriceHelper (MJ、Task)

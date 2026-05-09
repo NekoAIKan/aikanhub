@@ -1,8 +1,10 @@
 package service
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 )
 
@@ -15,9 +17,9 @@ type FundingSource interface {
 	// Source 返回资金来源标识："wallet" 或 "subscription"
 	Source() string
 	// PreConsume 从该资金来源预扣 amount 额度
-	PreConsume(amount int) error
+	PreConsume(amount int, amountMicros int64) error
 	// Settle 根据差额调整资金来源（正数补扣，负数退还）
-	Settle(delta int) error
+	Settle(delta int, finalAmountMicros int64) error
 	// Refund 退还所有预扣费
 	Refund() error
 }
@@ -27,14 +29,54 @@ type FundingSource interface {
 // ---------------------------------------------------------------------------
 
 type WalletFunding struct {
-	userId   int
-	consumed int // 实际预扣的用户额度
+	userId           int
+	requestId        string
+	currency         string
+	preauthRequestId string
+	consumed         int // 实际预扣的用户额度
+	consumedMicros   int64
 }
 
 func (w *WalletFunding) Source() string { return BillingSourceWallet }
 
-func (w *WalletFunding) PreConsume(amount int) error {
+func NewWalletFunding(userID int, requestID string) *WalletFunding {
+	if requestID == "" {
+		requestID = common.GetUUID()
+	}
+	return &WalletFunding{
+		userId:    userID,
+		requestId: requestID,
+		currency:  model.SettlementCurrency(),
+	}
+}
+
+func (w *WalletFunding) preauthID() string {
+	if w.preauthRequestId == "" {
+		w.preauthRequestId = fmt.Sprintf("billing:%s:wallet:preauth", w.requestId)
+	}
+	return w.preauthRequestId
+}
+
+func (w *WalletFunding) requestScopedID(suffix string) string {
+	return fmt.Sprintf("billing:%s:wallet:%s", w.requestId, suffix)
+}
+
+func (w *WalletFunding) PreConsume(amount int, amountMicros int64) error {
 	if amount <= 0 {
+		return nil
+	}
+	if !model.ShouldWriteLegacyQuota() {
+		if amountMicros <= 0 {
+			amountMicros = model.LegacyQuotaToMoneyMicros(int64(amount))
+		}
+		if amountMicros <= 0 {
+			return nil
+		}
+		if err := model.FreezeWallet(w.userId, w.currency, amountMicros, w.preauthID(), "billing_preconsume"); err != nil {
+			return err
+		}
+		w.consumed = amount
+		w.consumedMicros = amountMicros
 		return nil
 	}
 	if err := model.DecreaseUserQuota(w.userId, amount, false); err != nil {
@@ -44,9 +86,35 @@ func (w *WalletFunding) PreConsume(amount int) error {
 	return nil
 }
 
-func (w *WalletFunding) Settle(delta int) error {
+func (w *WalletFunding) Settle(delta int, finalAmountMicros int64) error {
 	if delta == 0 {
+		if !model.ShouldWriteLegacyQuota() && w.preauthRequestId != "" {
+			if finalAmountMicros < 0 {
+				finalAmountMicros = w.consumedMicros
+			}
+			if finalAmountMicros <= 0 && w.consumed > 0 {
+				finalAmountMicros = model.LegacyQuotaToMoneyMicros(int64(w.consumed))
+			}
+			return model.SettleFrozenWallet(w.userId, w.currency, w.preauthID(), finalAmountMicros, w.requestScopedID("settle"), "billing_settle")
+		}
 		return nil
+	}
+	if !model.ShouldWriteLegacyQuota() {
+		finalQuota := w.consumed + delta
+		if finalQuota < 0 {
+			finalQuota = 0
+		}
+		finalMicros := finalAmountMicros
+		if finalMicros < 0 {
+			finalMicros = model.LegacyQuotaToMoneyMicros(int64(finalQuota))
+		}
+		if w.preauthRequestId == "" {
+			if finalMicros <= 0 {
+				return nil
+			}
+			return model.AdjustWallet(w.userId, w.currency, -finalMicros, w.requestScopedID("settle-direct"), "billing_settle_direct")
+		}
+		return model.SettleFrozenWallet(w.userId, w.currency, w.preauthID(), finalMicros, w.requestScopedID("settle"), "billing_settle")
 	}
 	if delta > 0 {
 		return model.DecreaseUserQuota(w.userId, delta, false)
@@ -57,6 +125,12 @@ func (w *WalletFunding) Settle(delta int) error {
 func (w *WalletFunding) Refund() error {
 	if w.consumed <= 0 {
 		return nil
+	}
+	if !model.ShouldWriteLegacyQuota() {
+		if w.preauthRequestId == "" {
+			return nil
+		}
+		return model.ReleaseFrozenWallet(w.userId, w.currency, w.preauthID(), w.requestScopedID("release"), "billing_refund")
 	}
 	// IncreaseUserQuota 是 quota += N 的非幂等操作，不能重试，否则会多退额度。
 	// 订阅的 RefundSubscriptionPreConsume 有 requestId 幂等保护所以可以重试。
@@ -72,20 +146,27 @@ type SubscriptionFunding struct {
 	userId         int
 	modelName      string
 	amount         int64 // 预扣的订阅额度（subConsume）
+	amountMicros   int64
 	subscriptionId int
 	preConsumed    int64
 	// 以下字段在 PreConsume 成功后填充，供 RelayInfo 同步使用
-	AmountTotal     int64
-	AmountUsedAfter int64
-	PlanId          int
-	PlanTitle       string
+	AmountTotal           int64
+	AmountUsedAfter       int64
+	PlanId                int
+	PlanTitle             string
+	AmountTotalMicros     int64
+	AmountUsedMicrosAfter int64
+	Currency              string
 }
 
 func (s *SubscriptionFunding) Source() string { return BillingSourceSubscription }
 
-func (s *SubscriptionFunding) PreConsume(_ int) error {
+func (s *SubscriptionFunding) PreConsume(_ int, amountMicros int64) error {
 	// amount 参数被忽略，使用内部 s.amount（已在构造时根据 preConsumedQuota 计算）
-	res, err := model.PreConsumeUserSubscription(s.requestId, s.userId, s.modelName, 0, s.amount)
+	if amountMicros <= 0 {
+		amountMicros = s.amountMicros
+	}
+	res, err := model.PreConsumeUserSubscriptionWithMoneyAmount(s.requestId, s.userId, s.modelName, 0, s.amount, amountMicros)
 	if err != nil {
 		return err
 	}
@@ -93,6 +174,10 @@ func (s *SubscriptionFunding) PreConsume(_ int) error {
 	s.preConsumed = res.PreConsumed
 	s.AmountTotal = res.AmountTotal
 	s.AmountUsedAfter = res.AmountUsedAfter
+	s.AmountTotalMicros = res.AmountTotalMicros
+	s.AmountUsedMicrosAfter = res.AmountUsedMicrosAfter
+	s.Currency = res.Currency
+	s.amountMicros = res.PreConsumedAmountMicros
 	// 获取订阅计划信息
 	if planInfo, err := model.GetSubscriptionPlanInfoByUserSubscriptionId(res.UserSubscriptionId); err == nil && planInfo != nil {
 		s.PlanId = planInfo.PlanId
@@ -101,9 +186,12 @@ func (s *SubscriptionFunding) PreConsume(_ int) error {
 	return nil
 }
 
-func (s *SubscriptionFunding) Settle(delta int) error {
+func (s *SubscriptionFunding) Settle(delta int, finalAmountMicros int64) error {
 	if delta == 0 {
 		return nil
+	}
+	if !model.ShouldWriteLegacyQuota() && finalAmountMicros >= 0 {
+		return model.PostConsumeUserSubscriptionMoneyDelta(s.subscriptionId, finalAmountMicros-s.amountMicros)
 	}
 	return model.PostConsumeUserSubscriptionDelta(s.subscriptionId, int64(delta))
 }

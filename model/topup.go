@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -55,6 +56,35 @@ func (topUp *TopUp) Update() error {
 	var err error
 	err = DB.Save(topUp).Error
 	return err
+}
+
+func (topUp *TopUp) MoneyMicros() int64 {
+	if topUp.Money > 0 {
+		return decimal.NewFromFloat(topUp.Money).Mul(decimal.NewFromInt(1000000)).Round(0).IntPart()
+	}
+	if topUp.Amount <= 0 {
+		return 0
+	}
+	if topUp.PaymentProvider == PaymentProviderCreem {
+		return decimal.NewFromInt(topUp.Amount).
+			Mul(decimal.NewFromInt(1000000)).
+			Div(decimal.NewFromFloat(common.QuotaPerUnit)).
+			Round(0).
+			IntPart()
+	}
+	return decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromInt(1000000)).Round(0).IntPart()
+}
+
+func creditTopUpMoneyWalletWithTx(tx *gorm.DB, topUp *TopUp, metadata string) error {
+	amountMicros := topUp.MoneyMicros()
+	if amountMicros <= 0 {
+		return errors.New("无效的充值金额")
+	}
+	return CreditWalletWithTx(tx, topUp.UserId, "USD", amountMicros, "topup:"+topUp.TradeNo, MoneyWalletTransactionTopup, metadata)
+}
+
+func shouldMirrorTopUpToQuota() bool {
+	return !billing_setting.IsMoneyBillingModeEnabled()
 }
 
 func GetTopUpById(id int) *TopUp {
@@ -139,8 +169,18 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 		}
 
 		quota = topUp.Money * common.QuotaPerUnit
-		err = tx.Model(&User{}).Where("id = ?", topUp.UserId).Updates(map[string]interface{}{"stripe_customer": customerId, "quota": gorm.Expr("quota + ?", quota)}).Error
-		if err != nil {
+		updateFields := map[string]interface{}{"stripe_customer": customerId}
+		if shouldMirrorTopUpToQuota() {
+			updateFields["quota"] = gorm.Expr("quota + ?", quota)
+		}
+		if len(updateFields) > 0 {
+			err = tx.Model(&User{}).Where("id = ?", topUp.UserId).Updates(updateFields).Error
+			if err != nil {
+				return err
+			}
+		}
+
+		if err := creditTopUpMoneyWalletWithTx(tx, topUp, PaymentProviderStripe); err != nil {
 			return err
 		}
 
@@ -368,8 +408,14 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 			return err
 		}
 
-		// 增加用户额度（立即写库，保持一致性）
-		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+		// legacy/dual-read 模式继续镜像 quota；money 模式只写 money wallet。
+		if shouldMirrorTopUpToQuota() {
+			if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+				return err
+			}
+		}
+
+		if err := creditTopUpMoneyWalletWithTx(tx, topUp, "admin"); err != nil {
 			return err
 		}
 
@@ -425,8 +471,9 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 		quota = topUp.Amount
 
 		// 构建更新字段，优先使用邮箱，如果邮箱为空则使用用户名
-		updateFields := map[string]interface{}{
-			"quota": gorm.Expr("quota + ?", quota),
+		updateFields := map[string]interface{}{}
+		if shouldMirrorTopUpToQuota() {
+			updateFields["quota"] = gorm.Expr("quota + ?", quota)
 		}
 
 		// 如果有客户邮箱，尝试更新用户邮箱（仅当用户邮箱为空时）
@@ -446,6 +493,10 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 
 		err = tx.Model(&User{}).Where("id = ?", topUp.UserId).Updates(updateFields).Error
 		if err != nil {
+			return err
+		}
+
+		if err := creditTopUpMoneyWalletWithTx(tx, topUp, PaymentProviderCreem); err != nil {
 			return err
 		}
 
@@ -506,7 +557,13 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 			return err
 		}
 
-		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+		if shouldMirrorTopUpToQuota() {
+			if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+				return err
+			}
+		}
+
+		if err := creditTopUpMoneyWalletWithTx(tx, topUp, PaymentProviderWaffo); err != nil {
 			return err
 		}
 
@@ -567,7 +624,13 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 			return err
 		}
 
-		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+		if shouldMirrorTopUpToQuota() {
+			if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+				return err
+			}
+		}
+
+		if err := creditTopUpMoneyWalletWithTx(tx, topUp, PaymentProviderWaffoPancake); err != nil {
 			return err
 		}
 

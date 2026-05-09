@@ -277,3 +277,61 @@ export function formatRequestPrice(
     abbreviate: false,
   })
 }
+
+export function formatMoneyPricingAnchor(
+  model: PricingModel,
+  showWithRecharge = false,
+  priceRate = 1,
+  usdExchangeRate = 1
+): string {
+  const amountMicros = model.money_pricing_amount_micros
+  if (
+    typeof amountMicros !== 'number' ||
+    !Number.isFinite(amountMicros) ||
+    amountMicros <= 0
+  ) {
+    return '-'
+  }
+
+  const currency = (model.money_pricing_currency || 'USD').toUpperCase()
+  const amount = amountMicros / 1_000_000
+  if (currency === 'USD') {
+    const displayAmount = applyRechargeRate(
+      amount,
+      showWithRecharge,
+      priceRate,
+      usdExchangeRate
+    )
+    return formatCurrencyFromUSD(displayAmount, {
+      digitsLarge: 4,
+      digitsSmall: 4,
+      abbreviate: false,
+    })
+  }
+
+  return `${currency} ${stripTrailingZeros(
+    amount.toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 6,
+    })
+  )}`
+}
+
+export function getMoneyPricingUnitLabel(unit?: string): string {
+  switch (unit) {
+    case 'video':
+      return 'video'
+    case 'request':
+      return 'request'
+    case 'image':
+      return 'image'
+    case 'audio_second':
+      return 'second'
+    case 'input_token':
+      return 'input token'
+    case 'output_token':
+      return 'output token'
+    default:
+      return 'unit'
+  }
+}

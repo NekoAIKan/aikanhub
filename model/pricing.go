@@ -1,8 +1,8 @@
 package model
 
 import (
-	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 
 	"sync"
@@ -16,26 +16,30 @@ import (
 )
 
 type Pricing struct {
-	ModelName              string                  `json:"model_name"`
-	Description            string                  `json:"description,omitempty"`
-	Icon                   string                  `json:"icon,omitempty"`
-	Tags                   string                  `json:"tags,omitempty"`
-	VendorID               int                     `json:"vendor_id,omitempty"`
-	QuotaType              int                     `json:"quota_type"`
-	ModelRatio             float64                 `json:"model_ratio"`
-	ModelPrice             float64                 `json:"model_price"`
-	OwnerBy                string                  `json:"owner_by"`
-	CompletionRatio        float64                 `json:"completion_ratio"`
-	CacheRatio             *float64                `json:"cache_ratio,omitempty"`
-	CreateCacheRatio       *float64                `json:"create_cache_ratio,omitempty"`
-	ImageRatio             *float64                `json:"image_ratio,omitempty"`
-	AudioRatio             *float64                `json:"audio_ratio,omitempty"`
-	AudioCompletionRatio   *float64                `json:"audio_completion_ratio,omitempty"`
-	EnableGroup            []string                `json:"enable_groups"`
-	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
-	BillingMode            string                  `json:"billing_mode,omitempty"`
-	BillingExpr            string                  `json:"billing_expr,omitempty"`
-	PricingVersion         string                  `json:"pricing_version,omitempty"`
+	ModelName                string                  `json:"model_name"`
+	Description              string                  `json:"description,omitempty"`
+	Icon                     string                  `json:"icon,omitempty"`
+	Tags                     string                  `json:"tags,omitempty"`
+	VendorID                 int                     `json:"vendor_id,omitempty"`
+	QuotaType                int                     `json:"quota_type"`
+	ModelRatio               float64                 `json:"model_ratio"`
+	ModelPrice               float64                 `json:"model_price"`
+	OwnerBy                  string                  `json:"owner_by"`
+	CompletionRatio          float64                 `json:"completion_ratio"`
+	CacheRatio               *float64                `json:"cache_ratio,omitempty"`
+	CreateCacheRatio         *float64                `json:"create_cache_ratio,omitempty"`
+	ImageRatio               *float64                `json:"image_ratio,omitempty"`
+	AudioRatio               *float64                `json:"audio_ratio,omitempty"`
+	AudioCompletionRatio     *float64                `json:"audio_completion_ratio,omitempty"`
+	EnableGroup              []string                `json:"enable_groups"`
+	SupportedEndpointTypes   []constant.EndpointType `json:"supported_endpoint_types"`
+	BillingMode              string                  `json:"billing_mode,omitempty"`
+	BillingExpr              string                  `json:"billing_expr,omitempty"`
+	MoneyPricingMode         string                  `json:"money_pricing_mode,omitempty"`
+	MoneyPricingCurrency     string                  `json:"money_pricing_currency,omitempty"`
+	MoneyPricingAmountMicros int64                   `json:"money_pricing_amount_micros,omitempty"`
+	MoneyPricingUnit         string                  `json:"money_pricing_unit,omitempty"`
+	PricingVersion           string                  `json:"pricing_version,omitempty"`
 }
 
 type PricingVendor struct {
@@ -220,7 +224,7 @@ func updatePricing() {
 			continue
 		}
 		var raw map[string]interface{}
-		if err := json.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
+		if err := common.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
 			endpoints := make([]string, 0, len(raw))
 			for k, v := range raw {
 				switch v.(type) {
@@ -264,7 +268,7 @@ func updatePricing() {
 			continue
 		}
 		var raw map[string]interface{}
-		if err := json.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
+		if err := common.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
 			for k, v := range raw {
 				switch val := v.(type) {
 				case string:
@@ -337,6 +341,7 @@ func updatePricing() {
 				pricing.BillingExpr = expr
 			}
 		}
+		applyMoneyPricingPolicy(&pricing)
 		pricingMap = append(pricingMap, pricing)
 	}
 
@@ -356,6 +361,147 @@ func updatePricing() {
 	modelEnableGroupsLock.Unlock()
 
 	lastGetPricingTime = time.Now()
+}
+
+func applyMoneyPricingPolicy(pricing *Pricing) {
+	if pricing == nil {
+		return
+	}
+	endpoints := pricing.SupportedEndpointTypes
+	if len(endpoints) == 0 {
+		endpoints = []constant.EndpointType{constant.EndpointTypeOpenAI}
+	}
+	for _, endpoint := range endpoints {
+		policy, err := GetEnabledRetailPricingPolicy(pricing.ModelName, DefaultPricingGroup, string(endpoint))
+		if err != nil {
+			continue
+		}
+		pricing.MoneyPricingMode = policy.PricingMode
+		pricing.MoneyPricingCurrency = policy.Currency
+		amountMicros, currency, unit, ok := extractMoneyPricingAnchor(policy.BillingRuleJSON)
+		if ok {
+			pricing.MoneyPricingAmountMicros = amountMicros
+			if currency != "" {
+				pricing.MoneyPricingCurrency = currency
+			}
+			pricing.MoneyPricingUnit = unit
+			if unit == "request" || unit == "video" || unit == "image" || unit == "audio_second" {
+				pricing.QuotaType = 1
+				pricing.ModelPrice = float64(amountMicros) / 1_000_000
+			}
+		}
+		return
+	}
+}
+
+func extractMoneyPricingAnchor(raw string) (amountMicros int64, currency string, unit string, ok bool) {
+	if strings.TrimSpace(raw) == "" {
+		return 0, "", "", false
+	}
+	var payload map[string]any
+	if err := common.Unmarshal([]byte(raw), &payload); err != nil {
+		return 0, "", "", false
+	}
+	profileCurrency, _ := payload["currency"].(string)
+	profileType, _ := payload["profile_type"].(string)
+	switch profileType {
+	case "money_usage_pricing":
+		rates, _ := payload["rates"].(map[string]any)
+		for rateUnit, rawRate := range rates {
+			if amount, rateCurrency, rateOK := moneyPricingAmountFromRate(rawRate); rateOK {
+				if !ok || amount < amountMicros {
+					amountMicros = amount
+					currency = firstNonEmpty(rateCurrency, profileCurrency)
+					unit = rateUnit
+					ok = true
+				}
+			}
+		}
+	case "video_rule_matrix":
+		amount, rateCurrency, found := findLowestMoneyPrice(payload)
+		if found {
+			return amount, firstNonEmpty(rateCurrency, profileCurrency), "video", true
+		}
+	}
+	return amountMicros, currency, unit, ok
+}
+
+func moneyPricingAmountFromRate(raw any) (int64, string, bool) {
+	rate, ok := raw.(map[string]any)
+	if !ok {
+		return 0, "", false
+	}
+	amount, ok := numberToInt64(rate["amount_micros"])
+	if !ok || amount <= 0 {
+		return 0, "", false
+	}
+	currency, _ := rate["currency"].(string)
+	return amount, currency, true
+}
+
+func findLowestMoneyPrice(value any) (int64, string, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		if amount, currency, ok := moneyPricingAmountFromRate(typed); ok {
+			return amount, currency, true
+		}
+		var (
+			bestAmount   int64
+			bestCurrency string
+			found        bool
+		)
+		for _, child := range typed {
+			amount, currency, ok := findLowestMoneyPrice(child)
+			if ok && (!found || amount < bestAmount) {
+				bestAmount = amount
+				bestCurrency = currency
+				found = true
+			}
+		}
+		return bestAmount, bestCurrency, found
+	case []any:
+		var (
+			bestAmount   int64
+			bestCurrency string
+			found        bool
+		)
+		for _, child := range typed {
+			amount, currency, ok := findLowestMoneyPrice(child)
+			if ok && (!found || amount < bestAmount) {
+				bestAmount = amount
+				bestCurrency = currency
+				found = true
+			}
+		}
+		return bestAmount, bestCurrency, found
+	default:
+		return 0, "", false
+	}
+}
+
+func numberToInt64(value any) (int64, bool) {
+	switch typed := value.(type) {
+	case int64:
+		return typed, true
+	case int:
+		return int64(typed), true
+	case float64:
+		if typed < 0 || math.Trunc(typed) != typed {
+			return 0, false
+		}
+		return int64(typed), true
+	default:
+		return 0, false
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.ToUpper(strings.TrimSpace(value))
+		}
+	}
+	return ""
 }
 
 // GetSupportedEndpointMap 返回全局端点到路径的映射

@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	moneypricing "github.com/QuantumNous/new-api/service/money_pricing"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
 
@@ -307,6 +308,84 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	return summary
 }
 
+func applyMoneyUsageSettlementQuote(relayInfo *relaycommon.RelayInfo, summary *textQuotaSummary) error {
+	if relayInfo == nil || summary == nil || !relayInfo.PriceData.MoneyPricingEnabled {
+		return nil
+	}
+	if summary.TotalTokens == 0 {
+		relayInfo.PriceData.MoneyActualAmountKnown = true
+		relayInfo.PriceData.MoneyActualAmountMicros = 0
+		summary.Quota = 0
+		return nil
+	}
+	endpointType := relayInfo.PriceData.MoneyEndpointType
+	if endpointType == "" {
+		endpointType = string(constant.EndpointTypeOpenAI)
+	}
+	policy, err := model.GetEnabledRetailPricingPolicy(summary.ModelName, relayInfo.UsingGroup, endpointType)
+	if err != nil {
+		return err
+	}
+	profile, err := moneypricing.ValidateMoneyUsagePricingProfile(policy.BillingRuleJSON)
+	if err != nil {
+		return err
+	}
+	features := actualMoneyUsageFeatures(relayInfo, summary, profile, endpointType)
+	quote, err := moneypricing.QuoteRetailPricingPolicy(policy, features, model.SettlementCurrency())
+	if err != nil {
+		return err
+	}
+	relayInfo.PriceData.MoneyActualAmountKnown = true
+	relayInfo.PriceData.MoneyActualAmountMicros = quote.RetailAmountMicros
+	relayInfo.PriceData.MoneyPricingActualFeaturesJSON = quote.FeaturesJSON
+	relayInfo.PriceData.MoneyPricingActualUpstreamCostMicros = quote.UpstreamCostMicros
+	relayInfo.PriceData.MoneySettlementCurrency = quote.SettlementCurrency
+	relayInfo.PriceData.MoneyPricingVersion = quote.PricingVersion
+	relayInfo.PriceData.MoneyPricingHash = quote.PricingHash
+
+	summary.Quota = model.MoneyMicrosToLegacyQuota(quote.RetailAmountMicros)
+	if quote.RetailAmountMicros > 0 && summary.Quota == 0 {
+		summary.Quota = 1
+	}
+	return nil
+}
+
+func actualMoneyUsageFeatures(relayInfo *relaycommon.RelayInfo, summary *textQuotaSummary, profile *moneypricing.MoneyUsagePricingProfile, endpointType string) moneypricing.MoneyUsageFeatures {
+	features := moneypricing.MoneyUsageFeatures{
+		EndpointType: endpointType,
+		PublicModel:  summary.ModelName,
+		Group:        relayInfo.UsingGroup,
+	}
+	if profile == nil {
+		return features
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitRequest]; ok {
+		features.RequestCount = 1
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitInputToken]; ok {
+		features.InputTokens = int64(summary.PromptTokens)
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitOutputToken]; ok {
+		features.OutputTokens = int64(summary.CompletionTokens)
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitCachedInputToken]; ok {
+		features.CachedInputTokens = int64(summary.CacheTokens)
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitCacheWriteToken]; ok {
+		features.CacheWriteTokens = int64(cacheWriteTokensTotal(*summary))
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitAudioInputToken]; ok {
+		features.AudioInputTokens = int64(summary.AudioTokens)
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitWebSearchCall]; ok {
+		features.WebSearchCount = int64(summary.WebSearchCallCount + summary.ClaudeWebSearchCallCount)
+	}
+	if _, ok := profile.Rates[moneypricing.UsageUnitFileSearchCall]; ok {
+		features.FileSearchCount = int64(summary.FileSearchCallCount)
+	}
+	return features
+}
+
 func usageSemanticFromUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) string {
 	if usage != nil && usage.UsageSemantic != "" {
 		return usage.UsageSemantic
@@ -341,6 +420,13 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 			tieredBillingApplied = true
 			tieredResult = tieredRes
 			summary.Quota = composeTieredTextQuota(relayInfo, summary, tieredQuota, tieredRes)
+		}
+	}
+	if err := applyMoneyUsageSettlementQuote(relayInfo, &summary); err != nil {
+		logger.LogError(ctx, "error applying money usage pricing: "+err.Error())
+		if relayInfo.PriceData.MoneyPricingEnabled && relayInfo.PriceData.MoneyPreConsumedAmountKnown {
+			relayInfo.PriceData.MoneyActualAmountKnown = true
+			relayInfo.PriceData.MoneyActualAmountMicros = relayInfo.PriceData.MoneyPreConsumedAmountMicros
 		}
 	}
 
@@ -455,6 +541,18 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	}
 	if tieredBillingApplied {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
+	}
+	if relayInfo.PriceData.MoneyPricingEnabled {
+		other["money_pricing"] = true
+		other["money_pricing_mode"] = relayInfo.PriceData.MoneyPricingMode
+		other["money_settlement_currency"] = relayInfo.PriceData.MoneySettlementCurrency
+		other["money_pre_consumed_amount_micros"] = relayInfo.PriceData.MoneyPreConsumedAmountMicros
+		if relayInfo.PriceData.MoneyActualAmountKnown {
+			other["money_actual_amount_micros"] = relayInfo.PriceData.MoneyActualAmountMicros
+		}
+		if relayInfo.PriceData.MoneyPricingHash != "" {
+			other["money_pricing_hash"] = relayInfo.PriceData.MoneyPricingHash
+		}
 	}
 
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{

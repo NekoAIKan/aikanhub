@@ -33,6 +33,19 @@ export interface UserProfile {
   quota: number
   /** Total used quota */
   used_quota: number
+  /** Money billing mode flag */
+  money_billing_mode?: string
+  /** Settlement currency for money wallet */
+  money_currency?: string
+  /** Available money wallet balance in micros */
+  money_balance_amount_micros?: number
+  /** Money wallet summary */
+  money_wallet?: {
+    currency: string
+    available_micros: number
+    frozen_micros: number
+    lifetime_topup_micros: number
+  }
   /** Total request count */
   request_count: number
   /** Account status (1=启用, 2=禁用, 3=待审核, 4=已删除) */

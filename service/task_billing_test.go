@@ -19,11 +19,28 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 func TestMain(m *testing.M) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	var db *gorm.DB
+	var err error
+	if dsn := os.Getenv("TEST_POSTGRES_DSN"); dsn != "" {
+		db, err = gorm.Open(postgres.New(postgres.Config{
+			DSN:                  dsn,
+			PreferSimpleProtocol: shouldUseSimplePostgresProtocol(),
+		}), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+		common.UsingPostgreSQL = true
+		common.UsingSQLite = false
+		common.UsingMySQL = false
+	} else {
+		db, err = gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+		common.UsingSQLite = true
+		common.UsingPostgreSQL = false
+		common.UsingMySQL = false
+	}
 	if err != nil {
 		panic("failed to open test db: " + err.Error())
 	}
@@ -36,10 +53,10 @@ func TestMain(m *testing.M) {
 	model.DB = db
 	model.LOG_DB = db
 
-	common.UsingSQLite = true
 	common.RedisEnabled = false
 	common.BatchUpdateEnabled = false
 	common.LogConsumeEnabled = true
+	setPostgresServiceTestSchema(db)
 
 	if err := db.AutoMigrate(
 		&model.Task{},
@@ -48,12 +65,53 @@ func TestMain(m *testing.M) {
 		&model.Log{},
 		&model.Channel{},
 		&model.TopUp{},
+		&model.SubscriptionPlan{},
 		&model.UserSubscription{},
+		&model.SubscriptionPreConsumeRecord{},
+		&model.MoneyWallet{},
+		&model.MoneyWalletTransaction{},
+		&model.FxRate{},
+		&model.RetailPricingPolicy{},
 	); err != nil {
 		panic("failed to migrate: " + err.Error())
 	}
 
 	os.Exit(m.Run())
+}
+
+func shouldUseSimplePostgresProtocol() bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv("TEST_POSTGRES_SIMPLE_PROTOCOL")))
+	return value != "0" && value != "false" && value != "no"
+}
+
+func setPostgresServiceTestSchema(db *gorm.DB) {
+	if !common.UsingPostgreSQL {
+		return
+	}
+	schema := strings.TrimSpace(os.Getenv("TEST_POSTGRES_SCHEMA"))
+	if schema == "" {
+		return
+	}
+	for _, r := range schema {
+		if r != '_' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
+			panic("invalid TEST_POSTGRES_SCHEMA: only letters, digits, and underscore are allowed")
+		}
+	}
+	quotedSchema := `"` + schema + `"`
+	if err := db.Exec("CREATE SCHEMA IF NOT EXISTS " + quotedSchema).Error; err != nil {
+		panic("failed to create postgres test schema: " + err.Error())
+	}
+	if err := db.Exec("SET search_path TO " + quotedSchema).Error; err != nil {
+		panic("failed to set postgres test schema: " + err.Error())
+	}
+}
+
+func ensureServiceTestSchema(t *testing.T, values ...interface{}) {
+	t.Helper()
+	if common.UsingPostgreSQL {
+		return
+	}
+	require.NoError(t, model.DB.AutoMigrate(values...))
 }
 
 // ---------------------------------------------------------------------------
@@ -70,6 +128,25 @@ func truncate(t *testing.T) {
 		model.DB.Exec("DELETE FROM channels")
 		model.DB.Exec("DELETE FROM top_ups")
 		model.DB.Exec("DELETE FROM user_subscriptions")
+		model.DB.Exec("DELETE FROM money_wallet_transactions")
+		model.DB.Exec("DELETE FROM money_wallets")
+	})
+}
+
+func setTaskBillingMoneyMode(t *testing.T) {
+	t.Helper()
+	originalQuotaPerUnit := common.QuotaPerUnit
+	common.QuotaPerUnit = 500_000
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_setting.money_billing_mode":  "money",
+		"billing_setting.settlement_currency": "USD",
+	}))
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+		_ = config.GlobalConfig.LoadFromDB(map[string]string{
+			"billing_setting.money_billing_mode":  "legacy",
+			"billing_setting.settlement_currency": "USD",
+		})
 	})
 }
 
@@ -163,6 +240,20 @@ func getTokenUsedQuota(t *testing.T, id int) int {
 	var token model.Token
 	require.NoError(t, model.DB.Select("used_quota").Where("id = ?", id).First(&token).Error)
 	return token.UsedQuota
+}
+
+func getTokenRemainAmountMicros(t *testing.T, id int) int64 {
+	t.Helper()
+	var token model.Token
+	require.NoError(t, model.DB.Select("remain_amount_micros").Where("id = ?", id).First(&token).Error)
+	return token.RemainAmountMicros
+}
+
+func getWalletAvailableMicros(t *testing.T, userID int) int64 {
+	t.Helper()
+	var wallet model.MoneyWallet
+	require.NoError(t, model.DB.First(&wallet, "user_id = ? AND currency = ?", userID, "USD").Error)
+	return wallet.AvailableMicros
 }
 
 func getSubscriptionUsed(t *testing.T, id int) int64 {
@@ -294,6 +385,31 @@ func TestRefundTaskQuota_NoToken(t *testing.T) {
 	assert.Equal(t, model.LogTypeRefund, log.Type)
 }
 
+func TestRefundTaskQuota_WalletMoneyMode(t *testing.T) {
+	truncate(t)
+	setTaskBillingMoneyMode(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 41, 41, 41
+	const initQuota, preConsumed = 10000, 3000
+
+	seedUser(t, userID, initQuota)
+	seedToken(t, tokenID, userID, "sk-money-refund", 0)
+	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", tokenID).Updates(map[string]interface{}{
+		"remain_amount_micros": int64(1_000_000),
+		"currency":             "USD",
+	}).Error)
+	seedChannel(t, channelID)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+
+	RefundTaskQuota(ctx, task, "money task failed")
+
+	assert.Equal(t, initQuota, getUserQuota(t, userID))
+	assert.Equal(t, int64(1_006_000), getTokenRemainAmountMicros(t, tokenID))
+	assert.Equal(t, int64(6_000), getWalletAvailableMicros(t, userID))
+}
+
 // ===========================================================================
 // RecalculateTaskQuota tests
 // ===========================================================================
@@ -423,6 +539,34 @@ func TestRecalculate_ActualQuotaZero(t *testing.T) {
 	// No change (early return)
 	assert.Equal(t, initQuota, getUserQuota(t, userID))
 	assert.Equal(t, int64(0), countLogs(t))
+}
+
+func TestRecalculate_WalletMoneyMode(t *testing.T) {
+	truncate(t)
+	setTaskBillingMoneyMode(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 42, 42, 42
+	const initQuota, preConsumed = 10000, 2000
+	const actualQuota = 3000
+
+	seedUser(t, userID, initQuota)
+	require.NoError(t, model.CreditWallet(userID, "USD", 5_000_000, "test-money-recalc-topup", model.MoneyWalletTransactionTopup, "test"))
+	seedToken(t, tokenID, userID, "sk-money-recalc", 0)
+	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", tokenID).Updates(map[string]interface{}{
+		"remain_amount_micros": int64(1_000_000),
+		"currency":             "USD",
+	}).Error)
+	seedChannel(t, channelID)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+
+	RecalculateTaskQuota(ctx, task, actualQuota, "money adaptor adjustment")
+
+	assert.Equal(t, initQuota, getUserQuota(t, userID))
+	assert.Equal(t, int64(4_998_000), getWalletAvailableMicros(t, userID))
+	assert.Equal(t, int64(998_000), getTokenRemainAmountMicros(t, tokenID))
+	assert.Equal(t, actualQuota, task.Quota)
 }
 
 func TestRecalculate_Subscription_NegativeDelta(t *testing.T) {
