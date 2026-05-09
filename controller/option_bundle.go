@@ -81,7 +81,7 @@ func ExportOptionBundle(c *gin.Context) {
 		"data": OptionBundle{
 			SchemaVersion: 2,
 			ExportedAt:    common.GetTimestamp(),
-			App:           "aikanhub",
+			App:           "kittyvibe",
 			Options:       options,
 			Redacted:      redacted,
 		},

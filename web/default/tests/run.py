@@ -1,7 +1,7 @@
 """Seedance E2E test runner.
 
 Exercises every endpoint documented under web/default/src/features/docs/
-against a running aikanhub instance. Submits each generation, polls until
+against a running kittyvibe instance. Submits each generation, polls until
 success/failure (5 min cap), and writes outputs to ./out/.
 
 Usage:
@@ -29,10 +29,21 @@ from volcenginesdkarkruntime import Ark
 HERE = Path(__file__).resolve().parent
 load_dotenv(HERE.parent.parent.parent / ".env.maomao")
 
-BASE = os.environ.get("AIKANHUB_BASE_URL", "http://localhost:3000")
-TOKEN = os.environ["AIKANHUB_TOKEN"]
-MODEL = os.environ.get("AIKANHUB_MODEL", "doubao-seedance-2-0-fast-260128")
-TIMEOUT = int(os.environ.get("AIKANHUB_TIMEOUT", "900"))  # seconds per task
+def env(name: str, legacy_name: str, default: str | None = None) -> str | None:
+    return os.environ.get(name) or os.environ.get(legacy_name) or default
+
+
+def require_env(name: str, legacy_name: str) -> str:
+    value = env(name, legacy_name)
+    if not value:
+        raise RuntimeError(f"set {name} or {legacy_name}")
+    return value
+
+
+BASE = env("KITTYVIBE_BASE_URL", "AIKANHUB_BASE_URL", "http://localhost:3000")
+TOKEN = require_env("KITTYVIBE_TOKEN", "AIKANHUB_TOKEN")
+MODEL = env("KITTYVIBE_MODEL", "AIKANHUB_MODEL", "doubao-seedance-2-0-fast-260128")
+TIMEOUT = int(env("KITTYVIBE_TIMEOUT", "AIKANHUB_TIMEOUT", "900"))  # seconds per task
 
 OUT = HERE / "out"
 OUT.mkdir(exist_ok=True)

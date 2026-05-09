@@ -7,16 +7,27 @@ import { dirname } from 'node:path'
  * `New-Api-User` header value (the user id), and persist a
  * Playwright `storageState` so every spec starts already-authenticated.
  *
- * The aikanhub frontend reads the user id from localStorage under `user`
+ * The kittyvibe frontend reads the user id from localStorage under `user`
  * (JSON.stringified profile) and looks up `New-Api-User` from there for
  * every authenticated request — so we also bake that into storageState.
  */
 export default async function globalSetup(config: FullConfig) {
-  const baseURL = process.env.AIKANHUB_BASE_URL ?? 'http://localhost:3000'
-  const username = process.env.AIKANHUB_ADMIN_USER ?? 'admin'
-  const password = process.env.AIKANHUB_ADMIN_PASS ?? 'admin123456'
+  const baseURL =
+    process.env.KITTYVIBE_BASE_URL ??
+    process.env.AIKANHUB_BASE_URL ??
+    'http://localhost:3000'
+  const username =
+    process.env.KITTYVIBE_ADMIN_USER ??
+    process.env.AIKANHUB_ADMIN_USER ??
+    'admin'
+  const password =
+    process.env.KITTYVIBE_ADMIN_PASS ??
+    process.env.AIKANHUB_ADMIN_PASS ??
+    'admin123456'
   const storageStatePath =
-    process.env.AIKANHUB_STORAGE_STATE ?? './.auth/admin.json'
+    process.env.KITTYVIBE_STORAGE_STATE ??
+    process.env.AIKANHUB_STORAGE_STATE ??
+    './.auth/admin.json'
 
   const ctx = await request.newContext({ baseURL, ignoreHTTPSErrors: true })
   const res = await ctx.post('/api/user/login', {
@@ -44,6 +55,7 @@ export default async function globalSetup(config: FullConfig) {
   writeFileSync(storageStatePath, JSON.stringify(state, null, 2))
   // Side-channel for tests that need to issue API requests outside the
   // browser context (page.request). Read in fixtures.ts.
+  process.env.KITTYVIBE_USER_ID = String(user.id)
   process.env.AIKANHUB_USER_ID = String(user.id)
   writeFileSync(`${dirname(storageStatePath)}/userid.txt`, String(user.id))
   console.log(

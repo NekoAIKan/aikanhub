@@ -10,7 +10,7 @@ Output layout:
     fixtures/<case>/video.mp4             — downloaded binary (when status=succeeded)
     fixtures/<case>/meta.json             — sanitised summary (no signed URLs)
 
-Set AIKANHUB_WRITE_RAW_FIXTURES=1 to also write final.raw.json with signed
+Set KITTYVIBE_WRITE_RAW_FIXTURES=1 to also write final.raw.json with signed
 Volcano URLs for local debugging. Raw signed captures are gitignored.
 
 Run:
@@ -18,7 +18,7 @@ Run:
     python record.py text i2v_first       # subset
     python record.py --skip multimodal    # all but listed
 
-Token comes from ../../../.env.maomao (AIKANHUB_TOKEN must be a real
+Token comes from ../../../.env.maomao (KITTYVIBE_TOKEN must be a real
 ark- prefixed Volcano Ark API key, not the gateway sk- token).
 """
 from __future__ import annotations
@@ -41,12 +41,23 @@ from dotenv import load_dotenv
 HERE = Path(__file__).resolve().parent
 load_dotenv(HERE.parent.parent.parent / ".env.maomao")
 
-TOKEN = os.environ["AIKANHUB_TOKEN"]
-FAST_MODEL = os.environ.get("AIKANHUB_MODEL", "doubao-seedance-2-0-fast-260128")
+def env(name: str, legacy_name: str, default: str | None = None) -> str | None:
+    return os.environ.get(name) or os.environ.get(legacy_name) or default
+
+
+def require_env(name: str, legacy_name: str) -> str:
+    value = env(name, legacy_name)
+    if not value:
+        raise RuntimeError(f"set {name} or {legacy_name}")
+    return value
+
+
+TOKEN = require_env("KITTYVIBE_TOKEN", "AIKANHUB_TOKEN")
+FAST_MODEL = env("KITTYVIBE_MODEL", "AIKANHUB_MODEL", "doubao-seedance-2-0-fast-260128")
 FULL_MODEL = "doubao-seedance-2-0-260128"
 ARK_BASE = os.environ.get("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
-TIMEOUT = int(os.environ.get("AIKANHUB_TIMEOUT", "900"))
-WRITE_RAW_FIXTURES = os.environ.get("AIKANHUB_WRITE_RAW_FIXTURES") == "1"
+TIMEOUT = int(env("KITTYVIBE_TIMEOUT", "AIKANHUB_TIMEOUT", "900"))
+WRITE_RAW_FIXTURES = env("KITTYVIBE_WRITE_RAW_FIXTURES", "AIKANHUB_WRITE_RAW_FIXTURES") == "1"
 
 FIX = HERE / "fixtures"
 FIX.mkdir(exist_ok=True)

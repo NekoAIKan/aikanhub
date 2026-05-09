@@ -82,7 +82,7 @@ until curl -sf http://localhost:3000/api/status > /dev/null; do sleep 2; done &&
 4. **测试 API**：
 
 ```bash
-export AIKANHUB_TOKEN=sk-xxxxxxxx
+export KITTYVIBE_TOKEN=sk-xxxxxxxx
 bash tools/test-seedance.sh
 ```
 

@@ -1,5 +1,5 @@
-# aikanhub 本地开发栈
-#   - app: aikanhub 后端 + 前端（本地 build）
+# kittyvibe 本地开发栈
+#   - app: kittyvibe 后端 + 前端（本地 build）
 #   - redis: 本地缓存
 #   - SQL_DSN: 本地开发 Neon PostgreSQL 分支（通过 .env.local 配置）
 #
@@ -18,8 +18,8 @@ services:
       dockerfile: Dockerfile
       args:
         GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
-    image: aikanhub:local
-    container_name: aikanhub-app
+    image: kittyvibe:local
+    container_name: kittyvibe-app
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -34,14 +34,14 @@ services:
       - PORT=${PORT:-3000}
       - ERROR_LOG_ENABLED=${ERROR_LOG_ENABLED:-true}
       - BATCH_UPDATE_ENABLED=${BATCH_UPDATE_ENABLED:-true}
-      - NODE_NAME=${NODE_NAME:-aikanhub-dev-1}
+      - NODE_NAME=${NODE_NAME:-kittyvibe-dev-1}
       - UPDATE_TASK=${UPDATE_TASK:-true}
       - STREAMING_TIMEOUT=${STREAMING_TIMEOUT:-300}
     depends_on:
       redis:
         condition: service_healthy
     networks:
-      - aikanhub-net
+      - kittyvibe-net
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/status | grep -o '\"success\":\\s*true' || exit 1"]
       interval: 30s
@@ -51,21 +51,44 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: aikanhub-redis
+    container_name: kittyvibe-redis
     restart: unless-stopped
-    command: ["redis-server", "--requirepass", "3070f09bd424ef9d1bedd3e035616fd7", "--appendonly", "yes"]
+    environment:
+      - REDIS_CONN_STRING=${REDIS_CONN_STRING}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        password="$${REDIS_PASSWORD:-}"
+        if [ -z "$$password" ]; then
+          password="$$(printf '%s' "$${REDIS_CONN_STRING:-}" | sed -n 's#^redis://:\([^@]*\)@.*#\1#p')"
+        fi
+        if [ -z "$$password" ]; then
+          echo "REDIS_PASSWORD or a password-bearing REDIS_CONN_STRING is required" >&2
+          exit 1
+        fi
+        exec redis-server --requirepass "$$password" --appendonly yes
     volumes:
       - redis_data:/data
     networks:
-      - aikanhub-net
+      - kittyvibe-net
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "3070f09bd424ef9d1bedd3e035616fd7", "ping"]
+      test:
+        - CMD-SHELL
+        - |
+          password="$${REDIS_PASSWORD:-}"
+          if [ -z "$$password" ]; then
+            password="$$(printf '%s' "$${REDIS_CONN_STRING:-}" | sed -n 's#^redis://:\([^@]*\)@.*#\1#p')"
+          fi
+          redis-cli -a "$$password" ping
       interval: 10s
       timeout: 5s
       retries: 5
 
 networks:
-  aikanhub-net:
+  kittyvibe-net:
     driver: bridge
 
 volumes:

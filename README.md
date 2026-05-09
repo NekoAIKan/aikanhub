@@ -47,12 +47,12 @@ open http://localhost:3000
 部署完成后，登录后台 → **令牌** 创建一个 `sk-xxx`，然后：
 
 ```bash
-export AIKANHUB_TOKEN=sk-你的token
-export AIKANHUB_HOST=http://localhost:3000   # 部署地址
+export KITTYVIBE_TOKEN=sk-你的token
+export KITTYVIBE_HOST=http://localhost:3000   # 部署地址
 
 # 1) 提交视频生成任务（异步）
-curl -X POST $AIKANHUB_HOST/v1/video/generations \
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \
+curl -X POST $KITTYVIBE_HOST/v1/video/generations \
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "doubao-seedance-2-0-fast-260128",
@@ -64,8 +64,8 @@ curl -X POST $AIKANHUB_HOST/v1/video/generations \
 # → {"task_id": "task_xxx", "status": "queued"}
 
 # 2) 轮询状态（5s 一次，通常 90-120s 完成）
-curl $AIKANHUB_HOST/v1/video/generations/task_xxx \
-  -H "Authorization: Bearer $AIKANHUB_TOKEN"
+curl $KITTYVIBE_HOST/v1/video/generations/task_xxx \
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN"
 # → {"data": {"status": "SUCCESS", "data": {"content": {"video_url": "https://..."}}}}
 ```
 

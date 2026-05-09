@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "aikanhub-e2e",
+      "name": "kittyvibe-e2e",
       "devDependencies": {
         "@playwright/test": "^1.49.1",
       },

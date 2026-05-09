@@ -2,28 +2,31 @@
 # End-to-end test orchestrator.
 #
 # Steps:
-#   1. ensure aikanhub-app container is running with up-to-date code
+#   1. ensure kittyvibe-app container is running with up-to-date code
 #   2. start mock Volcano upstream (./mock_volcano.py) on :8721
 #   3. configure Channel #1 to point at the mock + correct seedance models
 #   4. run the python replay (backend round-trip)
 #   5. run the Playwright admin-UI suite
 #
 # Requirements:
-#   - .env.maomao with AIKANHUB_TOKEN (gateway sk- token, NOT the upstream key)
+#   - .env.maomao with KITTYVIBE_GATEWAY_TOKEN (gateway sk- token, NOT the upstream key)
 #   - admin user (default: admin/admin123456) for the UI suite
 set -euo pipefail
 cd "$(dirname "$0")"
 
-GATEWAY_TOKEN="${AIKANHUB_GATEWAY_TOKEN:-}"
+GATEWAY_TOKEN="${KITTYVIBE_GATEWAY_TOKEN:-${AIKANHUB_GATEWAY_TOKEN:-}}"
 if [ -z "$GATEWAY_TOKEN" ]; then
-  echo "Set AIKANHUB_GATEWAY_TOKEN to a gateway sk- token (issued via /api/token/)." >&2
+  echo "Set KITTYVIBE_GATEWAY_TOKEN to a gateway sk- token (issued via /api/token/)." >&2
   exit 1
 fi
 export AIKANHUB_DB="${AIKANHUB_DB:-/Users/randomradio/src/aikanhub/data/one-api.db}"
-export AIKANHUB_BASE_URL="${AIKANHUB_BASE_URL:-http://localhost:3000}"
-export AIKANHUB_ADMIN_USER="${AIKANHUB_ADMIN_USER:-admin}"
-export AIKANHUB_ADMIN_PASS="${AIKANHUB_ADMIN_PASS:-admin123456}"
-MOCK_BASE_URL="${AIKANHUB_E2E_MOCK_BASE_URL:-http://host.docker.internal:8721}"
+export KITTYVIBE_BASE_URL="${KITTYVIBE_BASE_URL:-${AIKANHUB_BASE_URL:-http://localhost:3000}}"
+export AIKANHUB_BASE_URL="$KITTYVIBE_BASE_URL"
+export KITTYVIBE_ADMIN_USER="${KITTYVIBE_ADMIN_USER:-${AIKANHUB_ADMIN_USER:-admin}}"
+export AIKANHUB_ADMIN_USER="$KITTYVIBE_ADMIN_USER"
+export KITTYVIBE_ADMIN_PASS="${KITTYVIBE_ADMIN_PASS:-${AIKANHUB_ADMIN_PASS:-admin123456}}"
+export AIKANHUB_ADMIN_PASS="$KITTYVIBE_ADMIN_PASS"
+MOCK_BASE_URL="${KITTYVIBE_E2E_MOCK_BASE_URL:-${AIKANHUB_E2E_MOCK_BASE_URL:-http://host.docker.internal:8721}}"
 SEEDANCE_MODELS="doubao-seedance-2-0-fast-260128,doubao-seedance-2-0-260128"
 
 # Activate or create the python venv.
@@ -42,6 +45,7 @@ curl -sS -m 3 -o /dev/null -w "[mock] HTTP %{http_code}\n" \
   http://localhost:8721/api/v3/contents/generations/tasks/ping
 
 # 2. Force local DB routing to the mock before any replay can submit work.
+KITTYVIBE_E2E_MOCK_BASE_URL="$MOCK_BASE_URL" \
 AIKANHUB_E2E_MOCK_BASE_URL="$MOCK_BASE_URL" \
 AIKANHUB_E2E_SEEDANCE_MODELS="$SEEDANCE_MODELS" \
 python - <<'PY'
@@ -195,7 +199,7 @@ PY
 # 3. Backend round-trip.
 echo
 echo "=== backend replay ==="
-AIKANHUB_GATEWAY_TOKEN="$GATEWAY_TOKEN" python replay.py
+KITTYVIBE_GATEWAY_TOKEN="$GATEWAY_TOKEN" AIKANHUB_GATEWAY_TOKEN="$GATEWAY_TOKEN" python replay.py
 
 # 4. Playwright suite.
 echo
