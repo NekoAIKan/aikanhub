@@ -261,6 +261,13 @@ export interface TaskLog {
   fail_reason?: string
   result_url?: string // 任务成功后的视频/图片 URL（新数据写在这里；旧数据回退到 fail_reason）
   status: string // NOT_START, SUBMITTED, IN_PROGRESS, SUCCESS, FAILURE, QUEUED, UNKNOWN
+  /** Backend serializes the Task `Properties` struct here; carries the
+   * customer-facing model name we want to render in the task list. */
+  properties?: {
+    origin_model_name?: string
+    upstream_model_name?: string
+    input?: string
+  }
   other?: string
   billing_breakdown?: BillingBreakdown
   created_at?: number
