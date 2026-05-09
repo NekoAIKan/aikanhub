@@ -28,7 +28,17 @@ func GetEndpointTypesByChannelType(channelType int, modelName string) []constant
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeOpenAI}
 	case constant.ChannelTypeXai:
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeOpenAI, constant.EndpointTypeOpenAIResponse}
-	case constant.ChannelTypeSora:
+	case constant.ChannelTypeSora,
+		constant.ChannelTypeDoubaoVideo,
+		constant.ChannelTypeKling,
+		constant.ChannelTypeJimeng,
+		constant.ChannelTypeVidu,
+		constant.ChannelTypePixverse:
+		// Video task channels expose `POST /v1/video/generations` and the
+		// task fetch routes; they are NOT OpenAI Chat. Without this branch
+		// every video model falls through to the default Chat mapping and
+		// the /pricing sidebar shows "Video 0" while every model is
+		// double-counted under "Chat".
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeOpenAIVideo}
 	default:
 		if IsOpenAIResponseOnlyModel(modelName) {
