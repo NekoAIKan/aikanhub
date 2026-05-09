@@ -184,11 +184,12 @@ func modelPriceHelperMoneyUsage(info *relaycommon.RelayInfo, promptTokens int, m
 		}
 		return types.PriceData{}, true, err
 	}
-	profile, err := moneypricing.ValidateMoneyUsagePricingProfile(policy.BillingRuleJSON)
+	baseFeatures := moneyUsageBaseFeatures(info, endpointType)
+	activeUnits, err := moneypricing.ActiveUsageUnitsForPolicy(policy, baseFeatures)
 	if err != nil {
 		return types.PriceData{}, true, err
 	}
-	features := estimatedMoneyUsageFeatures(info, profile, promptTokens, meta, endpointType)
+	features := estimatedMoneyUsageFeatures(info, activeUnits, promptTokens, meta, endpointType)
 	quote, err := moneypricing.QuoteRetailPricingPolicy(policy, features, model.SettlementCurrency())
 	if err != nil {
 		return types.PriceData{}, true, err
@@ -217,22 +218,36 @@ func modelPriceHelperMoneyUsage(info *relaycommon.RelayInfo, promptTokens int, m
 	}, true, nil
 }
 
-func estimatedMoneyUsageFeatures(info *relaycommon.RelayInfo, profile *moneypricing.MoneyUsagePricingProfile, promptTokens int, meta *types.TokenCountMeta, endpointType string) moneypricing.MoneyUsageFeatures {
-	features := moneypricing.MoneyUsageFeatures{
-		EndpointType: endpointType,
-		PublicModel:  info.OriginModelName,
-		Group:        info.UsingGroup,
+func moneyUsageBaseFeatures(info *relaycommon.RelayInfo, endpointType string) moneypricing.MoneyUsageFeatures {
+	if info == nil {
+		return moneypricing.MoneyUsageFeatures{EndpointType: endpointType}
 	}
-	if profile == nil {
-		return features
+	upstreamModel := info.OriginModelName
+	channelID := 0
+	if info.ChannelMeta != nil && info.UpstreamModelName != "" {
+		upstreamModel = info.UpstreamModelName
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitRequest]; ok {
+	if info.ChannelMeta != nil {
+		channelID = info.ChannelMeta.ChannelId
+	}
+	return moneypricing.MoneyUsageFeatures{
+		EndpointType:  endpointType,
+		PublicModel:   info.OriginModelName,
+		UpstreamModel: upstreamModel,
+		ChannelID:     channelID,
+		Group:         info.UsingGroup,
+	}
+}
+
+func estimatedMoneyUsageFeatures(info *relaycommon.RelayInfo, activeUnits map[moneypricing.UsageUnit]struct{}, promptTokens int, meta *types.TokenCountMeta, endpointType string) moneypricing.MoneyUsageFeatures {
+	features := moneyUsageBaseFeatures(info, endpointType)
+	if _, ok := activeUnits[moneypricing.UsageUnitRequest]; ok {
 		features.RequestCount = 1
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitInputToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitInputToken]; ok {
 		features.InputTokens = int64(promptTokens)
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitOutputToken]; ok && meta != nil {
+	if _, ok := activeUnits[moneypricing.UsageUnitOutputToken]; ok && meta != nil {
 		features.OutputTokens = int64(meta.MaxTokens)
 	}
 	return features

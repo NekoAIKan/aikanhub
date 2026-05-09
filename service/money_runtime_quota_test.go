@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	moneypricing "github.com/QuantumNous/new-api/service/money_pricing"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
@@ -20,8 +21,8 @@ const moneyRuntimePolicyJSON = `{"schema_version":1,"profile_type":"money_usage_
 
 func setupMoneyRuntimeQuotaTest(t *testing.T) {
 	t.Helper()
-	ensureServiceTestSchema(t, &model.User{}, &model.Token{}, &model.Log{}, &model.MoneyWallet{}, &model.MoneyWalletTransaction{}, &model.RetailPricingPolicy{})
-	for _, table := range []string{"logs", "money_wallet_transactions", "money_wallets", "retail_pricing_policies", "tokens", "users"} {
+	ensureServiceTestSchema(t, &model.User{}, &model.Token{}, &model.Log{}, &model.MoneyWallet{}, &model.MoneyWalletTransaction{}, &model.Channel{}, &model.Ability{}, &model.ChannelModelCost{}, &model.RetailPricingPolicy{})
+	for _, table := range []string{"logs", "money_wallet_transactions", "money_wallets", "channel_model_costs", "abilities", "channels", "retail_pricing_policies", "tokens", "users"} {
 		require.NoError(t, model.DB.Exec("DELETE FROM "+table).Error)
 	}
 	originalQuotaPerUnit := common.QuotaPerUnit
@@ -35,7 +36,7 @@ func setupMoneyRuntimeQuotaTest(t *testing.T) {
 		"billing_setting.settlement_currency": "USD",
 	}))
 	t.Cleanup(func() {
-		for _, table := range []string{"logs", "money_wallet_transactions", "money_wallets", "retail_pricing_policies", "tokens", "users"} {
+		for _, table := range []string{"logs", "money_wallet_transactions", "money_wallets", "channel_model_costs", "abilities", "channels", "retail_pricing_policies", "tokens", "users"} {
 			model.DB.Exec("DELETE FROM " + table)
 		}
 		common.QuotaPerUnit = originalQuotaPerUnit
@@ -45,6 +46,88 @@ func setupMoneyRuntimeQuotaTest(t *testing.T) {
 			"billing_setting.settlement_currency": "USD",
 		})
 	})
+}
+
+func TestMoneyRuntimeSettlementUsesSelectedChannelCostForCostPlus(t *testing.T) {
+	setupMoneyRuntimeQuotaTest(t)
+	modelName := "money-runtime-cost-plus"
+	require.NoError(t, model.DB.Create(&model.RetailPricingPolicy{
+		PublicModel:     modelName,
+		Group:           model.DefaultPricingGroup,
+		EndpointType:    "openai",
+		PricingMode:     model.PricingModeCostPlus,
+		BillingRuleJSON: `{"schema_version":1,"profile_type":"money_usage_pricing","currency":"USD","rates":{"input_token":{"amount_micros":2000000,"basis":"per_million_units","currency":"USD"}}}`,
+		Currency:        "USD",
+		Enabled:         true,
+	}).Error)
+	require.NoError(t, model.DB.Create(&model.ChannelModelCost{
+		ChannelId:       17,
+		UpstreamModel:   "upstream-runtime-cost-plus",
+		EndpointType:    "openai",
+		BillingRuleJSON: `{"schema_version":1,"profile_type":"money_usage_pricing","currency":"USD","rates":{"input_token":{"amount_micros":1500000,"basis":"per_million_units","currency":"USD"}}}`,
+		Source:          "manual",
+		Enabled:         true,
+	}).Error)
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: modelName,
+		UsingGroup:      model.DefaultPricingGroup,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelId:         17,
+			UpstreamModelName: "upstream-runtime-cost-plus",
+		},
+		PriceData: types.PriceData{
+			MoneyPricingEnabled: true,
+			MoneyEndpointType:   "openai",
+		},
+	}
+
+	_, applied, err := applyRuntimeMoneyUsageQuote(relayInfo, 1, func(activeUnits map[moneypricing.UsageUnit]struct{}, endpointType string) moneypricing.MoneyUsageFeatures {
+		require.Contains(t, activeUnits, moneypricing.UsageUnitInputToken)
+		return moneypricing.MoneyUsageFeatures{InputTokens: 1_000_000}
+	})
+
+	require.NoError(t, err)
+	require.True(t, applied)
+	require.True(t, relayInfo.PriceData.MoneyActualAmountKnown)
+	assert.Equal(t, int64(1_500_000), relayInfo.PriceData.MoneyActualAmountMicros)
+	assert.Equal(t, int64(1_500_000), relayInfo.PriceData.MoneyPricingActualUpstreamCostMicros)
+}
+
+func TestMoneyRuntimeCostPlusFallsBackToPreconsumeWhenSelectedChannelCostMissing(t *testing.T) {
+	setupMoneyRuntimeQuotaTest(t)
+	modelName := "money-runtime-cost-plus-missing"
+	require.NoError(t, model.DB.Create(&model.RetailPricingPolicy{
+		PublicModel:  modelName,
+		Group:        model.DefaultPricingGroup,
+		EndpointType: "openai",
+		PricingMode:  model.PricingModeCostPlus,
+		Currency:     "USD",
+		Enabled:      true,
+	}).Error)
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: modelName,
+		UsingGroup:      model.DefaultPricingGroup,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelId:         18,
+			UpstreamModelName: "missing-upstream",
+		},
+		PriceData: types.PriceData{
+			MoneyPricingEnabled:          true,
+			MoneyEndpointType:            "openai",
+			MoneyPreConsumedAmountKnown:  true,
+			MoneyPreConsumedAmountMicros: 123_456,
+		},
+	}
+
+	quota, applied, err := applyRuntimeMoneyUsageQuote(relayInfo, 1, func(activeUnits map[moneypricing.UsageUnit]struct{}, endpointType string) moneypricing.MoneyUsageFeatures {
+		return moneypricing.MoneyUsageFeatures{InputTokens: 1_000_000}
+	})
+
+	require.NoError(t, err)
+	require.True(t, applied)
+	assert.Equal(t, compatibilityQuotaFromMoneyAmount(123_456), quota)
+	require.True(t, relayInfo.PriceData.MoneyActualAmountKnown)
+	assert.Equal(t, int64(123_456), relayInfo.PriceData.MoneyActualAmountMicros)
 }
 
 func seedMoneyRuntimePolicy(t *testing.T, modelName string, profile string) {

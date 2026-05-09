@@ -40,6 +40,8 @@ const defaultGeneralSettings: GeneralSettings = {
     null,
     2
   ),
+  'billing_setting.money_billing_mode': 'legacy',
+  'billing_setting.settlement_currency': 'USD',
   'video_billing_setting.profiles': '{}',
   'onboarding_setting.new_user_quota': 0,
   'onboarding_setting.default_group': 'default',

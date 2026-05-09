@@ -9,7 +9,7 @@ import (
 	moneypricing "github.com/QuantumNous/new-api/service/money_pricing"
 )
 
-type moneyUsageFeatureBuilder func(profile *moneypricing.MoneyUsagePricingProfile, endpointType string) moneypricing.MoneyUsageFeatures
+type moneyUsageFeatureBuilder func(activeUnits map[moneypricing.UsageUnit]struct{}, endpointType string) moneypricing.MoneyUsageFeatures
 
 func runtimeMoneyEndpointType(relayInfo *relaycommon.RelayInfo) string {
 	if relayInfo == nil {
@@ -21,20 +21,16 @@ func runtimeMoneyEndpointType(relayInfo *relaycommon.RelayInfo) string {
 	return string(constant.EndpointTypeOpenAI)
 }
 
-func loadRuntimeMoneyPricingProfile(relayInfo *relaycommon.RelayInfo) (*model.RetailPricingPolicy, *moneypricing.MoneyUsagePricingProfile, string, error) {
+func loadRuntimeMoneyPricingPolicy(relayInfo *relaycommon.RelayInfo) (*model.RetailPricingPolicy, string, error) {
 	if relayInfo == nil || !relayInfo.PriceData.MoneyPricingEnabled {
-		return nil, nil, "", nil
+		return nil, "", nil
 	}
 	endpointType := runtimeMoneyEndpointType(relayInfo)
 	policy, err := model.GetEnabledRetailPricingPolicy(relayInfo.OriginModelName, relayInfo.UsingGroup, endpointType)
 	if err != nil {
-		return nil, nil, endpointType, err
+		return nil, endpointType, err
 	}
-	profile, err := moneypricing.ValidateMoneyUsagePricingProfile(policy.BillingRuleJSON)
-	if err != nil {
-		return nil, nil, endpointType, err
-	}
-	return policy, profile, endpointType, nil
+	return policy, endpointType, nil
 }
 
 func applyRuntimeMoneyUsageQuote(relayInfo *relaycommon.RelayInfo, totalTokens int, build moneyUsageFeatureBuilder) (int, bool, error) {
@@ -46,16 +42,32 @@ func applyRuntimeMoneyUsageQuote(relayInfo *relaycommon.RelayInfo, totalTokens i
 		relayInfo.PriceData.MoneyActualAmountMicros = 0
 		return 0, true, nil
 	}
-	policy, profile, endpointType, err := loadRuntimeMoneyPricingProfile(relayInfo)
+	policy, endpointType, err := loadRuntimeMoneyPricingPolicy(relayInfo)
 	if err != nil {
 		return 0, false, err
 	}
-	if policy == nil || profile == nil {
+	if policy == nil {
 		return 0, false, nil
 	}
-	features := build(profile, endpointType)
+	baseFeatures := runtimeMoneyUsageBaseFeatures(relayInfo, endpointType)
+	activeUnits, err := moneypricing.ActiveUsageUnitsForPolicy(policy, baseFeatures)
+	if err != nil {
+		if errors.Is(err, model.ErrMoneyPricingPolicyNotFound) {
+			if quota, ok := fallbackRuntimeMoneyQuoteToPreconsume(relayInfo); ok {
+				return quota, true, nil
+			}
+		}
+		return 0, false, err
+	}
+	features := build(activeUnits, endpointType)
+	features = mergeRuntimeMoneyUsageFeatureContext(features, relayInfo, endpointType)
 	quote, err := moneypricing.QuoteRetailPricingPolicy(policy, features, model.SettlementCurrency())
 	if err != nil {
+		if errors.Is(err, model.ErrMoneyPricingPolicyNotFound) {
+			if quota, ok := fallbackRuntimeMoneyQuoteToPreconsume(relayInfo); ok {
+				return quota, true, nil
+			}
+		}
 		return 0, false, err
 	}
 	applyRuntimeMoneyQuoteSnapshot(relayInfo, quote)
@@ -66,30 +78,53 @@ func quoteRuntimeViolationFee(relayInfo *relaycommon.RelayInfo) (*moneypricing.M
 	if relayInfo == nil || !relayInfo.PriceData.MoneyPricingEnabled {
 		return nil, false, nil
 	}
-	policy, profile, endpointType, err := loadRuntimeMoneyPricingProfile(relayInfo)
+	policy, endpointType, err := loadRuntimeMoneyPricingPolicy(relayInfo)
 	if errors.Is(err, model.ErrMoneyPricingPolicyNotFound) {
 		return nil, false, nil
 	}
 	if err != nil {
 		return nil, false, err
 	}
-	if policy == nil || profile == nil {
+	if policy == nil {
 		return nil, false, nil
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitViolation]; !ok {
-		return nil, false, nil
-	}
-	quote, err := moneypricing.QuoteRetailPricingPolicy(policy, moneypricing.MoneyUsageFeatures{
-		EndpointType:   endpointType,
-		PublicModel:    relayInfo.OriginModelName,
-		Group:          relayInfo.UsingGroup,
+	features := mergeRuntimeMoneyUsageFeatureContext(moneypricing.MoneyUsageFeatures{
 		ViolationCount: 1,
-	}, model.SettlementCurrency())
+	}, relayInfo, endpointType)
+	activeUnits, err := moneypricing.ActiveUsageUnitsForPolicy(policy, features)
+	if err != nil {
+		return nil, false, err
+	}
+	if _, ok := activeUnits[moneypricing.UsageUnitViolation]; !ok {
+		return nil, false, nil
+	}
+	quote, err := moneypricing.QuoteRetailPricingPolicy(policy, features, model.SettlementCurrency())
 	if err != nil {
 		return nil, false, err
 	}
 	applyRuntimeMoneyQuoteSnapshot(relayInfo, quote)
 	return quote, true, nil
+}
+
+func runtimeMoneyUsageBaseFeatures(relayInfo *relaycommon.RelayInfo, endpointType string) moneypricing.MoneyUsageFeatures {
+	return mergeRuntimeMoneyUsageFeatureContext(moneypricing.MoneyUsageFeatures{}, relayInfo, endpointType)
+}
+
+func mergeRuntimeMoneyUsageFeatureContext(features moneypricing.MoneyUsageFeatures, relayInfo *relaycommon.RelayInfo, endpointType string) moneypricing.MoneyUsageFeatures {
+	features.EndpointType = endpointType
+	if relayInfo == nil {
+		return features
+	}
+	features.PublicModel = relayInfo.OriginModelName
+	features.Group = relayInfo.UsingGroup
+	features.UpstreamModel = relayInfo.OriginModelName
+	if relayInfo.ChannelMeta != nil {
+		features.ChannelID = relayInfo.ChannelMeta.ChannelId
+		if relayInfo.UpstreamModelName != "" {
+			features.UpstreamModel = relayInfo.UpstreamModelName
+		}
+	}
+	return features
 }
 
 func applyRuntimeMoneyQuoteSnapshot(relayInfo *relaycommon.RelayInfo, quote *moneypricing.MoneyQuote) {

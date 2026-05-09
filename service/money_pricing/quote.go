@@ -93,6 +93,7 @@ func BuildMoneyUsageQuote(features MoneyUsageFeatures, profile *MoneyUsagePricin
 		EndpointType:       endpointType,
 		PublicModel:        features.PublicModel,
 		UpstreamModel:      features.UpstreamModel,
+		ChannelID:          features.ChannelID,
 		RuleID:             ProfileTypeMoneyUsagePricing,
 		Quantity:           totalQuantity,
 		QuantitySource:     MoneyUsageQuantitySource,

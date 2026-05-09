@@ -54,3 +54,43 @@ func GetLatestFxRate(baseCurrency string, quoteCurrency string) (*FxRate, error)
 	}
 	return &rate, nil
 }
+
+func ListFxRates(offset int, limit int) ([]FxRate, int64, error) {
+	var rates []FxRate
+	var total int64
+	query := DB.Model(&FxRate{})
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	query = DB.Order("effective_at DESC, created_at DESC")
+	if limit > 0 {
+		query = query.Offset(offset).Limit(limit)
+	}
+	if err := query.Find(&rates).Error; err != nil {
+		return nil, 0, err
+	}
+	return rates, total, nil
+}
+
+func GetFxRateById(id string) (*FxRate, error) {
+	var rate FxRate
+	err := DB.First(&rate, "id = ?", strings.TrimSpace(id)).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrFxRateNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &rate, nil
+}
+
+func DeleteFxRateById(id string) error {
+	result := DB.Delete(&FxRate{}, "id = ?", strings.TrimSpace(id))
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrFxRateNotFound
+	}
+	return nil
+}

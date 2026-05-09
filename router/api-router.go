@@ -192,6 +192,23 @@ func SetApiRouter(router *gin.Engine) {
 			inviteCampaignRoute.PUT("/:id", controller.UpdateInviteCampaign)
 			inviteCampaignRoute.DELETE("/:id", controller.DeleteInviteCampaign)
 		}
+		moneyPricingRoute := apiRouter.Group("/money_pricing")
+		moneyPricingRoute.Use(middleware.RootAuth())
+		{
+			moneyPricingRoute.GET("/fx_rates", controller.ListMoneyPricingFxRates)
+			moneyPricingRoute.POST("/fx_rates", controller.CreateMoneyPricingFxRate)
+			moneyPricingRoute.PUT("/fx_rates/:id", controller.UpdateMoneyPricingFxRate)
+			moneyPricingRoute.DELETE("/fx_rates/:id", controller.DeleteMoneyPricingFxRate)
+			moneyPricingRoute.GET("/channel_model_costs", controller.ListMoneyPricingChannelModelCosts)
+			moneyPricingRoute.POST("/channel_model_costs", controller.CreateMoneyPricingChannelModelCost)
+			moneyPricingRoute.PUT("/channel_model_costs/:id", controller.UpdateMoneyPricingChannelModelCost)
+			moneyPricingRoute.DELETE("/channel_model_costs/:id", controller.DeleteMoneyPricingChannelModelCost)
+			moneyPricingRoute.GET("/retail_policies", controller.ListMoneyPricingRetailPolicies)
+			moneyPricingRoute.POST("/retail_policies", controller.CreateMoneyPricingRetailPolicy)
+			moneyPricingRoute.PUT("/retail_policies/:id", controller.UpdateMoneyPricingRetailPolicy)
+			moneyPricingRoute.DELETE("/retail_policies/:id", controller.DeleteMoneyPricingRetailPolicy)
+			moneyPricingRoute.POST("/quote_preview", controller.PreviewMoneyPricingQuote)
+		}
 
 		// Custom OAuth provider management (root only)
 		customOAuthRoute := apiRouter.Group("/custom-oauth-provider")

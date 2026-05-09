@@ -88,6 +88,11 @@ const GENERAL_SECTIONS = [
             ] as 'credits' | 'summary' | 'detailed' | 'internal',
             group_modes: settings['billing_visibility_setting.group_modes'],
           },
+          billing_setting: {
+            money_billing_mode: settings['billing_setting.money_billing_mode'],
+            settlement_currency:
+              settings['billing_setting.settlement_currency'],
+          },
           video_billing_setting: {
             profiles: settings['video_billing_setting.profiles'],
           },

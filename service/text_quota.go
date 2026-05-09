@@ -326,11 +326,13 @@ func applyMoneyUsageSettlementQuote(relayInfo *relaycommon.RelayInfo, summary *t
 	if err != nil {
 		return err
 	}
-	profile, err := moneypricing.ValidateMoneyUsagePricingProfile(policy.BillingRuleJSON)
+	baseFeatures := runtimeMoneyUsageBaseFeatures(relayInfo, endpointType)
+	baseFeatures.PublicModel = summary.ModelName
+	activeUnits, err := moneypricing.ActiveUsageUnitsForPolicy(policy, baseFeatures)
 	if err != nil {
 		return err
 	}
-	features := actualMoneyUsageFeatures(relayInfo, summary, profile, endpointType)
+	features := actualMoneyUsageFeatures(relayInfo, summary, activeUnits, endpointType)
 	quote, err := moneypricing.QuoteRetailPricingPolicy(policy, features, model.SettlementCurrency())
 	if err != nil {
 		return err
@@ -350,37 +352,31 @@ func applyMoneyUsageSettlementQuote(relayInfo *relaycommon.RelayInfo, summary *t
 	return nil
 }
 
-func actualMoneyUsageFeatures(relayInfo *relaycommon.RelayInfo, summary *textQuotaSummary, profile *moneypricing.MoneyUsagePricingProfile, endpointType string) moneypricing.MoneyUsageFeatures {
-	features := moneypricing.MoneyUsageFeatures{
-		EndpointType: endpointType,
-		PublicModel:  summary.ModelName,
-		Group:        relayInfo.UsingGroup,
-	}
-	if profile == nil {
-		return features
-	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitRequest]; ok {
+func actualMoneyUsageFeatures(relayInfo *relaycommon.RelayInfo, summary *textQuotaSummary, activeUnits map[moneypricing.UsageUnit]struct{}, endpointType string) moneypricing.MoneyUsageFeatures {
+	features := runtimeMoneyUsageBaseFeatures(relayInfo, endpointType)
+	features.PublicModel = summary.ModelName
+	if _, ok := activeUnits[moneypricing.UsageUnitRequest]; ok {
 		features.RequestCount = 1
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitInputToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitInputToken]; ok {
 		features.InputTokens = int64(summary.PromptTokens)
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitOutputToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitOutputToken]; ok {
 		features.OutputTokens = int64(summary.CompletionTokens)
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitCachedInputToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitCachedInputToken]; ok {
 		features.CachedInputTokens = int64(summary.CacheTokens)
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitCacheWriteToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitCacheWriteToken]; ok {
 		features.CacheWriteTokens = int64(cacheWriteTokensTotal(*summary))
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitAudioInputToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitAudioInputToken]; ok {
 		features.AudioInputTokens = int64(summary.AudioTokens)
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitWebSearchCall]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitWebSearchCall]; ok {
 		features.WebSearchCount = int64(summary.WebSearchCallCount + summary.ClaudeWebSearchCallCount)
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitFileSearchCall]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitFileSearchCall]; ok {
 		features.FileSearchCount = int64(summary.FileSearchCallCount)
 	}
 	return features

@@ -45,6 +45,7 @@ type MoneyUsageFeatures struct {
 	EndpointType      string
 	PublicModel       string
 	UpstreamModel     string
+	ChannelID         int `json:"ChannelID,omitempty"`
 	Group             string
 	InputTokens       int64
 	OutputTokens      int64

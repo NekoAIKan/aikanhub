@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -12,10 +13,14 @@ const validMoneyUsageProfileJSON = `{"schema_version":1,"profile_type":"money_us
 
 func setupMoneyPricingPolicyTest(t *testing.T) {
 	t.Helper()
-	ensureModelTestSchema(t, &ChannelModelCost{}, &RetailPricingPolicy{})
+	ensureModelTestSchema(t, &Channel{}, &Ability{}, &ChannelModelCost{}, &RetailPricingPolicy{})
+	require.NoError(t, DB.Exec("DELETE FROM abilities").Error)
+	require.NoError(t, DB.Exec("DELETE FROM channels").Error)
 	require.NoError(t, DB.Exec("DELETE FROM channel_model_costs").Error)
 	require.NoError(t, DB.Exec("DELETE FROM retail_pricing_policies").Error)
 	t.Cleanup(func() {
+		DB.Exec("DELETE FROM abilities")
+		DB.Exec("DELETE FROM channels")
 		DB.Exec("DELETE FROM channel_model_costs")
 		DB.Exec("DELETE FROM retail_pricing_policies")
 	})
@@ -44,6 +49,37 @@ func TestChannelModelCostLookupIgnoresDisabledRows(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, cost.Enabled)
 	assert.Equal(t, "manual", cost.Source)
+}
+
+func TestListEnabledChannelModelCostsForPublicModelHonorsMapping(t *testing.T) {
+	setupMoneyPricingPolicyTest(t)
+	mapping := `{"public-model":"upstream-model"}`
+	require.NoError(t, DB.Create(&Channel{
+		Id:           71,
+		Key:          "test-key",
+		Name:         "mapped-channel",
+		Status:       common.ChannelStatusEnabled,
+		ModelMapping: &mapping,
+	}).Error)
+	require.NoError(t, DB.Create(&Ability{
+		Group:     DefaultPricingGroup,
+		Model:     "public-model",
+		ChannelId: 71,
+		Enabled:   true,
+	}).Error)
+	require.NoError(t, DB.Create(&ChannelModelCost{
+		ChannelId:       71,
+		UpstreamModel:   "upstream-model",
+		EndpointType:    "chat",
+		BillingRuleJSON: validMoneyUsageProfileJSON,
+		Source:          "manual",
+		Enabled:         true,
+	}).Error)
+
+	costs, err := ListEnabledChannelModelCostsForPublicModel("public-model", DefaultPricingGroup, "chat")
+	require.NoError(t, err)
+	require.Len(t, costs, 1)
+	assert.Equal(t, "upstream-model", costs[0].UpstreamModel)
 }
 
 func TestChannelModelCostRejectsInvalidProfileJSON(t *testing.T) {
@@ -157,6 +193,39 @@ func TestRetailPricingPolicyExactGroupWins(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "enterprise", policy.Group)
 	assert.Equal(t, int64(200), policy.MarkupBps)
+}
+
+func TestRetailPricingPolicyLookupFallsBackToDefaultGroup(t *testing.T) {
+	policies := []RetailPricingPolicy{
+		{
+			Id:           1,
+			PublicModel:  "public-model",
+			Group:        DefaultPricingGroup,
+			EndpointType: "chat",
+			PricingMode:  PricingModeCostPlus,
+			MarkupBps:    100,
+			Currency:     "USD",
+		},
+		{
+			Id:           2,
+			PublicModel:  "public-model",
+			Group:        "enterprise",
+			EndpointType: "chat",
+			PricingMode:  PricingModeCostPlus,
+			MarkupBps:    200,
+			Currency:     "USD",
+		},
+	}
+	lookup := BuildRetailPricingPolicyLookup(policies)
+
+	exact, ok := lookup.Lookup("public-model", "enterprise", "chat")
+	require.True(t, ok)
+	assert.Equal(t, int64(200), exact.MarkupBps)
+
+	fallback, ok := lookup.Lookup("public-model", "trial", "chat")
+	require.True(t, ok)
+	assert.Equal(t, DefaultPricingGroup, fallback.Group)
+	assert.Equal(t, int64(100), fallback.MarkupBps)
 }
 
 func TestRetailPricingPolicyRequiresFixedRuleProfile(t *testing.T) {

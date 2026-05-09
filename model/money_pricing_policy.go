@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -49,6 +50,8 @@ type RetailPricingPolicy struct {
 	CreatedAt       int64  `json:"created_at" gorm:"bigint"`
 	UpdatedAt       int64  `json:"updated_at" gorm:"bigint"`
 }
+
+type RetailPricingPolicyLookup map[string]*RetailPricingPolicy
 
 func (cost *ChannelModelCost) BeforeSave(tx *gorm.DB) error {
 	now := common.GetTimestamp()
@@ -238,6 +241,106 @@ func GetEnabledChannelModelCost(channelID int, upstreamModel string, endpointTyp
 	return &cost, nil
 }
 
+func ListEnabledChannelModelCostsForPublicModel(publicModel string, group string, endpointType string) ([]ChannelModelCost, error) {
+	publicModel = strings.TrimSpace(publicModel)
+	group = strings.TrimSpace(group)
+	if group == "" {
+		group = DefaultPricingGroup
+	}
+	endpointType = strings.TrimSpace(endpointType)
+	if publicModel == "" || endpointType == "" {
+		return nil, ErrMoneyPricingPolicyNotFound
+	}
+
+	var abilities []Ability
+	if err := DB.Where(fmt.Sprintf("%s = ? AND model = ? AND enabled = ?", retailPricingGroupColumn()), group, publicModel, true).
+		Find(&abilities).Error; err != nil {
+		return nil, err
+	}
+	if len(abilities) == 0 && group != DefaultPricingGroup {
+		if err := DB.Where(fmt.Sprintf("%s = ? AND model = ? AND enabled = ?", retailPricingGroupColumn()), DefaultPricingGroup, publicModel, true).
+			Find(&abilities).Error; err != nil {
+			return nil, err
+		}
+	}
+	if len(abilities) == 0 {
+		return nil, ErrMoneyPricingPolicyNotFound
+	}
+
+	channelIDs := make([]int, 0, len(abilities))
+	for _, ability := range abilities {
+		channelIDs = append(channelIDs, ability.ChannelId)
+	}
+
+	var channels []Channel
+	if err := DB.Where("id IN ?", channelIDs).Find(&channels).Error; err != nil {
+		return nil, err
+	}
+	channelByID := make(map[int]Channel, len(channels))
+	for _, channel := range channels {
+		channelByID[channel.Id] = channel
+	}
+
+	var costs []ChannelModelCost
+	if err := DB.Where("channel_id IN ? AND endpoint_type = ? AND enabled = ?", channelIDs, endpointType, true).
+		Order("channel_id ASC, id DESC").
+		Find(&costs).Error; err != nil {
+		return nil, err
+	}
+
+	matches := make([]ChannelModelCost, 0, len(costs))
+	seen := make(map[int]struct{}, len(costs))
+	for _, cost := range costs {
+		channel, ok := channelByID[cost.ChannelId]
+		if !ok {
+			continue
+		}
+		upstreamModel := upstreamModelForChannelCost(channel, publicModel)
+		if cost.UpstreamModel == publicModel || cost.UpstreamModel == upstreamModel {
+			if _, ok := seen[cost.Id]; ok {
+				continue
+			}
+			seen[cost.Id] = struct{}{}
+			matches = append(matches, cost)
+		}
+	}
+	if len(matches) == 0 {
+		return nil, ErrMoneyPricingPolicyNotFound
+	}
+	sort.SliceStable(matches, func(i, j int) bool {
+		if matches[i].ChannelId == matches[j].ChannelId {
+			return matches[i].Id > matches[j].Id
+		}
+		return matches[i].ChannelId < matches[j].ChannelId
+	})
+	return matches, nil
+}
+
+func upstreamModelForChannelCost(channel Channel, publicModel string) string {
+	upstream := strings.TrimSpace(publicModel)
+	modelMapping := channel.GetModelMapping()
+	if strings.TrimSpace(modelMapping) == "" || strings.TrimSpace(modelMapping) == "{}" {
+		return upstream
+	}
+	modelMap := make(map[string]string)
+	if err := common.UnmarshalJsonStr(modelMapping, &modelMap); err != nil {
+		return upstream
+	}
+	current := upstream
+	visited := map[string]struct{}{current: {}}
+	for {
+		next := strings.TrimSpace(modelMap[current])
+		if next == "" {
+			return current
+		}
+		if _, ok := visited[next]; ok {
+			return current
+		}
+		visited[next] = struct{}{}
+		current = next
+	}
+}
+
 func GetEnabledRetailPricingPolicy(publicModel string, group string, endpointType string) (*RetailPricingPolicy, error) {
 	publicModel = strings.TrimSpace(publicModel)
 	group = strings.TrimSpace(group)
@@ -253,6 +356,138 @@ func GetEnabledRetailPricingPolicy(publicModel string, group string, endpointTyp
 		return nil, err
 	}
 	return getEnabledRetailPricingPolicyExact(publicModel, DefaultPricingGroup, endpointType)
+}
+
+func ListEnabledRetailPricingPolicies(groups []string) ([]RetailPricingPolicy, error) {
+	var policies []RetailPricingPolicy
+	query := DB.Where("enabled = ?", true).Order("id ASC")
+	cleanGroups := make([]string, 0, len(groups))
+	for _, group := range groups {
+		group = strings.TrimSpace(group)
+		if group != "" {
+			cleanGroups = append(cleanGroups, group)
+		}
+	}
+	if len(cleanGroups) > 0 {
+		query = query.Where(fmt.Sprintf("%s IN ?", retailPricingGroupColumn()), cleanGroups)
+	}
+	if err := query.Find(&policies).Error; err != nil {
+		return nil, err
+	}
+	return policies, nil
+}
+
+func ListChannelModelCosts(offset int, limit int) ([]ChannelModelCost, int64, error) {
+	var costs []ChannelModelCost
+	var total int64
+	query := DB.Model(&ChannelModelCost{})
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	query = DB.Order("id DESC")
+	if limit > 0 {
+		query = query.Offset(offset).Limit(limit)
+	}
+	if err := query.Find(&costs).Error; err != nil {
+		return nil, 0, err
+	}
+	return costs, total, nil
+}
+
+func GetChannelModelCostById(id int) (*ChannelModelCost, error) {
+	var cost ChannelModelCost
+	err := DB.First(&cost, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrMoneyPricingPolicyNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &cost, nil
+}
+
+func DeleteChannelModelCostById(id int) error {
+	result := DB.Delete(&ChannelModelCost{}, "id = ?", id)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrMoneyPricingPolicyNotFound
+	}
+	return nil
+}
+
+func ListRetailPricingPolicies(offset int, limit int) ([]RetailPricingPolicy, int64, error) {
+	var policies []RetailPricingPolicy
+	var total int64
+	query := DB.Model(&RetailPricingPolicy{})
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	query = DB.Order("id DESC")
+	if limit > 0 {
+		query = query.Offset(offset).Limit(limit)
+	}
+	if err := query.Find(&policies).Error; err != nil {
+		return nil, 0, err
+	}
+	return policies, total, nil
+}
+
+func GetRetailPricingPolicyById(id int) (*RetailPricingPolicy, error) {
+	var policy RetailPricingPolicy
+	err := DB.First(&policy, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrMoneyPricingPolicyNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &policy, nil
+}
+
+func DeleteRetailPricingPolicyById(id int) error {
+	result := DB.Delete(&RetailPricingPolicy{}, "id = ?", id)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrMoneyPricingPolicyNotFound
+	}
+	return nil
+}
+
+func BuildRetailPricingPolicyLookup(policies []RetailPricingPolicy) RetailPricingPolicyLookup {
+	lookup := make(RetailPricingPolicyLookup, len(policies))
+	for i := range policies {
+		policy := &policies[i]
+		lookup[retailPricingPolicyLookupKey(policy.PublicModel, policy.Group, policy.EndpointType)] = policy
+	}
+	return lookup
+}
+
+func (lookup RetailPricingPolicyLookup) Lookup(publicModel string, group string, endpointType string) (*RetailPricingPolicy, bool) {
+	group = strings.TrimSpace(group)
+	if group == "" {
+		group = DefaultPricingGroup
+	}
+	if policy, ok := lookup[retailPricingPolicyLookupKey(publicModel, group, endpointType)]; ok {
+		return policy, true
+	}
+	if group != DefaultPricingGroup {
+		if policy, ok := lookup[retailPricingPolicyLookupKey(publicModel, DefaultPricingGroup, endpointType)]; ok {
+			return policy, true
+		}
+	}
+	return nil, false
+}
+
+func retailPricingPolicyLookupKey(publicModel string, group string, endpointType string) string {
+	group = strings.TrimSpace(group)
+	if group == "" {
+		group = DefaultPricingGroup
+	}
+	return strings.TrimSpace(publicModel) + "\x00" + group + "\x00" + strings.TrimSpace(endpointType)
 }
 
 func getEnabledRetailPricingPolicyExact(publicModel string, group string, endpointType string) (*RetailPricingPolicy, error) {

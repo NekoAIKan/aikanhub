@@ -289,6 +289,12 @@ func updatePricing() {
 		}
 	}
 
+	retailPolicies, err := ListEnabledRetailPricingPolicies([]string{DefaultPricingGroup})
+	if err != nil {
+		common.SysLog("failed to load money pricing policies for pricing cache: " + err.Error())
+	}
+	moneyPricingPolicyLookup := BuildRetailPricingPolicyLookup(retailPolicies)
+
 	pricingMap = make([]Pricing, 0)
 	for model, groups := range modelGroupsMap {
 		pricing := Pricing{
@@ -341,7 +347,7 @@ func updatePricing() {
 				pricing.BillingExpr = expr
 			}
 		}
-		applyMoneyPricingPolicy(&pricing)
+		applyMoneyPricingPolicy(&pricing, moneyPricingPolicyLookup)
 		pricingMap = append(pricingMap, pricing)
 	}
 
@@ -363,7 +369,7 @@ func updatePricing() {
 	lastGetPricingTime = time.Now()
 }
 
-func applyMoneyPricingPolicy(pricing *Pricing) {
+func applyMoneyPricingPolicy(pricing *Pricing, lookup RetailPricingPolicyLookup) {
 	if pricing == nil {
 		return
 	}
@@ -372,8 +378,8 @@ func applyMoneyPricingPolicy(pricing *Pricing) {
 		endpoints = []constant.EndpointType{constant.EndpointTypeOpenAI}
 	}
 	for _, endpoint := range endpoints {
-		policy, err := GetEnabledRetailPricingPolicy(pricing.ModelName, DefaultPricingGroup, string(endpoint))
-		if err != nil {
+		policy, ok := lookup.Lookup(pricing.ModelName, DefaultPricingGroup, string(endpoint))
+		if !ok {
 			continue
 		}
 		pricing.MoneyPricingMode = policy.PricingMode

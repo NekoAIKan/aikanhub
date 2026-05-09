@@ -105,6 +105,82 @@ export type InviteCampaignMutationResponse = {
   data?: InviteCampaign
 }
 
+export type MoneyBillingMode = 'legacy' | 'dual_read' | 'money'
+
+export type FxRate = {
+  id: string
+  base_currency: string
+  quote_currency: string
+  rate_micros: number
+  buffer_bps: number
+  source?: string
+  effective_at: number
+  created_at?: number
+}
+
+export type ChannelModelCost = {
+  id?: number
+  channel_id: number
+  upstream_model: string
+  endpoint_type: string
+  billing_rule_json: string
+  source: string
+  source_ref?: string
+  enabled: boolean
+  created_at?: number
+  updated_at?: number
+}
+
+export type RetailPricingPolicy = {
+  id?: number
+  public_model: string
+  group: string
+  endpoint_type: string
+  pricing_mode: 'fixed_rule' | 'cost_plus'
+  billing_rule_json?: string
+  markup_bps: number
+  fx_policy: string
+  fx_buffer_bps: number
+  currency: string
+  enabled: boolean
+  created_at?: number
+  updated_at?: number
+}
+
+export type MoneyPricingPageData<T> = {
+  page?: number
+  page_size?: number
+  total?: number
+  items?: T[]
+}
+
+export type MoneyPricingListResponse<T> = {
+  success: boolean
+  message: string
+  data?: MoneyPricingPageData<T> | T[]
+}
+
+export type MoneyPricingMutationResponse<T> = {
+  success: boolean
+  message: string
+  data?: T
+}
+
+export type MoneyPricingQuotePreviewResponse = {
+  success: boolean
+  message: string
+  data?: {
+    RetailAmountMicros?: number
+    UpstreamCostMicros?: number
+    SettlementCurrency?: string
+    CostCurrency?: string
+    FxRateID?: string
+    MarkupBps?: number
+    FxBufferBps?: number
+    LineItems?: Array<Record<string, unknown>>
+  }
+}
+
 export type DeleteLogsResponse = {
   success: boolean
   message: string
@@ -138,6 +214,8 @@ export type GeneralSettings = {
   'profit_setting.apply_to_default_video_profiles': boolean
   'billing_visibility_setting.default_mode': string
   'billing_visibility_setting.group_modes': string
+  'billing_setting.money_billing_mode': MoneyBillingMode
+  'billing_setting.settlement_currency': string
   'video_billing_setting.profiles': string
   'onboarding_setting.new_user_quota': number
   'onboarding_setting.default_group': string

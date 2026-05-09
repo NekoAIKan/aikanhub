@@ -64,6 +64,7 @@ func TestMain(m *testing.M) {
 		&model.Token{},
 		&model.Log{},
 		&model.Channel{},
+		&model.Ability{},
 		&model.TopUp{},
 		&model.SubscriptionPlan{},
 		&model.UserSubscription{},
@@ -71,6 +72,7 @@ func TestMain(m *testing.M) {
 		&model.MoneyWallet{},
 		&model.MoneyWalletTransaction{},
 		&model.FxRate{},
+		&model.ChannelModelCost{},
 		&model.RetailPricingPolicy{},
 	); err != nil {
 		panic("failed to migrate: " + err.Error())

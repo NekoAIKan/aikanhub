@@ -40,6 +40,7 @@ import { SettingsSection } from '../components/settings-section'
 import { useSettingsForm } from '../hooks/use-settings-form'
 import { useUpdateOption } from '../hooks/use-update-option'
 import { tryJsonParse } from '../utils/json-parser'
+import { MoneyPricingAdminSection } from './money-pricing-admin-section'
 
 const billingVisibilityModeSchema = z.enum([
   'credits',
@@ -76,6 +77,13 @@ const creditsSchema = z.object({
         ctx.addIssue({ code: 'custom', message: 'Expected JSON object' })
       }
     }),
+  }),
+  billing_setting: z.object({
+    money_billing_mode: z.enum(['legacy', 'dual_read', 'money']),
+    settlement_currency: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z]{3}$/),
   }),
   video_billing_setting: z.object({
     profiles: z.string().superRefine((value, ctx) => {
@@ -634,6 +642,78 @@ export function CreditsSettingsSection({
                 </FormItem>
               )}
             />
+          </div>
+
+          <div className='space-y-4'>
+            <div>
+              <h3 className='text-sm font-medium'>{t('Money billing mode')}</h3>
+              <p className='text-muted-foreground text-xs'>
+                {t(
+                  'Amount-denominated billing uses settlement currency micros for new pricing policies.'
+                )}
+              </p>
+            </div>
+
+            <div className='grid gap-4 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='billing_setting.money_billing_mode'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Billing mode')}</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={t('Select billing mode')} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value='legacy'>
+                          {t('Legacy quota')}
+                        </SelectItem>
+                        <SelectItem value='dual_read'>
+                          {t('Dual read')}
+                        </SelectItem>
+                        <SelectItem value='money'>{t('Money')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      {t(
+                        'Money mode writes amount fields as the billing source.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='billing_setting.settlement_currency'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Settlement currency')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        value={field.value}
+                        onChange={(event) =>
+                          field.onChange(event.target.value.toUpperCase())
+                        }
+                        name={field.name}
+                        onBlur={field.onBlur}
+                        ref={field.ref}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t('Three-letter currency used for wallet settlement.')}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <MoneyPricingAdminSection />
           </div>
 
           <FormField

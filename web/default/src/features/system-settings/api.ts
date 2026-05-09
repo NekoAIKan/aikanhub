@@ -5,9 +5,15 @@ import type {
   ConfigBundlePreviewResponse,
   DeleteLogsResponse,
   FetchUpstreamRatiosRequest,
+  ChannelModelCost,
+  FxRate,
   InviteCampaign,
   InviteCampaignMutationResponse,
   InviteCampaignsResponse,
+  MoneyPricingListResponse,
+  MoneyPricingMutationResponse,
+  MoneyPricingQuotePreviewResponse,
+  RetailPricingPolicy,
   SystemOptionsResponse,
   UpdateOptionRequest,
   UpdateOptionResponse,
@@ -116,6 +122,121 @@ export async function deleteInviteCampaign(campaign: InviteCampaign) {
   const campaignId = campaign.id ?? campaign.code
   const res = await api.delete<InviteCampaignMutationResponse>(
     `/api/invite_campaign/${campaignId}`,
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function getFxRates() {
+  const res = await api.get<MoneyPricingListResponse<FxRate>>(
+    '/api/money_pricing/fx_rates',
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function createFxRate(request: FxRate) {
+  const res = await api.post<MoneyPricingMutationResponse<FxRate>>(
+    '/api/money_pricing/fx_rates',
+    request,
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function updateFxRate(request: FxRate) {
+  const res = await api.put<MoneyPricingMutationResponse<FxRate>>(
+    `/api/money_pricing/fx_rates/${request.id}`,
+    request,
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function deleteFxRate(request: FxRate) {
+  const res = await api.delete<MoneyPricingMutationResponse<null>>(
+    `/api/money_pricing/fx_rates/${request.id}`,
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function getChannelModelCosts() {
+  const res = await api.get<MoneyPricingListResponse<ChannelModelCost>>(
+    '/api/money_pricing/channel_model_costs',
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function createChannelModelCost(request: ChannelModelCost) {
+  const res = await api.post<MoneyPricingMutationResponse<ChannelModelCost>>(
+    '/api/money_pricing/channel_model_costs',
+    request,
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function updateChannelModelCost(request: ChannelModelCost) {
+  const res = await api.put<MoneyPricingMutationResponse<ChannelModelCost>>(
+    `/api/money_pricing/channel_model_costs/${request.id}`,
+    request,
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function deleteChannelModelCost(request: ChannelModelCost) {
+  const res = await api.delete<MoneyPricingMutationResponse<null>>(
+    `/api/money_pricing/channel_model_costs/${request.id}`,
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function getRetailPricingPolicies() {
+  const res = await api.get<MoneyPricingListResponse<RetailPricingPolicy>>(
+    '/api/money_pricing/retail_policies',
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function createRetailPricingPolicy(request: RetailPricingPolicy) {
+  const res = await api.post<MoneyPricingMutationResponse<RetailPricingPolicy>>(
+    '/api/money_pricing/retail_policies',
+    request,
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function updateRetailPricingPolicy(request: RetailPricingPolicy) {
+  const res = await api.put<MoneyPricingMutationResponse<RetailPricingPolicy>>(
+    `/api/money_pricing/retail_policies/${request.id}`,
+    request,
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function deleteRetailPricingPolicy(request: RetailPricingPolicy) {
+  const res = await api.delete<MoneyPricingMutationResponse<null>>(
+    `/api/money_pricing/retail_policies/${request.id}`,
+    quietRequestConfig
+  )
+  return res.data
+}
+
+export async function previewMoneyPricingQuote(request: {
+  policy: RetailPricingPolicy
+  features: Record<string, unknown>
+  settlement_currency: string
+}) {
+  const res = await api.post<MoneyPricingQuotePreviewResponse>(
+    '/api/money_pricing/quote_preview',
+    request,
     quietRequestConfig
   )
   return res.data

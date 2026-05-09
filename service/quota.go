@@ -110,69 +110,61 @@ func textOutputTokensFromUsage(completionTokens int, details dto.OutputTokenDeta
 	return textTokens
 }
 
-func moneyUsageFeaturesFromRealtimeUsage(relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage, profile *moneypricing.MoneyUsagePricingProfile, endpointType string, includeRequest bool) moneypricing.MoneyUsageFeatures {
-	features := moneypricing.MoneyUsageFeatures{
-		EndpointType: endpointType,
-		PublicModel:  relayInfo.OriginModelName,
-		Group:        relayInfo.UsingGroup,
-	}
-	if usage == nil || profile == nil {
+func moneyUsageFeaturesFromRealtimeUsage(relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage, activeUnits map[moneypricing.UsageUnit]struct{}, endpointType string, includeRequest bool) moneypricing.MoneyUsageFeatures {
+	features := runtimeMoneyUsageBaseFeatures(relayInfo, endpointType)
+	if usage == nil {
 		return features
 	}
 	if includeRequest {
-		if _, ok := profile.Rates[moneypricing.UsageUnitRequest]; ok {
+		if _, ok := activeUnits[moneypricing.UsageUnitRequest]; ok {
 			features.RequestCount = 1
 		}
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitInputToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitInputToken]; ok {
 		features.InputTokens = int64(textInputTokensFromUsage(usage.InputTokens, usage.InputTokenDetails))
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitOutputToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitOutputToken]; ok {
 		features.OutputTokens = int64(textOutputTokensFromUsage(usage.OutputTokens, usage.OutputTokenDetails))
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitCachedInputToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitCachedInputToken]; ok {
 		features.CachedInputTokens = int64(usage.InputTokenDetails.CachedTokens)
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitCacheWriteToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitCacheWriteToken]; ok {
 		features.CacheWriteTokens = int64(usage.InputTokenDetails.CachedCreationTokens)
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitAudioInputToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitAudioInputToken]; ok {
 		features.AudioInputTokens = int64(usage.InputTokenDetails.AudioTokens)
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitAudioOutputToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitAudioOutputToken]; ok {
 		features.AudioOutputTokens = int64(usage.OutputTokenDetails.AudioTokens)
 	}
 	return features
 }
 
-func moneyUsageFeaturesFromAudioUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage, profile *moneypricing.MoneyUsagePricingProfile, endpointType string) moneypricing.MoneyUsageFeatures {
-	features := moneypricing.MoneyUsageFeatures{
-		EndpointType: endpointType,
-		PublicModel:  relayInfo.OriginModelName,
-		Group:        relayInfo.UsingGroup,
-	}
-	if usage == nil || profile == nil {
+func moneyUsageFeaturesFromAudioUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage, activeUnits map[moneypricing.UsageUnit]struct{}, endpointType string) moneypricing.MoneyUsageFeatures {
+	features := runtimeMoneyUsageBaseFeatures(relayInfo, endpointType)
+	if usage == nil {
 		return features
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitRequest]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitRequest]; ok {
 		features.RequestCount = 1
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitInputToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitInputToken]; ok {
 		features.InputTokens = int64(textInputTokensFromUsage(usage.PromptTokens, usage.PromptTokensDetails))
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitOutputToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitOutputToken]; ok {
 		features.OutputTokens = int64(textOutputTokensFromUsage(usage.CompletionTokens, usage.CompletionTokenDetails))
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitCachedInputToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitCachedInputToken]; ok {
 		features.CachedInputTokens = int64(usage.PromptTokensDetails.CachedTokens)
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitCacheWriteToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitCacheWriteToken]; ok {
 		features.CacheWriteTokens = int64(usage.PromptTokensDetails.CachedCreationTokens)
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitAudioInputToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitAudioInputToken]; ok {
 		features.AudioInputTokens = int64(usage.PromptTokensDetails.AudioTokens)
 	}
-	if _, ok := profile.Rates[moneypricing.UsageUnitAudioOutputToken]; ok {
+	if _, ok := activeUnits[moneypricing.UsageUnitAudioOutputToken]; ok {
 		features.AudioOutputTokens = int64(usage.CompletionTokenDetails.AudioTokens)
 	}
 	return features
@@ -229,8 +221,8 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 	}
 
 	quota := calculateAudioQuota(quotaInfo)
-	if moneyQuota, applied, quoteErr := applyRuntimeMoneyUsageQuote(relayInfo, usage.TotalTokens, func(profile *moneypricing.MoneyUsagePricingProfile, endpointType string) moneypricing.MoneyUsageFeatures {
-		return moneyUsageFeaturesFromRealtimeUsage(relayInfo, usage, profile, endpointType, false)
+	if moneyQuota, applied, quoteErr := applyRuntimeMoneyUsageQuote(relayInfo, usage.TotalTokens, func(activeUnits map[moneypricing.UsageUnit]struct{}, endpointType string) moneypricing.MoneyUsageFeatures {
+		return moneyUsageFeaturesFromRealtimeUsage(relayInfo, usage, activeUnits, endpointType, false)
 	}); quoteErr != nil {
 		logger.LogError(ctx, "error applying realtime money usage pricing: "+quoteErr.Error())
 	} else if applied {
@@ -334,8 +326,8 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	if tieredOk {
 		quota = tieredQuota
 	}
-	if moneyQuota, applied, quoteErr := applyRuntimeMoneyUsageQuote(relayInfo, usage.TotalTokens, func(profile *moneypricing.MoneyUsagePricingProfile, endpointType string) moneypricing.MoneyUsageFeatures {
-		return moneyUsageFeaturesFromRealtimeUsage(relayInfo, usage, profile, endpointType, true)
+	if moneyQuota, applied, quoteErr := applyRuntimeMoneyUsageQuote(relayInfo, usage.TotalTokens, func(activeUnits map[moneypricing.UsageUnit]struct{}, endpointType string) moneypricing.MoneyUsageFeatures {
+		return moneyUsageFeaturesFromRealtimeUsage(relayInfo, usage, activeUnits, endpointType, true)
 	}); quoteErr != nil {
 		logger.LogError(ctx, "error applying realtime money usage pricing: "+quoteErr.Error())
 		if fallbackQuota, ok := fallbackRuntimeMoneyQuoteToPreconsume(relayInfo); ok {
@@ -466,8 +458,8 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	if tieredOk {
 		quota = tieredQuota
 	}
-	if moneyQuota, applied, quoteErr := applyRuntimeMoneyUsageQuote(relayInfo, usage.TotalTokens, func(profile *moneypricing.MoneyUsagePricingProfile, endpointType string) moneypricing.MoneyUsageFeatures {
-		return moneyUsageFeaturesFromAudioUsage(relayInfo, usage, profile, endpointType)
+	if moneyQuota, applied, quoteErr := applyRuntimeMoneyUsageQuote(relayInfo, usage.TotalTokens, func(activeUnits map[moneypricing.UsageUnit]struct{}, endpointType string) moneypricing.MoneyUsageFeatures {
+		return moneyUsageFeaturesFromAudioUsage(relayInfo, usage, activeUnits, endpointType)
 	}); quoteErr != nil {
 		logger.LogError(ctx, "error applying audio money usage pricing: "+quoteErr.Error())
 		if fallbackQuota, ok := fallbackRuntimeMoneyQuoteToPreconsume(relayInfo); ok {
