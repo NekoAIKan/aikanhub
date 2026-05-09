@@ -1070,7 +1070,7 @@ export function Docs() {
                 </h1>
                 <p className='text-muted-foreground text-sm'>
                   {t(
-                    'kittyvibe video generation API — call mainstream video models with one token, OpenAI-style async tasks.'
+                    'KittyVibe video generation API — call mainstream video models with one token, OpenAI-style async tasks.'
                   )}
                 </p>
               </header>
@@ -1086,7 +1086,7 @@ export function Docs() {
                 >
                   <p className='text-sm leading-relaxed'>
                     {t(
-                      'kittyvibe is a unified video generation API gateway. All supported models are called through the same set of endpoints — one token, no per-vendor signups, no SDK juggling, no fragmented invoices.'
+                      'KittyVibe is a unified video generation API gateway. All supported models are called through the same set of endpoints — one token, no per-vendor signups, no SDK juggling, no fragmented invoices.'
                     )}
                   </p>
                   <ul className='text-muted-foreground list-disc space-y-1 pl-6 text-sm'>
@@ -1101,7 +1101,7 @@ export function Docs() {
                     </li>
                     <li>
                       {t(
-                        'Videos are served from kittyvibe-signed URLs so storage links never leak to clients.'
+                        'Videos are served from KittyVibe-signed URLs so storage links never leak to clients.'
                       )}
                     </li>
                     <li>
@@ -1239,7 +1239,7 @@ export function Docs() {
                   id='seedance-overview'
                   title={t('Seedance overview')}
                   description={t(
-                    'Seedance is a high-end video generation model series. kittyvibe supports every Seedance call mode: text-to-video, image-to-video (first / first+last frame), multi-modal reference, edit video, extend video — plus audio generation and web search augmentation.'
+                    'Seedance is a high-end video generation model series. KittyVibe supports every Seedance call mode: text-to-video, image-to-video (first / first+last frame), multi-modal reference, edit video, extend video — plus audio generation and web search augmentation.'
                   )}
                 >
                   <Callout type='tip'>

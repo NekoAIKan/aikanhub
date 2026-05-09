@@ -25,7 +25,7 @@ func TestOptionBundleExportExcludesSensitiveKeys(t *testing.T) {
 	setupGrowthControllerTestDB(t)
 	common.OptionMapRWMutex.Lock()
 	common.OptionMap = map[string]string{
-		"SystemName":         "kittyvibe",
+		"SystemName":         "KittyVibe",
 		"GitHubClientSecret": "super-secret",
 		"TurnstileSiteKey":   "site-secret-too",
 		"ModelRatio":         `{"gpt":1}`,
@@ -51,7 +51,7 @@ func TestOptionBundleExportExcludesSensitiveKeys(t *testing.T) {
 	require.Equal(t, 2, response.Data.SchemaVersion)
 	require.Equal(t, "kittyvibe", response.Data.App)
 	require.NotZero(t, response.Data.ExportedAt)
-	require.Equal(t, "kittyvibe", response.Data.Options["SystemName"])
+	require.Equal(t, "KittyVibe", response.Data.Options["SystemName"])
 	require.NotContains(t, response.Data.Options, "GitHubClientSecret")
 	require.NotContains(t, response.Data.Options, "TurnstileSiteKey")
 	require.ElementsMatch(t, []string{"GitHubClientSecret", "TurnstileSiteKey"}, response.Data.Redacted)

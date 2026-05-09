@@ -11,7 +11,7 @@ import {
 
 const defaultGeneralSettings: GeneralSettings = {
   Notice: '',
-  SystemName: 'kittyvibe',
+  SystemName: 'KittyVibe',
   Logo: '',
   Footer: '',
   About: '',

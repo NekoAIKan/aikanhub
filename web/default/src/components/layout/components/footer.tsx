@@ -61,7 +61,7 @@ function ProjectAttribution(props: { currentYear: number }) {
           rel='noopener noreferrer'
           className='text-foreground/70 hover:text-foreground font-medium transition-colors'
         >
-          kittyvibe
+          KittyVibe
         </a>
         {' · '}
         <a
@@ -87,7 +87,7 @@ export function Footer(props: FooterProps) {
   } = useSystemConfig()
 
   const displayLogo = systemLogo || props.logo || '/logo.png'
-  const displayName = systemName || props.name || 'kittyvibe'
+  const displayName = systemName || props.name || 'KittyVibe'
   const isDemoSiteMode = Boolean(demoSiteEnabled)
   const currentYear = new Date().getFullYear()
 

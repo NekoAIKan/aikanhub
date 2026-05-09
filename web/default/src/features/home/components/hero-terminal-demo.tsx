@@ -104,7 +104,7 @@ const API_DEMOS: ApiDemoConfig[] = [
     method: 'GET',
     endpoint: '/v1/videos/{task_id}/content',
     headers: ['"Authorization: Bearer sk-••••"'],
-    request: ['# streams mp4 from upstream via kittyvibe proxy'],
+    request: ['# streams mp4 from upstream via KittyVibe proxy'],
     response: [
       '# Content-Type: video/mp4',
       '# Content-Length: <size>',

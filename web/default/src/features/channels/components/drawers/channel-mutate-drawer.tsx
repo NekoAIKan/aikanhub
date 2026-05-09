@@ -633,7 +633,7 @@ export function ChannelMutateDrawer({
     const timer = setTimeout(() => {
       toast.warning(
         t(
-          'Warning: Base URL should not end with /v1. kittyvibe will handle it automatically. This may cause request failures.'
+          'Warning: Base URL should not end with /v1. KittyVibe will handle it automatically. This may cause request failures.'
         ),
         { duration: 5000 }
       )
@@ -1767,7 +1767,7 @@ export function ChannelMutateDrawer({
                         </FormControl>
                         <FormDescription>
                           {t(
-                            'Custom API base URL. For official channels, kittyvibe has built-in addresses. Only fill this for third-party proxy sites or special endpoints. Do not add /v1 or trailing slash.'
+                            'Custom API base URL. For official channels, KittyVibe has built-in addresses. Only fill this for third-party proxy sites or special endpoints. Do not add /v1 or trailing slash.'
                           )}
                         </FormDescription>
                         <FormMessage />
