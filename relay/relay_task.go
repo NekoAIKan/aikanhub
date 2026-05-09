@@ -227,6 +227,12 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	// 8. 构建请求体
 	requestBody, err := adaptor.BuildRequestBody(c, info)
 	if err != nil {
+		// Audit failures from metadata.audit_image=true carry positional
+		// info — surface as image_audit_failed / image_audit_error so
+		// clients can identify which image needs replacing (issue #43).
+		if taskErr := taskErrorFromImageAuditError(err); taskErr != nil {
+			return nil, taskErr
+		}
 		return nil, service.TaskErrorWrapper(err, "build_request_failed", http.StatusInternalServerError)
 	}
 

@@ -150,6 +150,17 @@ func SetRelayRouter(router *gin.Engine) {
 			controller.Relay(c, types.RelayFormatOpenAI)
 		})
 
+		// image audit (issue #43): explicit pre-audit + reuse for ARK
+		// asset library. No Distribute() — these calls go directly to
+		// Volcano with the gateway's configured ARK_AK/ARK_SK, not
+		// through a user-selected channel.
+		imageAuditRouter := relayV1Router.Group("/image-audits")
+		{
+			imageAuditRouter.POST("", controller.CreateImageAudit)
+			imageAuditRouter.GET("", controller.ListImageAudits)
+			imageAuditRouter.GET("/:id", controller.GetImageAudit)
+		}
+
 		// not implemented
 		httpRouter.POST("/images/variations", controller.RelayNotImplemented)
 		httpRouter.GET("/files", controller.RelayNotImplemented)

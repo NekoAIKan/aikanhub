@@ -31,6 +31,7 @@ func migrateModels() []interface{} {
 		&Setup{}, &TwoFA{}, &TwoFABackupCode{}, &Checkin{},
 		&SubscriptionOrder{}, &UserSubscription{}, &SubscriptionPreConsumeRecord{},
 		&CustomOAuthProvider{}, &UserOAuthBinding{}, &SubscriptionPlan{},
+		&ImageAuditRecord{},
 	}
 }
 

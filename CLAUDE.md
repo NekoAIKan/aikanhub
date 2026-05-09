@@ -336,3 +336,23 @@ Two related traps when touching wallet/checkout currency display:
 
 1. **`quotaDisplayType` is the user's display currency, not the gateway's.** When `quotaDisplayType=USD` but the operator runs Epay, "Pay X" amounts come out in CNY (because they're `topup × USDExchangeRate`), not USD. Use `formatPaymentGatewayAmount()` (in `web/default/src/lib/currency.ts`) for any value already multiplied by `priceRatio` — it formats with ¥ when display is USD and the rate is non-1.
 2. **`status.price` is a deprecated alias.** Frontend code should read `status.usd_exchange_rate`. The `price` field is still emitted by `/api/status` for backward compat but is just `USDExchangeRate` under another name.
+
+### Rule 23: Persistent caches must answer before infra config checks
+
+When a function fronts an external service (ARK, COS, an LLM provider) and also persists a result cache for that service's outputs, the cache lookup MUST run before any "is the upstream configured?" guard. Otherwise rotating credentials or temporarily clearing an env var invalidates every previously-cached row — callers who only need to re-read a cached audit / asset / response suddenly get `service_not_configured` errors and assume the cache itself broke.
+
+Pattern (correct):
+
+```go
+// 1) cache lookup — answers regardless of upstream status
+if cached, err := store.Find(...); err == nil {
+    return cached, nil
+}
+// 2) only NOW check upstream creds — we're about to call it
+if !cfg.HasUpstream() {
+    return nil, errors.New("upstream not configured")
+}
+result, err := upstream.Call(...)
+```
+
+Test by setting upstream creds to empty AFTER seeding a cached row, then calling the function — it must return the cached row, not the config error. See `service/imageaudit/audit.go::Submit` for the canonical implementation.

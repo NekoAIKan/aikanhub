@@ -2,172 +2,258 @@ package imageaudit
 
 import (
 	"context"
-	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
+	"gorm.io/gorm"
 )
 
-// EnsureAudited drives the full audit pipeline for a single image source and
-// returns the asset:// URI to substitute back into the upstream payload.
+// EnsureAudited (legacy synchronous helper) and the new Submit/Wait
+// pair both live here. Submit/Wait back the public /v1/image-audits
+// endpoint; EnsureAudited keeps the per-request `audit_image=true` path
+// working without forcing every caller to refactor.
 //
-// src is whatever the user gave us:
+// Storage shape:
 //
-//	http(s)://...                  → CreateAsset(src) → poll → asset://<id>
-//	data:image/...;base64,<b64>    → COS upload → CreateAsset(public URL) → poll → asset://<id>
-//	<bare base64 string>           → same as data: URI, MIME inferred
-//	asset://<id>                   → returned as-is (already-audited inputs are fine)
+//	src (URL or data URI)
+//	    │
+//	    ▼  hashSource()
+//	(user_id, sha256) ──── DB lookup (active row?) ───── yes ──→ return cached
+//	    │ no
+//	    ▼
+//	materializeURL  → COS upload if base64
+//	    │
+//	    ▼
+//	ARK CreateAsset → assetID
+//	    │
+//	    ▼
+//	model.CreateImageAuditRecord(status=processing)
+//	    │
+//	    ▼
+//	spawnPoller (goroutine)  → GetAsset poll → DB row updated to active/failed
 //
-// On audit failure the error is *AuditError. On infra failures (creds missing,
-// COS upload failed, ARK 5xx, etc.) the error is a plain wrapped error.
-func EnsureAudited(ctx context.Context, src string) (string, error) {
+// Cache hits never spawn a poller. Failed cache hits are NOT auto-
+// retried — moderation rejections are usually deterministic and
+// retrying just spends ARK quota.
+
+// hashSource is the dedup key. Trimmed first so trailing whitespace
+// from copy/paste still hits the cache.
+func hashSource(src string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(src)))
+	return hex.EncodeToString(sum[:])
+}
+
+func sourceKindOf(src string) model.ImageAuditSource {
+	if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+		return model.ImageAuditSourceURL
+	}
+	return model.ImageAuditSourceBase64
+}
+
+// Submit creates a fresh audit record (or returns a cached terminal
+// one) and kicks off a background poller. The returned record's status
+// may be:
+//
+//   - active     — cache hit on a previously-passed audit. Reusable.
+//   - failed     — cache hit on a previously-failed audit. Caller
+//                  should NOT auto-retry; moderation decisions are
+//                  deterministic per content, retrying just spends
+//                  ARK quota.
+//   - processing — fresh audit, poller running. Use Wait() to block.
+//
+// userID > 0 scopes the dedup cache to that user. userID=0 disables
+// caching — internal calls without a user context fall straight to
+// fresh audit.
+//
+// asset://<id> input is a degenerate case used by the legacy
+// audit_image=true flow: a passthrough request for an asset the caller
+// claims is already audited. We try to find OUR record for it (scoped
+// to userID so we don't leak cross-tenant); if we don't have one, we
+// synthesize a non-persisted record with status=active. Public callers
+// (POST /v1/image-audits) should reject asset:// at the controller —
+// the synthetic record's id is not GET-able.
+func Submit(ctx context.Context, src string, userID, tokenID int) (*model.ImageAuditRecord, error) {
 	src = strings.TrimSpace(src)
 	if src == "" {
-		return "", errors.New("imageaudit: empty image source")
+		return nil, errors.New("imageaudit: empty source")
 	}
+
 	if strings.HasPrefix(src, "asset://") {
-		// Already an audited reference — the caller pre-uploaded.
-		return src, nil
+		return submitAssetPassthrough(src, userID, tokenID)
+	}
+
+	sh := hashSource(src)
+
+	// Cache lookup over BOTH active and failed terminal rows. A failed
+	// hit returns the cached failure verbatim; the caller decides how
+	// to surface it. Skipping the cache for failed rows would mean
+	// every retry of a moderation-rejected image spends another ARK
+	// CreateAsset call for an identical (deterministic) outcome.
+	//
+	// IMPORTANT: cache check runs BEFORE the HasARK() guard so that
+	// pre-audited rows remain queryable even if ARK credentials get
+	// unset (e.g. ops rotates keys). Otherwise a config gap would
+	// invalidate every cached audit, surprising callers with infra
+	// errors on hot-path lookups.
+	if userID > 0 {
+		if cached, err := model.FindTerminalImageAuditByHash(userID, sh); err == nil {
+			return cached, nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			// Cache lookup is best-effort. Log and fall through to a
+			// fresh audit so a transient DB hiccup doesn't block users.
+			common.SysLog(fmt.Sprintf("imageaudit: cache lookup failed: %v", err))
+		}
 	}
 
 	cfg := Load()
 	if !cfg.HasARK() {
-		return "", errors.New("imageaudit: ARK_AK / ARK_SK not configured")
+		return nil, errors.New("imageaudit: ARK_AK / ARK_SK not configured")
 	}
 
-	// Step 1 — make sure we have a public URL to give CreateAsset.
 	publicURL, err := materializeURL(ctx, cfg, src)
 	if err != nil {
-		return "", fmt.Errorf("imageaudit: prepare URL: %w", err)
+		return nil, fmt.Errorf("imageaudit: prepare URL: %w", err)
 	}
 
 	client := newARKClient(cfg)
-	groupId, err := client.ensureAssetGroup(ctx)
+	groupID, err := client.ensureAssetGroup(ctx)
 	if err != nil {
-		return "", fmt.Errorf("imageaudit: ensureAssetGroup: %w", err)
+		return nil, fmt.Errorf("imageaudit: ensureAssetGroup: %w", err)
+	}
+	assetID, err := client.createAsset(ctx, groupID, publicURL)
+	if err != nil {
+		return nil, fmt.Errorf("imageaudit: createAsset: %w", err)
 	}
 
-	// Step 2 — submit + poll.
-	assetID, err := client.createAsset(ctx, groupId, publicURL)
-	if err != nil {
-		return "", fmt.Errorf("imageaudit: createAsset: %w", err)
+	rec := &model.ImageAuditRecord{
+		UserID:     userID,
+		TokenID:    tokenID,
+		SourceHash: sh,
+		SourceKind: sourceKindOf(src),
+		PublicURL:  publicURL,
+		Project:    cfg.ARKProject,
+		GroupID:    groupID,
+		AssetID:    assetID,
+		AssetURI:   "asset://" + assetID,
+		Status:     model.ImageAuditStatusProcessing,
 	}
-	if _, err := client.pollAsset(ctx, assetID); err != nil {
-		// AuditError is preserved verbatim so callers can map to a stable code.
-		return "", err
+	if err := model.CreateImageAuditRecord(rec); err != nil {
+		// Row creation failed but ARK already accepted the submission.
+		// Log loud — the asset is now orphaned in ARK from our DB's
+		// perspective. Caller gets an error and can resubmit; the
+		// startup sweeper won't find it because we never persisted it.
+		common.SysLog(fmt.Sprintf("imageaudit: persist record failed (assetID=%s orphaned): %v",
+			assetID, err))
+		return nil, fmt.Errorf("imageaudit: persist record: %w", err)
 	}
-	return "asset://" + assetID, nil
+
+	spawnPoller(rec.RecordID, assetID, cfg.ARKPollInterval, cfg.ARKPollTimeout)
+
+	return rec, nil
 }
 
-// IsAuditFailure returns true when the error is the audit terminating in
-// Failed (vs. transient infra errors). Used by the relay layer to map to a
-// distinct user-facing error code.
+// submitAssetPassthrough handles src="asset://<id>" inputs. Used by
+// EnsureAudited (legacy audit_image=true) for callers who already have
+// an audited asset id and want passthrough. The public POST endpoint
+// rejects this case at the controller layer.
+//
+// We look up our own audit record for this asset, scoped to userID
+// when provided, so user A can't probe whether user B has audited a
+// given asset. If we don't have a record, we synthesize an in-memory
+// active record — the caller asserts the asset is good; if it isn't,
+// ARK will reject the downstream video task.
+func submitAssetPassthrough(src string, userID, tokenID int) (*model.ImageAuditRecord, error) {
+	assetID := strings.TrimPrefix(src, "asset://")
+	if assetID == "" {
+		return nil, errors.New("imageaudit: empty asset id")
+	}
+	if r, err := model.FindImageAuditByAssetID(assetID); err == nil {
+		// Only return the existing record when it belongs to this
+		// caller. Otherwise treat as unknown and synthesize, so we
+		// don't leak userIDs / timestamps across tenants.
+		if userID == 0 || r.UserID == userID {
+			return r, nil
+		}
+	}
+	now := time.Now().Unix()
+	return &model.ImageAuditRecord{
+		RecordID:  "external_" + assetID,
+		UserID:    userID,
+		TokenID:   tokenID,
+		AssetID:   assetID,
+		AssetURI:  src,
+		Status:    model.ImageAuditStatusActive,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}, nil
+}
+
+// Wait blocks until the record reaches a terminal state, ctx expires,
+// or the audit poll timeout fires. Polls the DB (not an in-memory
+// channel) so it works across replicas where the poller goroutine
+// lives in a different process.
+func Wait(ctx context.Context, recordID string) (*model.ImageAuditRecord, error) {
+	cfg := Load()
+	interval := cfg.ARKPollInterval
+	if interval <= 0 {
+		interval = 3 * time.Second
+	}
+	deadline := time.Now().Add(cfg.ARKPollTimeout)
+	for {
+		r, err := model.GetImageAuditRecordByRecordID(0, recordID)
+		if err != nil {
+			return nil, err
+		}
+		if r.Status.IsTerminal() {
+			return r, nil
+		}
+		if time.Now().After(deadline) {
+			return r, fmt.Errorf("imageaudit: wait timed out (record=%s)", recordID)
+		}
+		select {
+		case <-ctx.Done():
+			return r, ctx.Err()
+		case <-time.After(interval):
+		}
+	}
+}
+
+// EnsureAudited is the legacy synchronous wrapper. Submit+Wait, return
+// the asset:// URI on success. Audit failure → *AuditError so callers
+// can map to a stable image_audit_failed error code.
+//
+// userID/tokenID are best-effort — pass 0 from callers that don't have
+// the context yet (they'll just miss the dedup cache).
+func EnsureAudited(ctx context.Context, src string, userID, tokenID int) (string, error) {
+	rec, err := Submit(ctx, src, userID, tokenID)
+	if err != nil {
+		return "", err
+	}
+	if !rec.Status.IsTerminal() {
+		rec, err = Wait(ctx, rec.RecordID)
+		if err != nil {
+			return "", err
+		}
+	}
+	if rec.Status == model.ImageAuditStatusFailed {
+		return "", &AuditError{AssetId: rec.AssetID, Status: "Failed", Reason: rec.Reason}
+	}
+	if rec.AssetURI == "" {
+		return "", fmt.Errorf("imageaudit: record %s active but URI empty", rec.RecordID)
+	}
+	return rec.AssetURI, nil
+}
+
+// IsAuditFailure reports whether the error is an audit moderation
+// rejection (vs. an infrastructure error). Callers map this to a stable
+// image_audit_failed error code in the public response.
 func IsAuditFailure(err error) bool {
 	var ae *AuditError
 	return errors.As(err, &ae)
-}
-
-// materializeURL ensures the audit pipeline has a public HTTPS URL to feed
-// CreateAsset. Plain http(s) URLs pass through; data URIs and bare base64
-// strings get uploaded to COS first.
-func materializeURL(ctx context.Context, cfg Config, src string) (string, error) {
-	if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
-		return src, nil
-	}
-	// Anything else has to be uploadable bytes. Decode + upload.
-	if !cfg.HasCOS() {
-		return "", errors.New("audit_image=true with non-URL source requires COS_BUCKET / COS_SECRET_ID / COS_SECRET_KEY")
-	}
-	raw, contentType, err := decodeDataURI(src)
-	if err != nil {
-		return "", fmt.Errorf("decode data URI: %w", err)
-	}
-	if len(raw) == 0 {
-		return "", errors.New("decoded image is empty")
-	}
-	objectKey := buildObjectKey(cfg.COSPrefix, contentType)
-	publicURL, err := uploadToCOS(ctx, cfg, objectKey, raw, contentType)
-	if err != nil {
-		return "", fmt.Errorf("cos upload: %w", err)
-	}
-	return publicURL, nil
-}
-
-// buildObjectKey produces a unique, short, predictable key like
-// "<prefix>/2026/05/07/<8-hex>.jpg" so collisions are impossible and traces
-// are sortable by date.
-func buildObjectKey(prefix, contentType string) string {
-	prefix = strings.Trim(prefix, "/")
-	if prefix == "" {
-		prefix = "aikanhub-audit"
-	}
-	now := time.Now().UTC()
-	day := now.Format("2006/01/02")
-	rb := make([]byte, 6)
-	_, _ = rand.Read(rb)
-	suffix := hex.EncodeToString(rb)
-	return fmt.Sprintf("%s/%s/%d-%s%s", prefix, day, now.UnixNano(), suffix, extOf(contentType))
-}
-
-// ---------------------------------------------------------------------------
-// Single-flight cache: when a video task carries multiple images that all need
-// auditing, the calling adapter loops over them serially. That's fine, but
-// callers that batch identical URLs (rare, but happens with templated
-// requests) shouldn't re-submit the same one. The cache below is process-
-// local and bounded — it's only optimization, never correctness.
-// ---------------------------------------------------------------------------
-
-type cachedResult struct {
-	asset    string
-	expireAt time.Time
-}
-
-var (
-	cacheMu sync.Mutex
-	cache   = make(map[string]cachedResult)
-)
-
-const cacheTTL = 30 * time.Minute
-
-// EnsureAuditedCached is EnsureAudited with a same-process best-effort cache
-// keyed by the source string. Use this from the hot path; bare EnsureAudited
-// is fine for tests.
-func EnsureAuditedCached(ctx context.Context, src string) (string, error) {
-	if cached, ok := cacheGet(src); ok {
-		return cached, nil
-	}
-	out, err := EnsureAudited(ctx, src)
-	if err != nil {
-		return "", err
-	}
-	cachePut(src, out)
-	return out, nil
-}
-
-func cacheGet(key string) (string, bool) {
-	cacheMu.Lock()
-	defer cacheMu.Unlock()
-	c, ok := cache[key]
-	if !ok {
-		return "", false
-	}
-	if time.Now().After(c.expireAt) {
-		delete(cache, key)
-		return "", false
-	}
-	return c.asset, true
-}
-
-func cachePut(key, asset string) {
-	cacheMu.Lock()
-	defer cacheMu.Unlock()
-	if len(cache) > 1000 {
-		// Crude eviction — drop everything. Audit decisions can re-derive on
-		// next request; we only care about avoiding unbounded growth.
-		cache = make(map[string]cachedResult)
-	}
-	cache[key] = cachedResult{asset: asset, expireAt: time.Now().Add(cacheTTL)}
 }
