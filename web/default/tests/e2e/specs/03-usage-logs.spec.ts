@@ -6,7 +6,7 @@
 import { test, expect, type APIRequestContext } from '../fixtures'
 import type { Route } from '@playwright/test'
 
-const TOKEN = process.env.AIKANHUB_GATEWAY_TOKEN
+const TOKEN = process.env.KITTYVIBE_GATEWAY_TOKEN
 const FIXTURE_TASK_ID = 'task-pr27-720p-54450'
 
 async function submitAndPoll(req: APIRequestContext, body: Record<string, unknown>) {
@@ -238,7 +238,7 @@ test.describe('PR #27 — usage logs surface video tasks correctly', () => {
   })
 
   test('text → textGenerate row in Usage Logs', async ({ page, apiRequest }) => {
-    test.skip(!TOKEN, 'set AIKANHUB_GATEWAY_TOKEN to a sk- token to run this spec')
+    test.skip(!TOKEN, 'set KITTYVIBE_GATEWAY_TOKEN to a sk- token to run this spec')
     const submitted = await submitAndPoll(apiRequest, {
       model: 'doubao-seedance-2-0-fast-260128',
       content: [{ type: 'text', text: 'a tiny ginger cat' }],
@@ -257,7 +257,7 @@ test.describe('PR #27 — usage logs surface video tasks correctly', () => {
   })
 
   test('first+last → firstTailGenerate row in Usage Logs', async ({ page, apiRequest }) => {
-    test.skip(!TOKEN, 'set AIKANHUB_GATEWAY_TOKEN to a sk- token to run this spec')
+    test.skip(!TOKEN, 'set KITTYVIBE_GATEWAY_TOKEN to a sk- token to run this spec')
     const submitted = await submitAndPoll(apiRequest, {
       model: 'doubao-seedance-2-0-fast-260128',
       content: [

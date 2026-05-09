@@ -148,7 +148,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                 <FormItem>
                   <FormLabel>{t('System Name')}</FormLabel>
                   <FormControl>
-                    <Input placeholder='kittyvibe' {...field} />
+                    <Input placeholder='KittyVibe' {...field} />
                   </FormControl>
                   <FormDescription>
                     {t('The name displayed across the application')}
@@ -252,7 +252,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                   <FormLabel>{t('Home Page Content')}</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder={t('Welcome to kittyvibe...')}
+                      placeholder={t('Welcome to KittyVibe...')}
                       rows={6}
                       {...field}
                     />

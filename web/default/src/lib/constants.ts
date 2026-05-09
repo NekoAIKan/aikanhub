@@ -3,7 +3,7 @@
  */
 
 // System Configuration Defaults
-export const DEFAULT_SYSTEM_NAME = 'kittyvibe'
+export const DEFAULT_SYSTEM_NAME = 'KittyVibe'
 export const DEFAULT_LOGO = '/logo.png'
 
 // LocalStorage Keys

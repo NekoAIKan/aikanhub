@@ -15,7 +15,7 @@ const ENDPOINT_BASE =
 // ============================================================================
 
 const CURL_T2V = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "doubao-seedance-2-0-260128",
@@ -26,7 +26,7 @@ const CURL_T2V = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
   }'`
 
 const CURL_I2V_FIRST = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "doubao-seedance-2-0-260128",
@@ -38,7 +38,7 @@ const CURL_I2V_FIRST = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
   }'`
 
 const CURL_I2V_FIRSTLAST = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "doubao-seedance-2-0-260128",
@@ -54,7 +54,7 @@ const CURL_I2V_FIRSTLAST = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \
   }'`
 
 const CURL_MULTIMODAL = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "doubao-seedance-2-0-260128",
@@ -73,7 +73,7 @@ const CURL_MULTIMODAL = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
   }'`
 
 const CURL_EDIT = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "doubao-seedance-2-0-260128",
@@ -90,7 +90,7 @@ const CURL_EDIT = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
   }'`
 
 const CURL_EXTEND = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "doubao-seedance-2-0-260128",
@@ -108,7 +108,7 @@ const CURL_EXTEND = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
   }'`
 
 const CURL_WEB_SEARCH = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "doubao-seedance-2-0-260128",
@@ -130,7 +130,7 @@ const CURL_WEB_SEARCH = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
 // ----------------------------------------------------------------------------
 
 const CURL_PIXVERSE_T2V = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "pixverse-v4.5",
@@ -138,7 +138,7 @@ const CURL_PIXVERSE_T2V = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
   }'`
 
 const CURL_PIXVERSE_T2V_PINNED = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "pixverse-v4.5-720p",
@@ -146,7 +146,7 @@ const CURL_PIXVERSE_T2V_PINNED = `curl -X POST ${ENDPOINT_BASE}/v1/video/generat
   }'`
 
 const CURL_PIXVERSE_I2V = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "pixverse-v4.5",
@@ -155,7 +155,7 @@ const CURL_PIXVERSE_I2V = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
   }'`
 
 const CURL_PIXVERSE_TRANSITION = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "pixverse-v4.5",
@@ -167,7 +167,7 @@ const CURL_PIXVERSE_TRANSITION = `curl -X POST ${ENDPOINT_BASE}/v1/video/generat
   }'`
 
 const CURL_PIXVERSE_FUSION = `curl -X POST ${ENDPOINT_BASE}/v1/video/generations \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "pixverse-v4.5",
@@ -189,7 +189,7 @@ import os
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ["AIKANHUB_TOKEN"],
+    api_key=os.environ["KITTYVIBE_TOKEN"],
     base_url="${ENDPOINT_BASE}/v1",
 )
 
@@ -204,7 +204,7 @@ import os
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ["AIKANHUB_TOKEN"],
+    api_key=os.environ["KITTYVIBE_TOKEN"],
     base_url="${ENDPOINT_BASE}/v1",
 )
 
@@ -218,10 +218,10 @@ video = client.videos.create(
 print(video.id)`
 
 const CURL_POLL = `curl ${ENDPOINT_BASE}/v1/video/generations/$TASK_ID \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN"`
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN"`
 
 const CURL_DOWNLOAD = `curl -o video.mp4 ${ENDPOINT_BASE}/v1/videos/$TASK_ID/content \\
-  -H "Authorization: Bearer $AIKANHUB_TOKEN"`
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN"`
 
 // ----------------------------------------------------------------------------
 // Python SDK examples.
@@ -239,7 +239,7 @@ import os
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ["AIKANHUB_TOKEN"],
+    api_key=os.environ["KITTYVIBE_TOKEN"],
     base_url="${ENDPOINT_BASE}/v1",
 )
 
@@ -257,7 +257,7 @@ import os
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ["AIKANHUB_TOKEN"],
+    api_key=os.environ["KITTYVIBE_TOKEN"],
     base_url="${ENDPOINT_BASE}/v1",
 )
 
@@ -278,7 +278,7 @@ import os
 from volcenginesdkarkruntime import Ark
 
 client = Ark(
-    api_key=os.environ["AIKANHUB_TOKEN"],
+    api_key=os.environ["KITTYVIBE_TOKEN"],
     base_url="${ENDPOINT_BASE}/api/v3",
 )
 
@@ -299,7 +299,7 @@ import os
 from volcenginesdkarkruntime import Ark
 
 client = Ark(
-    api_key=os.environ["AIKANHUB_TOKEN"],
+    api_key=os.environ["KITTYVIBE_TOKEN"],
     base_url="${ENDPOINT_BASE}/api/v3",
 )
 
@@ -323,7 +323,7 @@ import os
 from volcenginesdkarkruntime import Ark
 
 client = Ark(
-    api_key=os.environ["AIKANHUB_TOKEN"],
+    api_key=os.environ["KITTYVIBE_TOKEN"],
     base_url="${ENDPOINT_BASE}/api/v3",
 )
 
@@ -345,7 +345,7 @@ import os
 from volcenginesdkarkruntime import Ark
 
 client = Ark(
-    api_key=os.environ["AIKANHUB_TOKEN"],
+    api_key=os.environ["KITTYVIBE_TOKEN"],
     base_url="${ENDPOINT_BASE}/api/v3",
 )
 
@@ -368,7 +368,7 @@ import os
 from volcenginesdkarkruntime import Ark
 
 client = Ark(
-    api_key=os.environ["AIKANHUB_TOKEN"],
+    api_key=os.environ["KITTYVIBE_TOKEN"],
     base_url="${ENDPOINT_BASE}/api/v3",
 )
 
@@ -389,7 +389,7 @@ import os
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ["AIKANHUB_TOKEN"],
+    api_key=os.environ["KITTYVIBE_TOKEN"],
     base_url="${ENDPOINT_BASE}/v1",
 )
 
@@ -398,7 +398,7 @@ print(video.status, video.model_extra)
 
 # Volcano SDK alternative — exposes content.video_url directly:
 # from volcenginesdkarkruntime import Ark
-# ark = Ark(api_key=os.environ["AIKANHUB_TOKEN"], base_url="${ENDPOINT_BASE}/api/v3")
+# ark = Ark(api_key=os.environ["KITTYVIBE_TOKEN"], base_url="${ENDPOINT_BASE}/api/v3")
 # task = ark.content_generation.tasks.get(task_id="your-task-id-here")
 # print(task.status, task.content.video_url)`
 
@@ -409,7 +409,7 @@ from pathlib import Path
 TASK_ID = "your-task-id-here"
 r = httpx.get(
     f"${ENDPOINT_BASE}/v1/videos/{TASK_ID}/content",
-    headers={"Authorization": f"Bearer {os.environ['AIKANHUB_TOKEN']}"},
+    headers={"Authorization": f"Bearer {os.environ['KITTYVIBE_TOKEN']}"},
 )
 r.raise_for_status()
 Path("video.mp4").write_bytes(r.content)
@@ -422,7 +422,7 @@ from pathlib import Path
 from openai import OpenAI
 
 BASE  = "${ENDPOINT_BASE}"
-TOKEN = os.environ["AIKANHUB_TOKEN"]
+TOKEN = os.environ["KITTYVIBE_TOKEN"]
 client = OpenAI(api_key=TOKEN, base_url=f"{BASE}/v1")
 
 
@@ -474,7 +474,7 @@ const NODE_FULL = `// End-to-end example: submit -> poll -> download
 import { writeFile } from "node:fs/promises";
 
 const BASE  = "${ENDPOINT_BASE}";
-const TOKEN = process.env.AIKANHUB_TOKEN;
+const TOKEN = process.env.KITTYVIBE_TOKEN;
 const H     = { Authorization: \`Bearer \${TOKEN}\`, "Content-Type": "application/json" };
 
 async function submitVideoTask(prompt, opts = {}) {
@@ -1070,7 +1070,7 @@ export function Docs() {
                 </h1>
                 <p className='text-muted-foreground text-sm'>
                   {t(
-                    'kittyvibe video generation API — call mainstream video models with one token, OpenAI-style async tasks.'
+                    'KittyVibe video generation API — call mainstream video models with one token, OpenAI-style async tasks.'
                   )}
                 </p>
               </header>
@@ -1086,7 +1086,7 @@ export function Docs() {
                 >
                   <p className='text-sm leading-relaxed'>
                     {t(
-                      'kittyvibe is a unified video generation API gateway. All supported models are called through the same set of endpoints — one token, no per-vendor signups, no SDK juggling, no fragmented invoices.'
+                      'KittyVibe is a unified video generation API gateway. All supported models are called through the same set of endpoints — one token, no per-vendor signups, no SDK juggling, no fragmented invoices.'
                     )}
                   </p>
                   <ul className='text-muted-foreground list-disc space-y-1 pl-6 text-sm'>
@@ -1101,7 +1101,7 @@ export function Docs() {
                     </li>
                     <li>
                       {t(
-                        'Videos are served from kittyvibe-signed URLs so storage links never leak to clients.'
+                        'Videos are served from KittyVibe-signed URLs so storage links never leak to clients.'
                       )}
                     </li>
                     <li>
@@ -1149,7 +1149,7 @@ export function Docs() {
                       </h3>
                       <CodeBlock
                         lang='shell'
-                        code={`export AIKANHUB_TOKEN=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`}
+                        code={`export KITTYVIBE_TOKEN=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`}
                       />
                     </li>
                     <li className='space-y-2'>
@@ -1195,7 +1195,7 @@ export function Docs() {
                 >
                   <CodeBlock
                     lang='shell'
-                    code={`Authorization: Bearer $AIKANHUB_TOKEN`}
+                    code={`Authorization: Bearer $KITTYVIBE_TOKEN`}
                   />
                   <p className='text-muted-foreground text-sm'>
                     {t(
@@ -1239,7 +1239,7 @@ export function Docs() {
                   id='seedance-overview'
                   title={t('Seedance overview')}
                   description={t(
-                    'Seedance is a high-end video generation model series. kittyvibe supports every Seedance call mode: text-to-video, image-to-video (first / first+last frame), multi-modal reference, edit video, extend video — plus audio generation and web search augmentation.'
+                    'Seedance is a high-end video generation model series. KittyVibe supports every Seedance call mode: text-to-video, image-to-video (first / first+last frame), multi-modal reference, edit video, extend video — plus audio generation and web search augmentation.'
                   )}
                 >
                   <Callout type='tip'>

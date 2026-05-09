@@ -13,7 +13,7 @@
 
 ```bash
 curl /v1/video/generations \
-  -H "Authorization: Bearer $AIKANHUB_API_KEY" \
+  -H "Authorization: Bearer $KITTYVIBE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "doubao-seedance-2-0-fast-260128",

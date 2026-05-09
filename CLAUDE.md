@@ -105,10 +105,10 @@ When implementing a new channel:
 - Confirm whether the provider supports `StreamOptions`.
 - If supported, add the channel to `streamSupportedChannels`.
 
-### Rule 5: Fork Attribution & Branding Policy (AIKanHub)
+### Rule 5: Fork Attribution & Branding Policy (KittyVibe)
 
 This is a fork of [Calcium-Ion/new-api](https://github.com/Calcium-Ion/new-api).
-We re-brand the user-facing surface to AIKanHub, but preserve upstream attribution
+We re-brand the user-facing surface to KittyVibe, but preserve upstream attribution
 where AGPL-3.0 requires it. When making changes, follow:
 
 **MUST preserve (legal / AGPL requirements):**
@@ -125,7 +125,7 @@ where AGPL-3.0 requires it. When making changes, follow:
 - Project taglines, descriptions, analytics IDs
 
 **When adding new files:**
-- New files in this fork should carry AIKanHub identity (e.g., `aikanhub-*` naming
+- New files in this fork should carry KittyVibe identity (e.g., `aikanhub-*` naming
   in container_name, image tags, env var prefixes if introducing new ones)
 - Do not introduce gratuitous references to the upstream project name in new code
 

@@ -1,15 +1,15 @@
 # Seedance E2E test harness
 
 Drives every documented Seedance endpoint via both the OpenAI SDK and the
-Volcano Ark SDK, against a running aikanhub instance.
+Volcano Ark SDK, against a running kittyvibe instance.
 
 ## Prerequisites
 
 ```bash
-# 1. aikanhub running on $AIKANHUB_BASE_URL (default http://localhost:3000)
+# 1. kittyvibe running on $KITTYVIBE_BASE_URL (default http://localhost:3000)
 #    with a Doubao channel configured.
 # 2. Token in .env.maomao (one level up):
-#       AIKANHUB_TOKEN=sk-...
+#       KITTYVIBE_TOKEN=sk-...
 
 cd aikanhub/web/default/tests
 python3 -m venv .venv && source .venv/bin/activate

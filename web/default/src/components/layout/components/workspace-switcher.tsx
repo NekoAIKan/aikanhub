@@ -37,7 +37,7 @@ type WorkspaceSwitcherProps = {
  */
 export function WorkspaceSwitcher({
   workspaces,
-  defaultName = 'kittyvibe',
+  defaultName = 'KittyVibe',
   defaultVersion,
 }: WorkspaceSwitcherProps) {
   const { t } = useTranslation()

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.6
 #
-# AIKanHub multi-stage build.
+# KittyVibe multi-stage build.
 #
 # The image builds the default frontend and embeds it into the Go binary.
 
