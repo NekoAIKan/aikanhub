@@ -276,3 +276,22 @@ When adding or editing a task adaptor:
 - Cover this in `web/default/tests/run.py::check_action_labels` — it submits one request per shape and asserts the stored action.
 
 See `relay/channel/task/doubao/adaptor.go::inferAction` for the canonical implementation.
+
+### Rule 19: Vendor prices and per-model billing knobs never live in source
+
+This repo is open source; any number that represents an upstream cost, a markup, a per-model unit price, or a vendor-specific fallback (default fps, resolution, conservative multiplier, video-input discount ratio, etc.) is **operator data**, not code. It belongs in:
+
+- `setting/video_billing_setting.profiles` (per-model JSON, runtime-configurable via the admin UI / `/api/option/` PUT)
+- `setting/profit_setting.*` (deployment-wide upstream cost + markup)
+- `setting/ratio_setting.*` (per-model ratios for non-video models)
+
+Things that are NOT allowed in source:
+
+- A `defaultXxxProfile()` factory that ships specific fps / resolution / multiplier defaults for a vendor's model family.
+- A map like `videoInputRatioMap = {"model": 28.0/46.0}` whose numeric value mirrors a vendor's published price ratio.
+- A magic-number fallback in a price resolver (e.g. `return 1` from `resolveVideoRetailUnitPrice` when nothing is configured) — that bills users at an opaque rate the operator never set. Return 0 / refuse instead, or only fall back to admin-configured `profit_setting.*` values.
+- Hardcoded sample tables in user docs or admin previews (`$0.885 / video`, fixture rows with `quota = tokens / 2`) — these freeze the moment the vendor moves.
+
+When you need to "preview" or "test" pricing, run the actual billing engine against admin-configured data — see `controller/video_billing_preview.go` for the pattern (canonical request shapes server-side, runtime resolves them through the same `service.CalculateVideoBilling` the request path uses).
+
+Operator handover for the video billing schema lives at `setting/video_billing_setting/profiles.md`. Update it in the same PR when you add or repurpose a profile field.
