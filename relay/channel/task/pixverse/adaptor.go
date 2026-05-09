@@ -129,14 +129,20 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 		return service.TaskErrorWrapper(err, "get_task_request_failed", http.StatusBadRequest)
 	}
 
-	// Determine action: explicit metadata.action wins; otherwise infer from images.
+	// Determine action: explicit metadata.action wins; otherwise infer
+	// from the image count. `req.Images` is hydrated upstream by
+	// ValidateBasicTaskRequest from both the top-level `images[]` field
+	// AND `metadata.content[].image_url`, so a single source check
+	// covers both call shapes.
 	action := constant.TaskActionTextGenerate
 	if metaAction, ok := req.Metadata["action"]; ok {
 		if s, _ := metaAction.(string); s != "" {
 			action = s
 		}
-	} else if req.HasImage() {
+	} else {
 		switch len(req.Images) {
+		case 0:
+			// keep textGenerate
 		case 1:
 			action = constant.TaskActionGenerate
 		case 2:

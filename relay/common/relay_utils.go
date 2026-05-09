@@ -78,6 +78,59 @@ func validatePrompt(prompt string) *dto.TaskError {
 	return nil
 }
 
+// imagesFromMetadataContent extracts image URLs from the
+// `metadata.content[]` shape used by OpenAI-compatible video clients.
+// Callers expect one URL per item shaped `{type: "image_url",
+// image_url: {url: "..."}}`. Items without a URL are skipped silently
+// (let the downstream resolver decide whether the missing slot is fatal).
+func imagesFromMetadataContent(metadata map[string]any) []string {
+	if metadata == nil {
+		return nil
+	}
+	contentRaw, ok := metadata["content"]
+	if !ok {
+		return nil
+	}
+	extract := func(items []map[string]any) []string {
+		var out []string
+		for _, item := range items {
+			if item["type"] != nil && item["type"] != "image_url" {
+				if _, has := item["image_url"]; !has {
+					continue
+				}
+			}
+			urlField, ok := item["image_url"]
+			if !ok {
+				continue
+			}
+			switch v := urlField.(type) {
+			case string:
+				if v != "" {
+					out = append(out, v)
+				}
+			case map[string]any:
+				if u, ok := v["url"].(string); ok && u != "" {
+					out = append(out, u)
+				}
+			}
+		}
+		return out
+	}
+	switch content := contentRaw.(type) {
+	case []any:
+		converted := make([]map[string]any, 0, len(content))
+		for _, item := range content {
+			if itemMap, ok := item.(map[string]any); ok {
+				converted = append(converted, itemMap)
+			}
+		}
+		return extract(converted)
+	case []map[string]any:
+		return extract(content)
+	}
+	return nil
+}
+
 func validateMultipartTaskRequest(c *gin.Context, info *RelayInfo, action string) (TaskSubmitReq, error) {
 	var req TaskSubmitReq
 	if _, err := c.MultipartForm(); err != nil {
@@ -140,6 +193,15 @@ func ValidateMultipartDirect(c *gin.Context, info *RelayInfo) *dto.TaskError {
 	}
 	if req.InputReference != "" {
 		req.Images = []string{req.InputReference}
+	}
+	// Hydrate `req.Images` from `metadata.content[].image_url` so adaptor
+	// code can keep reading a single canonical field. Callers using the
+	// OpenAI Videos shape pass image references inside metadata.content;
+	// without this fold the downstream image-resolution path (e.g.
+	// pixverse.resolveImageID looking at req.Images[i]) returns
+	// "missing image at index 0" even though the request did include one.
+	if extras := imagesFromMetadataContent(req.Metadata); len(extras) > 0 {
+		req.Images = append(req.Images, extras...)
 	}
 
 	if strings.TrimSpace(req.Model) == "" {
@@ -219,6 +281,14 @@ func ValidateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string) *d
 	if len(req.Images) == 0 && strings.TrimSpace(req.Image) != "" {
 		// 兼容单图上传
 		req.Images = []string{req.Image}
+	}
+	// Hydrate from metadata.content[].image_url for OpenAI-style callers
+	// who pass image references inside metadata. Without this, downstream
+	// adaptors (pixverse i2v, doubao referenceGenerate) read req.Images
+	// as empty and reject the request as missing image input even when
+	// the metadata clearly carries one.
+	if extras := imagesFromMetadataContent(req.Metadata); len(extras) > 0 {
+		req.Images = append(req.Images, extras...)
 	}
 
 	storeTaskRequest(c, info, action, req)
