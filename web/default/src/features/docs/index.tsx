@@ -2379,42 +2379,44 @@ export function Docs() {
                 <Section
                   id='pricing'
                   title={t('Pricing')}
-                  description={t('Charged per video, in USD.')}
+                  description={t(
+                    'Billing is per-token, derived from the request. Specific rates for this deployment are on the model pricing page.'
+                  )}
                 >
-                  <div className='overflow-hidden rounded-lg border'>
-                    <table className='w-full text-sm'>
-                      <thead className='bg-muted'>
-                        <tr className='text-left'>
-                          <th className='px-4 py-2 font-medium'>
-                            {t('Model')}
-                          </th>
-                          <th className='px-4 py-2 font-medium'>{t('Spec')}</th>
-                          <th className='px-4 py-2 font-medium'>
-                            {t('Unit price')}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className='divide-y text-xs'>
-                        <tr>
-                          <td className='px-4 py-2 font-mono'>
-                            doubao-seedance-2-0-260128
-                          </td>
-                          <td className='px-4 py-2'>720p / 5 s</td>
-                          <td className='px-4 py-2'>$0.885 / video</td>
-                        </tr>
-                        <tr>
-                          <td className='px-4 py-2 font-mono'>
-                            doubao-seedance-2-0-fast-260128
-                          </td>
-                          <td className='px-4 py-2'>720p / 5 s</td>
-                          <td className='px-4 py-2'>$0.712 / video</td>
-                        </tr>
-                      </tbody>
-                    </table>
+                  <p className='text-sm'>
+                    {t(
+                      'For each video task the system computes a token count from the request and multiplies by a per-million-token rate.'
+                    )}
+                  </p>
+                  <div className='bg-muted/50 rounded-lg border p-3 font-mono text-xs'>
+                    tokens = (input_seconds + output_seconds) × width ×
+                    height × fps / 1024
                   </div>
+                  <p className='text-sm'>{t('The rate ($/1M tokens) varies by:')}</p>
+                  <ul className='text-muted-foreground list-disc space-y-1 pl-6 text-sm'>
+                    <li>
+                      {t(
+                        'Output resolution — 480p / 720p / 1080p may price differently.'
+                      )}
+                    </li>
+                    <li>
+                      {t(
+                        'Whether the request includes a reference video — with-video typically prices lower than text/image-only.'
+                      )}
+                    </li>
+                  </ul>
                   <p className='text-muted-foreground text-xs'>
                     {t(
-                      'Currently flat pricing (baseline 720p / 5 s / no video input). Per-resolution / per-duration / video-input pricing is in development. Multi-modal calls that include video inputs apply a discount multiplier. Failed tasks are not billed.'
+                      'Requests that carry reference video are subject to a minimum-token floor. Failed tasks are not billed. Group ratios apply on top of the resolved rate.'
+                    )}
+                  </p>
+                  <p className='text-sm'>
+                    {t('See the')}{' '}
+                    <a className='underline' href='/pricing'>
+                      {t('model pricing page')}
+                    </a>{' '}
+                    {t(
+                      'for the rates configured on this deployment, or check the per-task billing breakdown in your dashboard usage logs for the exact tokens, unit price, and quota deducted.'
                     )}
                   </p>
                 </Section>
