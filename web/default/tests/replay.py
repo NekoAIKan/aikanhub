@@ -31,22 +31,18 @@ from dotenv import load_dotenv
 HERE = Path(__file__).resolve().parent
 load_dotenv(HERE.parent.parent.parent / ".env.maomao")
 
-def env(name: str, legacy_name: str, default: str | None = None) -> str | None:
-    return os.environ.get(name) or os.environ.get(legacy_name) or default
-
-
-def require_env(name: str, legacy_name: str) -> str:
-    value = env(name, legacy_name)
+def require_env(name: str) -> str:
+    value = os.environ.get(name)
     if not value:
-        raise RuntimeError(f"set {name} or {legacy_name}")
+        raise RuntimeError(f"set {name}")
     return value
 
 
-BASE = env("KITTYVIBE_BASE_URL", "AIKANHUB_BASE_URL", "http://localhost:3000")
-TOKEN = require_env("KITTYVIBE_GATEWAY_TOKEN", "AIKANHUB_GATEWAY_TOKEN")
-DB = os.environ.get("AIKANHUB_DB", "/Users/randomradio/src/aikanhub/data/one-api.db")
+BASE = os.environ.get("KITTYVIBE_BASE_URL", "http://localhost:3000")
+TOKEN = require_env("KITTYVIBE_GATEWAY_TOKEN")
+DB = os.environ.get("KITTYVIBE_DB", "/Users/randomradio/src/aikanhub/data/one-api.db")
 TIMEOUT = int(os.environ.get("REPLAY_TIMEOUT", "120"))
-MOCK_BASE = env("KITTYVIBE_E2E_MOCK_BASE_URL", "AIKANHUB_E2E_MOCK_BASE_URL", "http://host.docker.internal:8721")
+MOCK_BASE = os.environ.get("KITTYVIBE_E2E_MOCK_BASE_URL", "http://host.docker.internal:8721")
 
 FAST = "doubao-seedance-2-0-fast-260128"
 FULL = "doubao-seedance-2-0-260128"
@@ -247,7 +243,7 @@ def _billing_evidence(task_id: str, row: dict) -> dict:
 
 def _assert_mock_channel_configured() -> None:
     if not os.path.exists(DB):
-        raise RuntimeError(f"AIKANHUB_DB does not exist: {DB}")
+        raise RuntimeError(f"KITTYVIBE_DB does not exist: {DB}")
     con = sqlite3.connect(DB)
     con.row_factory = sqlite3.Row
     try:

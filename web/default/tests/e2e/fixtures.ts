@@ -9,10 +9,7 @@ import { readFileSync } from 'node:fs'
 let cachedUserId: string | null = null
 function userId(): string {
   if (cachedUserId !== null) return cachedUserId
-  const path =
-    process.env.KITTYVIBE_USERID_FILE ??
-    process.env.AIKANHUB_USERID_FILE ??
-    './.auth/userid.txt'
+  const path = process.env.KITTYVIBE_USERID_FILE ?? './.auth/userid.txt'
   cachedUserId = readFileSync(path, 'utf8').trim()
   return cachedUserId
 }

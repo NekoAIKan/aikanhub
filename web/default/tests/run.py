@@ -29,21 +29,17 @@ from volcenginesdkarkruntime import Ark
 HERE = Path(__file__).resolve().parent
 load_dotenv(HERE.parent.parent.parent / ".env.maomao")
 
-def env(name: str, legacy_name: str, default: str | None = None) -> str | None:
-    return os.environ.get(name) or os.environ.get(legacy_name) or default
-
-
-def require_env(name: str, legacy_name: str) -> str:
-    value = env(name, legacy_name)
+def require_env(name: str) -> str:
+    value = os.environ.get(name)
     if not value:
-        raise RuntimeError(f"set {name} or {legacy_name}")
+        raise RuntimeError(f"set {name}")
     return value
 
 
-BASE = env("KITTYVIBE_BASE_URL", "AIKANHUB_BASE_URL", "http://localhost:3000")
-TOKEN = require_env("KITTYVIBE_TOKEN", "AIKANHUB_TOKEN")
-MODEL = env("KITTYVIBE_MODEL", "AIKANHUB_MODEL", "doubao-seedance-2-0-fast-260128")
-TIMEOUT = int(env("KITTYVIBE_TIMEOUT", "AIKANHUB_TIMEOUT", "900"))  # seconds per task
+BASE = os.environ.get("KITTYVIBE_BASE_URL", "http://localhost:3000")
+TOKEN = require_env("KITTYVIBE_TOKEN")
+MODEL = os.environ.get("KITTYVIBE_MODEL", "doubao-seedance-2-0-fast-260128")
+TIMEOUT = int(os.environ.get("KITTYVIBE_TIMEOUT", "900"))  # seconds per task
 
 OUT = HERE / "out"
 OUT.mkdir(exist_ok=True)

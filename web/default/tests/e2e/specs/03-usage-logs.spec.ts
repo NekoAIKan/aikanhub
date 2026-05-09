@@ -6,8 +6,7 @@
 import { test, expect, type APIRequestContext } from '../fixtures'
 import type { Route } from '@playwright/test'
 
-const TOKEN =
-  process.env.KITTYVIBE_GATEWAY_TOKEN ?? process.env.AIKANHUB_GATEWAY_TOKEN
+const TOKEN = process.env.KITTYVIBE_GATEWAY_TOKEN
 const FIXTURE_TASK_ID = 'task-pr27-720p-54450'
 
 async function submitAndPoll(req: APIRequestContext, body: Record<string, unknown>) {

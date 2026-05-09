@@ -15,13 +15,13 @@
 
 set -euo pipefail
 
-BASE_URL="${KITTYVIBE_BASE_URL:-${AIKANHUB_BASE_URL:-http://localhost:3000}}"
-TOKEN="${KITTYVIBE_TOKEN:-${AIKANHUB_TOKEN:-}}"
+BASE_URL="${KITTYVIBE_BASE_URL:-http://localhost:3000}"
+TOKEN="${KITTYVIBE_TOKEN:-}"
 if [ -z "$TOKEN" ]; then
-  echo "请先 export KITTYVIBE_TOKEN=sk-xxx（兼容旧名 AIKANHUB_TOKEN）" >&2
+  echo "请先 export KITTYVIBE_TOKEN=sk-xxx" >&2
   exit 1
 fi
-MODEL="${KITTYVIBE_MODEL:-${AIKANHUB_MODEL:-doubao-seedance-2-0-fast-260128}}"
+MODEL="${KITTYVIBE_MODEL:-doubao-seedance-2-0-fast-260128}"
 PROMPT="${1:-一只橘猫慢慢从镜头前走过，背景是夕阳下的东京街道，4K，电影感}"
 
 echo "==> Submitting task to $BASE_URL"
