@@ -58,29 +58,36 @@ export function VideoBillingSection({ model }: Props) {
   const data: VideoBillingPricing | undefined = model.video_billing
   if (!data) return null
 
-  // Matrix is grouped two ways: by resolution → durations,
-  // separately for text vs with-video. Renders cleaner than one giant
-  // 18-row table.
-  const grouped = useMemo(() => groupMatrix(data.matrix), [data.matrix])
+  // Detect mode by inspecting matrix cells: if any cell carries a
+  // per-second rate the profile is per_second; otherwise formula. Drives
+  // grouping (audio vs video) and column choice (rate vs unit-price).
+  const mode: 'per_second' | 'formula' = data.matrix.some(
+    (cell) => (cell.price_per_second_usd ?? 0) > 0
+  )
+    ? 'per_second'
+    : 'formula'
+
+  const grouped = useMemo(() => groupMatrix(data.matrix, mode), [data.matrix, mode])
 
   return (
     <section className='border-b py-5'>
       <SectionLabel>{t('Pricing matrix')}</SectionLabel>
       <p className='text-muted-foreground mb-4 text-xs'>
-        {t(
-          'Per-token billing. Token count is derived from request shape; the rate ($/1M tokens) shown is what the customer is charged after profile resolution.'
-        )}
+        {mode === 'per_second'
+          ? t(
+              'Per-second billing. Customer pays output_seconds × the rate shown for the resolution and audio choice.'
+            )
+          : t(
+              'Per-token billing. Token count is derived from request shape; the rate ($/1M tokens) shown is what the customer is charged after profile resolution.'
+            )}
       </p>
 
       <div className='space-y-5'>
-        {grouped.map(({ hasVideo, rows }) => (
+        {grouped.map(({ variant, rows }) => (
           <MatrixTable
-            key={String(hasVideo)}
-            title={
-              hasVideo
-                ? t('With reference video input')
-                : t('Text or image input only')
-            }
+            key={variant}
+            title={matrixGroupTitle(t, mode, variant)}
+            mode={mode}
             rows={rows}
           />
         ))}
@@ -94,27 +101,51 @@ export function VideoBillingSection({ model }: Props) {
         </ul>
       )}
 
-      <LiveCalculator model={model} fallback={data.headline} />
+      <LiveCalculator model={model} fallback={data.headline} mode={mode} />
     </section>
   )
 }
 
-function groupMatrix(matrix: VideoBillingPricingPoint[]): Array<{
-  hasVideo: boolean
-  rows: VideoBillingPricingPoint[]
-}> {
-  const text: VideoBillingPricingPoint[] = []
-  const withVideo: VideoBillingPricingPoint[] = []
-  for (const row of matrix) {
-    ;(row.has_video_input ? withVideo : text).push(row)
+type MatrixVariant = 'default' | 'with_video' | 'with_audio'
+
+function groupMatrix(
+  matrix: VideoBillingPricingPoint[],
+  mode: 'per_second' | 'formula'
+): Array<{ variant: MatrixVariant; rows: VideoBillingPricingPoint[] }> {
+  const buckets: Record<MatrixVariant, VideoBillingPricingPoint[]> = {
+    default: [],
+    with_video: [],
+    with_audio: [],
   }
-  const out: Array<{ hasVideo: boolean; rows: VideoBillingPricingPoint[] }> = []
-  if (text.length > 0) out.push({ hasVideo: false, rows: text })
-  if (withVideo.length > 0) out.push({ hasVideo: true, rows: withVideo })
+  for (const row of matrix) {
+    if (mode === 'per_second') {
+      buckets[row.has_audio_input ? 'with_audio' : 'default'].push(row)
+    } else {
+      buckets[row.has_video_input ? 'with_video' : 'default'].push(row)
+    }
+  }
+  const out: Array<{ variant: MatrixVariant; rows: VideoBillingPricingPoint[] }> = []
+  if (buckets.default.length > 0) out.push({ variant: 'default', rows: buckets.default })
+  if (buckets.with_video.length > 0) out.push({ variant: 'with_video', rows: buckets.with_video })
+  if (buckets.with_audio.length > 0) out.push({ variant: 'with_audio', rows: buckets.with_audio })
   return out
 }
 
-function MatrixTable(props: { title: string; rows: VideoBillingPricingPoint[] }) {
+function matrixGroupTitle(
+  t: (k: string) => string,
+  mode: 'per_second' | 'formula',
+  variant: MatrixVariant
+): string {
+  if (variant === 'with_video') return t('With reference video input')
+  if (variant === 'with_audio') return t('With audio output')
+  return mode === 'per_second' ? t('Without audio output') : t('Text or image input only')
+}
+
+function MatrixTable(props: {
+  title: string
+  rows: VideoBillingPricingPoint[]
+  mode: 'per_second' | 'formula'
+}) {
   const { t } = useTranslation()
 
   // Pivot rows into resolution × duration grid. Columns are sorted
@@ -157,10 +188,16 @@ function MatrixTable(props: { title: string; rows: VideoBillingPricingPoint[] })
                     <div className='font-mono text-sm tabular-nums'>
                       {formatUSD(cell.price_usd)}
                     </div>
-                    <div className='text-muted-foreground text-[10px]'>
-                      ${cell.unit_price_per_million.toFixed(2)}/M ·{' '}
-                      {formatInteger(cell.tokens)} tok
-                    </div>
+                    {props.mode === 'per_second' ? (
+                      <div className='text-muted-foreground text-[10px]'>
+                        ${(cell.price_per_second_usd ?? 0).toFixed(3)}/s
+                      </div>
+                    ) : (
+                      <div className='text-muted-foreground text-[10px]'>
+                        ${cell.unit_price_per_million.toFixed(2)}/M ·{' '}
+                        {formatInteger(cell.tokens)} tok
+                      </div>
+                    )}
                   </TableCell>
                 )
               })}
@@ -174,13 +211,16 @@ function MatrixTable(props: { title: string; rows: VideoBillingPricingPoint[] })
 
 type CalculateResponse = {
   profile_found: boolean
+  mode?: string
   width: number
   height: number
   fps: number
   duration_seconds: number
   has_video_input: boolean
+  has_audio_input?: boolean
   tokens: number
   unit_price_per_million: number
+  price_per_second_usd?: number
   price_usd: number
   quota: number
 }
@@ -188,6 +228,7 @@ type CalculateResponse = {
 function LiveCalculator(props: {
   model: PricingModel
   fallback: VideoBillingPricingPoint
+  mode: 'per_second' | 'formula'
 }) {
   const { t } = useTranslation()
   const headline = props.fallback
@@ -204,7 +245,12 @@ function LiveCalculator(props: {
 
   const [resolution, setResolution] = useState(headline.resolution || '720p')
   const [duration, setDuration] = useState(headline.duration_seconds)
-  const [hasVideoInput, setHasVideoInput] = useState(false)
+  // Single optional flag — its meaning depends on mode. For formula
+  // models it controls "include reference video"; for per_second models
+  // it controls "include audio output". The wire payload sends both,
+  // each adapter ignores the one that doesn't apply, so the same toggle
+  // works for both vendors.
+  const [optionalFlag, setOptionalFlag] = useState(false)
   const [result, setResult] = useState<CalculateResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -223,7 +269,8 @@ function LiveCalculator(props: {
           model: props.model.model_name,
           resolution,
           duration_seconds: duration,
-          has_video_input: hasVideoInput,
+          has_video_input: props.mode === 'formula' ? optionalFlag : false,
+          has_audio_input: props.mode === 'per_second' ? optionalFlag : false,
         })
         if (cancelled) return
         if (res.data?.data) {
@@ -238,7 +285,7 @@ function LiveCalculator(props: {
     return () => {
       cancelled = true
     }
-  }, [props.model.model_name, resolution, duration, hasVideoInput])
+  }, [props.model.model_name, resolution, duration, optionalFlag, props.mode])
 
   return (
     <div className='bg-muted/40 mt-5 rounded-md border p-4'>
@@ -289,12 +336,14 @@ function LiveCalculator(props: {
         </div>
         <div className='flex items-end gap-2'>
           <Switch
-            id='has-video'
-            checked={hasVideoInput}
-            onCheckedChange={setHasVideoInput}
+            id='optional-flag'
+            checked={optionalFlag}
+            onCheckedChange={setOptionalFlag}
           />
-          <label htmlFor='has-video' className='text-xs leading-none'>
-            {t('Includes reference video')}
+          <label htmlFor='optional-flag' className='text-xs leading-none'>
+            {props.mode === 'per_second'
+              ? t('Includes audio output')
+              : t('Includes reference video')}
           </label>
         </div>
       </div>
@@ -303,11 +352,25 @@ function LiveCalculator(props: {
 
       {result && result.profile_found && (
         <div className='mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4'>
-          <CalcMetric label={t('Tokens')} value={formatInteger(result.tokens)} />
-          <CalcMetric
-            label={t('Unit price ($/1M)')}
-            value={`$${result.unit_price_per_million.toFixed(2)}`}
-          />
+          {props.mode === 'per_second' ? (
+            <CalcMetric
+              label={t('Rate ($/sec)')}
+              value={`$${(result.price_per_second_usd ?? 0).toFixed(3)}`}
+            />
+          ) : (
+            <CalcMetric label={t('Tokens')} value={formatInteger(result.tokens)} />
+          )}
+          {props.mode === 'per_second' ? (
+            <CalcMetric
+              label={t('Duration (s)')}
+              value={String(result.duration_seconds)}
+            />
+          ) : (
+            <CalcMetric
+              label={t('Unit price ($/1M)')}
+              value={`$${result.unit_price_per_million.toFixed(2)}`}
+            />
+          )}
           <CalcMetric
             label={t('Estimated charge')}
             value={formatUSD(result.price_usd)}

@@ -20,6 +20,17 @@ var canonicalMatrixResolutions = []canonicalMatrixResolution{
 	{Alias: "1080p", Width: 1920, Height: 1080},
 }
 
+// canonicalPerSecondResolutions covers the 4-tier resolutions that
+// per-second vendors typically expose (Pixverse ships 360p as the
+// entry tier; formula vendors usually start at 480p). Order matters
+// for matrix rendering — smallest first.
+var canonicalPerSecondResolutions = []canonicalMatrixResolution{
+	{Alias: "360p", Width: 640, Height: 360},
+	{Alias: "540p", Width: 960, Height: 540},
+	{Alias: "720p", Width: 1280, Height: 720},
+	{Alias: "1080p", Width: 1920, Height: 1080},
+}
+
 // canonicalMatrixDurations is the duration set surfaced on /pricing for
 // the at-a-glance matrix. The /pricing/$model details page calls the
 // public preview endpoint for arbitrary durations.
@@ -35,16 +46,27 @@ const (
 	headlineResolution = "720p"
 )
 
-// buildVideoBillingPricing returns nil when `model` has no formula
-// profile registered; otherwise it builds the headline + canonical
-// matrix from the same `setting/video_billing_setting` data the
-// runtime consumes. Pricing is computed locally (no service call) to
-// avoid an import cycle: model → service → model.
+// buildVideoBillingPricing returns nil when `model` has no profile
+// registered; otherwise it builds the headline + canonical matrix from
+// the same `setting/video_billing_setting` data the runtime consumes.
+// Pricing is computed locally (no service call) to avoid an import
+// cycle: model → service → model.
 func buildVideoBillingPricing(model string) *VideoBillingPricing {
 	profile, ok := videobilling.GetProfile(model)
-	if !ok || profile.Mode != videobilling.ModeFormula {
+	if !ok {
 		return nil
 	}
+	switch profile.Mode {
+	case videobilling.ModeFormula:
+		return buildFormulaPricing(profile)
+	case videobilling.ModePerSecond:
+		return buildPerSecondPricing(profile)
+	default:
+		return nil
+	}
+}
+
+func buildFormulaPricing(profile videobilling.VideoBillingProfile) *VideoBillingPricing {
 	fps := profile.FallbackFPS
 	if fps <= 0 {
 		fps = 24
@@ -68,6 +90,68 @@ func buildVideoBillingPricing(model string) *VideoBillingPricing {
 		Matrix:   matrix,
 		Rules:    videoBillingDisplayRules(profile),
 	}
+}
+
+// buildPerSecondPricing emits a 4 (resolution) × 3 (duration) × 2
+// (audio) matrix. Although per_second pricing is linear in duration —
+// we don't strictly need to enumerate durations — surfacing them here
+// lets the customer compare seedance-style and pixverse-style models
+// on the same axes without having to mentally extrapolate.
+func buildPerSecondPricing(profile videobilling.VideoBillingProfile) *VideoBillingPricing {
+	matrix := make([]VideoBillingPricingPoint, 0, len(canonicalPerSecondResolutions)*len(canonicalMatrixDurations)*2)
+	for _, r := range canonicalPerSecondResolutions {
+		w, h := resolveProfileDimensions(profile, r)
+		for _, dur := range canonicalMatrixDurations {
+			matrix = append(matrix, computePerSecondPoint(profile, r.Alias, w, h, dur, false))
+			matrix = append(matrix, computePerSecondPoint(profile, r.Alias, w, h, dur, true))
+		}
+	}
+
+	// Headline: 540p / 5s no-audio is the tier that maps to "$1 = N
+	// videos" across vendors that publish that comparison metric.
+	const headlineRes = "540p"
+	headlineW, headlineH := resolveProfileDimensions(profile, canonicalMatrixResolution{Alias: headlineRes, Width: 960, Height: 540})
+	headline := computePerSecondPoint(profile, headlineRes, headlineW, headlineH, headlineDuration, false)
+	headline.Scenario = headlineRes + " / " + itoa(headlineDuration) + "s no-audio"
+
+	return &VideoBillingPricing{
+		Headline: headline,
+		Matrix:   matrix,
+		Rules:    perSecondDisplayRules(profile),
+	}
+}
+
+// computePerSecondPoint mirrors computeVideoBillingPoint but for the
+// per_second mode. PriceUSD is the customer-facing total for the cell;
+// UnitPricePerMillion is set to 0 (not applicable) and the wire-side
+// `price_per_second_usd` carries the rate so the frontend can render it.
+func computePerSecondPoint(profile videobilling.VideoBillingProfile, resolution string, w, h, dur int, hasAudio bool) VideoBillingPricingPoint {
+	rate, _, _ := videobilling.ResolvePerSecondRate(profile, hasAudio, resolution)
+	priceUSD := float64(dur) * rate
+	quota := int(priceUSD * common.QuotaPerUnit)
+	return VideoBillingPricingPoint{
+		Resolution:        resolution,
+		Width:             w,
+		Height:            h,
+		DurationSeconds:   dur,
+		HasVideoInput:     false,
+		HasAudioInput:     hasAudio,
+		Tokens:            0,
+		PricePerSecondUSD: rate,
+		PriceUSD:          priceUSD,
+		Quota:             quota,
+	}
+}
+
+func perSecondDisplayRules(profile videobilling.VideoBillingProfile) []string {
+	rules := []string{
+		"Per-second billing: customer pays output_seconds × per-second rate",
+	}
+	if profile.PricePerSecondWithAudio > 0 || len(profile.PricePerSecondWithAudioByResolution) > 0 {
+		rules = append(rules, "Audio output is opt-in and priced separately from video")
+	}
+	rules = append(rules, "Failed tasks are not billed")
+	return rules
 }
 
 // resolveProfileDimensions returns the (width, height) for a canonical
