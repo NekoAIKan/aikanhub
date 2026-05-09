@@ -22,6 +22,12 @@ type UserBase struct {
 	Status   int    `json:"status"`
 	Username string `json:"username"`
 	Setting  string `json:"setting"`
+	// Role is needed by handlers that gate admin-only behaviour from
+	// token-authenticated callers (e.g. video proxy bypassing per-user
+	// task ownership for admins). Without it, c.GetInt("role") returns
+	// 0 in the API-token path, defeating any role >= RoleAdminUser
+	// checks downstream.
+	Role int `json:"role"`
 }
 
 func (user *UserBase) WriteContext(c *gin.Context) {
@@ -31,6 +37,7 @@ func (user *UserBase) WriteContext(c *gin.Context) {
 	common.SetContextKey(c, constant.ContextKeyUserEmail, user.Email)
 	common.SetContextKey(c, constant.ContextKeyUserName, user.Username)
 	common.SetContextKey(c, constant.ContextKeyUserSetting, user.GetSetting())
+	c.Set("role", user.Role)
 }
 
 func (user *UserBase) GetSetting() dto.UserSetting {
@@ -113,6 +120,7 @@ func GetUserCache(userId int) (userCache *UserBase, err error) {
 		Username: user.Username,
 		Setting:  user.Setting,
 		Email:    user.Email,
+		Role:     user.Role,
 	}
 
 	return userCache, nil
