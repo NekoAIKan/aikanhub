@@ -21,6 +21,22 @@ kittyvibe.ai New API
 - Alipay never calls New API directly.
 - New API never stores Alipay private keys.
 
+## Planned Files
+
+```text
+epay/
+  main.go
+  config.go
+  epay_sign.go
+  server.go
+  orders.go
+  alipay_client.go
+  alipay_notify.go
+  newapi_callback.go
+  retry_worker.go
+  deploy/
+  testdata/
+```
 ## New API Configuration
 
 ```text
