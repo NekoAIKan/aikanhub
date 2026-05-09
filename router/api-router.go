@@ -32,6 +32,12 @@ func SetApiRouter(router *gin.Engine) {
 		//apiRouter.GET("/midjourney", controller.GetMidjourney)
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
 		apiRouter.GET("/pricing", middleware.TryUserAuth(), controller.GetPricing)
+		// Live price calculator surfaced on /pricing/<model> — accepts
+		// arbitrary (resolution, duration, has_video_input) and returns
+		// one pricing point. Public so non-logged-in visitors can use it;
+		// rate-limited via GlobalAPIRateLimit; never reveals upstream
+		// cost or markup (only the customer-facing retail price).
+		apiRouter.POST("/pricing/calculate", middleware.GlobalAPIRateLimit(), controller.CalculateVideoBillingPrice)
 		apiRouter.GET("/verification", middleware.EmailVerificationRateLimit(), middleware.TurnstileCheck(), controller.SendEmailVerification)
 		apiRouter.GET("/reset_password", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendPasswordResetEmail)
 		apiRouter.POST("/user/reset", middleware.CriticalRateLimit(), controller.ResetPassword)

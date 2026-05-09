@@ -40,6 +40,7 @@ import {
 import { formatGroupPrice, formatFixedPrice } from '../lib/price'
 import type { PricingModel, TokenUnit, PriceType } from '../types'
 import { DynamicPricingBreakdown } from './dynamic-pricing-breakdown'
+import { VideoBillingSection } from './video-billing-section'
 
 function SectionTitle(props: { children: React.ReactNode }) {
   return (
@@ -734,17 +735,26 @@ export function ModelDetailsContent(props: ModelDetailsContentProps) {
     showRechargePrice = false,
   } = props
 
+  // Video formula models bypass PriceSection — its model_ratio /
+  // model_price reads return zeros for these — and surface their pricing
+  // through a dedicated matrix + live calculator instead.
+  const isVideoFormula = model.quota_type === QUOTA_TYPE_VALUES.VIDEO_FORMULA
+
   return (
     <>
       <ModelHeader model={model} />
 
-      <PriceSection
-        model={model}
-        priceRate={priceRate}
-        usdExchangeRate={usdExchangeRate}
-        tokenUnit={tokenUnit}
-        showRechargePrice={showRechargePrice}
-      />
+      {isVideoFormula ? (
+        <VideoBillingSection model={model} />
+      ) : (
+        <PriceSection
+          model={model}
+          priceRate={priceRate}
+          usdExchangeRate={usdExchangeRate}
+          tokenUnit={tokenUnit}
+          showRechargePrice={showRechargePrice}
+        />
+      )}
 
       <EndpointsSection model={model} endpointMap={endpointMap} />
 

@@ -35,8 +35,34 @@ export type PricingModel = {
   billing_mode?: string
   /** Raw expression describing dynamic / tiered billing */
   billing_expr?: string
+  /**
+   * Populated for video formula models (quota_type === 2). Carries the
+   * canonical headline price + a 3×3×2 (resolution × duration × with-video)
+   * matrix derived server-side from the same `setting/video_billing_setting`
+   * config the runtime uses, so the price shown is what the customer pays.
+   */
+  video_billing?: VideoBillingPricing
   /** Pricing version returned by backend, useful for cache busting */
   pricing_version?: string
+}
+
+export type VideoBillingPricingPoint = {
+  resolution?: string
+  width: number
+  height: number
+  duration_seconds: number
+  has_video_input: boolean
+  tokens: number
+  unit_price_per_million: number
+  price_usd: number
+  quota: number
+  scenario?: string
+}
+
+export type VideoBillingPricing = {
+  headline: VideoBillingPricingPoint
+  matrix: VideoBillingPricingPoint[]
+  rules?: string[]
 }
 
 export type PricingData = {
@@ -59,4 +85,5 @@ export type PriceType =
   | 'image'
   | 'audio_input'
   | 'audio_output'
-export type QuotaType = 0 | 1 // 0: token-based, 1: per-request
+// 0: token ratio · 1: per-request fixed · 2: per-token video formula
+export type QuotaType = 0 | 1 | 2

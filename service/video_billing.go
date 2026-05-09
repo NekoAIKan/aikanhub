@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/setting/profit_setting"
 	videobilling "github.com/QuantumNous/new-api/setting/video_billing_setting"
 )
 
@@ -66,7 +65,7 @@ func CalculateVideoBilling(profile videobilling.VideoBillingProfile, input Video
 		tokens = profile.MinTokensWithVideo
 	}
 
-	retailUnitPrice, upstreamUnitCost, markupPercent := resolveVideoRetailUnitPrice(profile, normalized.HasReferenceMedia, normalized.Resolution)
+	retailUnitPrice, upstreamUnitCost, markupPercent := videobilling.ResolveRetailUnitPrice(profile, normalized.HasReferenceMedia, normalized.Resolution)
 	rawCost := float64(tokens) * retailUnitPrice
 	if normalized.Draft && profile.DraftMultiplier > 0 {
 		rawCost *= profile.DraftMultiplier
@@ -101,59 +100,6 @@ func CalculateVideoBilling(profile videobilling.VideoBillingProfile, input Video
 		PricingHash:       pricingHash,
 		PricingVersion:    "video_formula:v1:" + pricingHash,
 	}
-}
-
-// resolveVideoRetailUnitPrice picks the unit price (USD per 1M tokens) the
-// caller's request resolves to. Lookup precedence (first match wins):
-//
-//  1. Request has reference media → UnitPriceWithVideoByResolution[resolution]
-//  2. Request has reference media → UnitPriceWithVideo
-//  3. UnitPriceByResolution[resolution]
-//  4. UnitPrice
-//  5. profit_setting.upstream_cost_per_million_tokens × (1 + markup%) when
-//     ApplyToDefaultVideoProfiles is set
-//  6. 0 — the request is treated as free.
-//
-// Step 6 is intentionally not a magic-number fallback ($1/M was historical):
-// shipping a non-zero default would bake vendor-agnostic pricing into the
-// open-source binary, so we return zero and force the operator to configure
-// either the per-profile fields or the global profit_setting.
-func resolveVideoRetailUnitPrice(profile videobilling.VideoBillingProfile, hasReferenceMedia bool, resolution string) (retailUnitPrice float64, upstreamUnitCost float64, markupPercent float64) {
-	profit := profit_setting.GetProfitSetting()
-	upstreamUnitCost = profit.UpstreamCostPerMillionTokens
-	if upstreamUnitCost < 0 {
-		upstreamUnitCost = 0
-	}
-	markupPercent = profit.DefaultMarkupPercent
-
-	if hasReferenceMedia {
-		if price, ok := lookupResolutionPrice(profile.UnitPriceWithVideoByResolution, resolution); ok {
-			return price, upstreamUnitCost, markupPercent
-		}
-		if profile.UnitPriceWithVideo > 0 {
-			return profile.UnitPriceWithVideo, upstreamUnitCost, markupPercent
-		}
-	}
-	if price, ok := lookupResolutionPrice(profile.UnitPriceByResolution, resolution); ok {
-		return price, upstreamUnitCost, markupPercent
-	}
-	if profile.UnitPrice > 0 {
-		return profile.UnitPrice, upstreamUnitCost, markupPercent
-	}
-	if upstreamUnitCost > 0 && profit.ApplyToDefaultVideoProfiles {
-		return upstreamUnitCost * (1 + markupPercent/100), upstreamUnitCost, markupPercent
-	}
-	return 0, upstreamUnitCost, markupPercent
-}
-
-func lookupResolutionPrice(table map[string]float64, resolution string) (float64, bool) {
-	if len(table) == 0 || resolution == "" {
-		return 0, false
-	}
-	if price, ok := table[resolution]; ok && price > 0 {
-		return price, true
-	}
-	return 0, false
 }
 
 func videoPricingHash(profile videobilling.VideoBillingProfile, retailUnitPrice float64, upstreamUnitCost float64, markupPercent float64) string {
