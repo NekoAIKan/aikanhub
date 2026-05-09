@@ -38,20 +38,7 @@ func VideoProxy(c *gin.Context) {
 	}
 
 	userID := c.GetInt("id")
-	role := c.GetInt("role")
-	// Admins watching /usage-logs need to inspect any user's generated
-	// video, not just their own. GetByTaskId filters by user_id which
-	// would 404 admins on tasks they didn't submit themselves.
-	var (
-		task   *model.Task
-		exists bool
-		err    error
-	)
-	if role >= common.RoleAdminUser {
-		task, exists, err = model.GetTaskByTaskID(taskID)
-	} else {
-		task, exists, err = model.GetByTaskId(userID, taskID)
-	}
+	task, exists, err := model.GetByTaskId(userID, taskID)
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to query task %s: %s", taskID, err.Error()))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to query task")
