@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -122,7 +121,7 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 //
 //   - first_frame + last_frame  → firstTailGenerate (首尾生视频)
 //   - any video_url             → referenceGenerate (参照生视频, covers
-//                                  multi-modal / edit / extend)
+//     multi-modal / edit / extend)
 //   - any image_url             → generate (图生视频)
 //   - text only                 → textGenerate (文生视频)
 //
@@ -428,8 +427,11 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 		return nil, errors.Wrap(err, "unmarshal metadata failed")
 	}
 
-	if sec, _ := strconv.Atoi(req.Seconds); sec > 0 {
-		r.Duration = lo.ToPtr(dto.IntValue(sec))
+	if resolution := firstString(req.Resolution, req.Size); resolution != "" {
+		r.Resolution = resolution
+	}
+	if duration := firstPositiveInt(req.Duration, atoi(req.Seconds)); duration > 0 {
+		r.Duration = lo.ToPtr(dto.IntValue(duration))
 	}
 
 	r.Content = lo.Reject(r.Content, func(c ContentItem, _ int) bool { return c.Type == "text" })
