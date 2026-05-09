@@ -1,8 +1,8 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import * as z from 'zod'
 import type { Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Calculator } from 'lucide-react'
+import { Calculator, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   BILLING_VISIBILITY_MODES,
@@ -13,6 +13,7 @@ import {
   normalizeBillingVisibilityMode,
   type BillingVisibilityMode,
 } from '@/lib/billing-visibility'
+import { api } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -103,33 +104,6 @@ const TRANSPARENCY_GROUPS = [
   'enterprise',
 ] as const
 
-const FIXTURE_CASES = [
-  {
-    labelKey: '720p text',
-    tokens: 108900,
-    quota: 54450,
-    prechargeQuota: 67500,
-  },
-  {
-    labelKey: '1080p text',
-    tokens: 245024,
-    quota: 122512,
-    prechargeQuota: 151875,
-  },
-  {
-    labelKey: 'Edit / multimodal',
-    tokens: 324900,
-    quota: 162450,
-    prechargeQuota: 216000,
-  },
-  {
-    labelKey: 'Extend',
-    tokens: 389700,
-    quota: 194850,
-    prechargeQuota: 345600,
-  },
-] as const
-
 function formatNumber(value: number, digits = 2) {
   if (!Number.isFinite(value)) return '-'
   return value.toLocaleString(undefined, {
@@ -206,43 +180,6 @@ export function CreditsSettingsSection({
       }
     )
   }
-
-  const preview = useMemo(() => {
-    const quotaPerCredit = watched.credit_display_setting?.quota_per_credit || 1
-    const markup = watched.profit_setting?.default_markup_percent || 0
-    const upstreamCost =
-      watched.profit_setting?.upstream_cost_per_million_tokens || 0
-    const retailCost = upstreamCost * (1 + markup / 100)
-    const effectiveRetailCost = retailCost > 0 ? retailCost : 1
-
-    return {
-      retailCost: effectiveRetailCost,
-      cases: FIXTURE_CASES.map((fixture) => {
-        const upstreamQuota =
-          upstreamCost > 0
-            ? Math.round((fixture.quota * upstreamCost) / effectiveRetailCost)
-            : 0
-        const grossMarginQuota = fixture.quota - upstreamQuota
-        const grossMarginPercent =
-          fixture.quota > 0 ? (grossMarginQuota / fixture.quota) * 100 : 0
-
-        return {
-          ...fixture,
-          credits: fixture.quota / quotaPerCredit,
-          retailUsd: fixture.quota / quotaPerUnit,
-          upstreamUsd: upstreamQuota / quotaPerUnit,
-          upstreamQuota,
-          grossMarginQuota,
-          grossMarginPercent,
-        }
-      }),
-    }
-  }, [
-    quotaPerUnit,
-    watched.credit_display_setting?.quota_per_credit,
-    watched.profit_setting?.default_markup_percent,
-    watched.profit_setting?.upstream_cost_per_million_tokens,
-  ])
 
   return (
     <SettingsSection
@@ -461,63 +398,11 @@ export function CreditsSettingsSection({
             />
           </div>
 
-          <div
-            data-testid='fixture-pricing-preview'
-            className='rounded-lg border p-4'
-          >
-            <div className='mb-3 flex items-center gap-2'>
-              <Calculator className='text-muted-foreground h-4 w-4' />
-              <div className='text-sm font-medium'>
-                {t('Fixture pricing preview')}
-              </div>
-              <Badge variant='outline'>{t('Admin preview')}</Badge>
-            </div>
-            <div className='overflow-x-auto'>
-              <table className='w-full min-w-[720px] text-sm'>
-                <thead className='text-muted-foreground border-b text-xs'>
-                  <tr>
-                    <th className='py-2 text-left font-medium'>{t('Case')}</th>
-                    <th className='py-2 text-left font-medium'>
-                      {t('Credits')}
-                    </th>
-                    <th className='py-2 text-left font-medium'>{t('Quota')}</th>
-                    <th className='py-2 text-left font-medium'>
-                      {t('Retail Charge')}
-                    </th>
-                    <th className='py-2 text-left font-medium'>
-                      {t('Upstream Cost')}
-                    </th>
-                    <th className='py-2 text-left font-medium'>
-                      {t('Gross margin')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.cases.map((row) => (
-                    <tr key={row.labelKey} className='border-b last:border-0'>
-                      <td className='py-2 font-medium'>{t(row.labelKey)}</td>
-                      <td className='py-2 font-mono'>
-                        {formatNumber(row.credits, 2)}{' '}
-                        {watched.credit_display_setting?.label || t('Credits')}
-                      </td>
-                      <td className='py-2 font-mono'>
-                        {formatNumber(row.quota, 0)}
-                      </td>
-                      <td className='py-2 font-mono'>
-                        ${formatNumber(row.retailUsd, 4)}
-                      </td>
-                      <td className='py-2 font-mono'>
-                        ${formatNumber(row.upstreamUsd, 4)}
-                      </td>
-                      <td className='py-2 font-mono'>
-                        {formatNumber(row.grossMarginPercent, 2)}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <VideoBillingLivePreview
+            quotaPerUnit={quotaPerUnit}
+            creditsLabel={watched.credit_display_setting?.label}
+            quotaPerCredit={watched.credit_display_setting?.quota_per_credit}
+          />
 
           <div className='space-y-4'>
             <div>
@@ -677,5 +562,229 @@ export function CreditsSettingsSection({
         </form>
       </Form>
     </SettingsSection>
+  )
+}
+
+type VideoBillingPreviewCase = {
+  label: string
+  tokens: number
+  unit_price_per_million: number
+  raw_cost_usd: number
+  quota: number
+  has_reference_media: boolean
+  resolution?: string
+  basis: string
+}
+
+type VideoBillingPreviewResponse = {
+  model: string
+  profile_found: boolean
+  quota_per_unit: number
+  cases: VideoBillingPreviewCase[]
+  available_models: string[]
+}
+
+type VideoBillingLivePreviewProps = {
+  quotaPerUnit: number
+  creditsLabel?: string
+  quotaPerCredit?: number
+}
+
+function VideoBillingLivePreview({
+  quotaPerUnit,
+  creditsLabel,
+  quotaPerCredit,
+}: VideoBillingLivePreviewProps) {
+  const { t } = useTranslation()
+  const [availableModels, setAvailableModels] = useState<string[]>([])
+  const [selectedModel, setSelectedModel] = useState<string>('')
+  const [cases, setCases] = useState<VideoBillingPreviewCase[]>([])
+  const [profileFound, setProfileFound] = useState<boolean>(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Initial load: fetch the list of configured models with empty model arg.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await api.post<{
+          success: boolean
+          message?: string
+          data?: VideoBillingPreviewResponse
+        }>('/api/option/video_billing/preview', { model: '' })
+        if (cancelled) return
+        const data = res.data?.data
+        if (data) {
+          const models = [...(data.available_models ?? [])].sort()
+          setAvailableModels(models)
+          if (models.length > 0 && !selectedModel) {
+            setSelectedModel(models[0])
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err))
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Refetch when selected model changes.
+  useEffect(() => {
+    if (!selectedModel) {
+      setCases([])
+      setProfileFound(false)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await api.post<{
+          success: boolean
+          message?: string
+          data?: VideoBillingPreviewResponse
+        }>('/api/option/video_billing/preview', { model: selectedModel })
+        if (cancelled) return
+        const data = res.data?.data
+        if (data) {
+          setCases(data.cases ?? [])
+          setProfileFound(data.profile_found ?? false)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err))
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedModel])
+
+  return (
+    <div
+      data-testid='video-billing-live-preview'
+      className='rounded-lg border p-4'
+    >
+      <div className='mb-3 flex flex-wrap items-center gap-2'>
+        <Calculator className='text-muted-foreground h-4 w-4' />
+        <div className='text-sm font-medium'>
+          {t('Video billing preview (live)')}
+        </div>
+        <Badge variant='outline'>{t('Admin preview')}</Badge>
+        {loading && (
+          <Loader2 className='text-muted-foreground ml-2 h-3 w-3 animate-spin' />
+        )}
+      </div>
+      <p className='text-muted-foreground mb-3 text-xs'>
+        {t(
+          'Resolves canonical request shapes against the saved video_billing_setting.profiles entry for the selected model. Reflects the same code path as runtime billing.'
+        )}
+      </p>
+
+      {availableModels.length === 0 ? (
+        <div className='text-muted-foreground text-xs'>
+          {t(
+            'No video billing profiles configured. Save a profile in the JSON above first.'
+          )}
+        </div>
+      ) : (
+        <div className='mb-3 max-w-sm'>
+          <Select value={selectedModel} onValueChange={setSelectedModel}>
+            <SelectTrigger>
+              <SelectValue placeholder={t('Select a model')} />
+            </SelectTrigger>
+            <SelectContent>
+              {availableModels.map((model) => (
+                <SelectItem key={model} value={model}>
+                  {model}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {error && (
+        <div className='text-destructive mb-3 text-xs'>{error}</div>
+      )}
+
+      {selectedModel && !profileFound && !loading && (
+        <div className='text-muted-foreground text-xs'>
+          {t('No profile found for this model.')}
+        </div>
+      )}
+
+      {profileFound && cases.length > 0 && (
+        <div className='overflow-x-auto'>
+          <table className='w-full min-w-[840px] text-sm'>
+            <thead className='text-muted-foreground border-b text-xs'>
+              <tr>
+                <th className='py-2 text-left font-medium'>{t('Case')}</th>
+                <th className='py-2 text-left font-medium'>{t('Tokens')}</th>
+                <th className='py-2 text-left font-medium'>
+                  {t('Unit price ($/1M)')}
+                </th>
+                <th className='py-2 text-left font-medium'>
+                  {t('Retail Charge')}
+                </th>
+                <th className='py-2 text-left font-medium'>{t('Quota')}</th>
+                {quotaPerCredit && quotaPerCredit > 0 && (
+                  <th className='py-2 text-left font-medium'>
+                    {t('Credits')}
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {cases.map((row) => {
+                const credits =
+                  quotaPerCredit && quotaPerCredit > 0
+                    ? row.quota / quotaPerCredit
+                    : null
+                const retailUsd =
+                  quotaPerUnit > 0 ? row.quota / quotaPerUnit : 0
+                return (
+                  <tr key={row.label} className='border-b last:border-0'>
+                    <td className='py-2 font-medium'>{row.label}</td>
+                    <td className='py-2 font-mono'>
+                      {formatNumber(row.tokens, 0)}
+                    </td>
+                    <td className='py-2 font-mono'>
+                      ${formatNumber(row.unit_price_per_million, 4)}
+                    </td>
+                    <td className='py-2 font-mono'>
+                      ${formatNumber(retailUsd, 4)}
+                    </td>
+                    <td className='py-2 font-mono'>
+                      {formatNumber(row.quota, 0)}
+                    </td>
+                    {credits !== null && (
+                      <td className='py-2 font-mono'>
+                        {formatNumber(credits, 2)}{' '}
+                        {creditsLabel || t('Credits')}
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   )
 }

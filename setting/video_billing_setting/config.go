@@ -77,6 +77,17 @@ func GetProfile(model string) (VideoBillingProfile, bool) {
 	return cloneProfile(profile), true
 }
 
+// ListConfiguredModels returns the model keys currently present in
+// video_billing_setting.profiles. Order is not guaranteed; callers that
+// need deterministic order should sort.
+func ListConfiguredModels() []string {
+	keys := make([]string, 0, len(videoBillingSetting.Profiles))
+	for k := range videoBillingSetting.Profiles {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 func cloneProfile(profile VideoBillingProfile) VideoBillingProfile {
 	profile.ResolutionAliases = lo.Assign(profile.ResolutionAliases)
 	profile.UnitPriceByResolution = lo.Assign(profile.UnitPriceByResolution)
