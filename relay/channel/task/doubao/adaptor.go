@@ -428,8 +428,19 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 		return nil, errors.Wrap(err, "unmarshal metadata failed")
 	}
 
-	if sec, _ := strconv.Atoi(req.Seconds); sec > 0 {
-		r.Duration = lo.ToPtr(dto.IntValue(sec))
+	// Honour top-level passthrough fields when metadata didn't already set them.
+	// OpenAI Videos clients put `resolution` and numeric `duration` at the root
+	// of the request body; without this fallback the upstream Volcano Ark API
+	// receives nothing and silently substitutes its defaults (720p, 5s).
+	if r.Resolution == "" && req.Resolution != "" {
+		r.Resolution = req.Resolution
+	}
+	if r.Duration == nil {
+		if req.Duration > 0 {
+			r.Duration = lo.ToPtr(dto.IntValue(req.Duration))
+		} else if sec, _ := strconv.Atoi(req.Seconds); sec > 0 {
+			r.Duration = lo.ToPtr(dto.IntValue(sec))
+		}
 	}
 
 	r.Content = lo.Reject(r.Content, func(c ContentItem, _ int) bool { return c.Type == "text" })
