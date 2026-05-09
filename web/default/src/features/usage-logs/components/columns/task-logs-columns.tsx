@@ -183,6 +183,15 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
         if (!taskId) {
           return <span className='text-muted-foreground/60 text-xs'>-</span>
         }
+        // Prefer the user-facing model name persisted under
+        // `properties.origin_model_name`. Backend writes the channel
+        // type integer into `platform` (legacy: "58", "54", ...) which
+        // is meaningless to customers — fall back to it only when
+        // properties.origin_model_name is missing on old rows.
+        const modelLabel =
+          log.properties?.origin_model_name ||
+          log.properties?.upstream_model_name ||
+          log.platform
         return (
           <div className='flex max-w-[170px] flex-col gap-0.5'>
             <StatusBadge
@@ -192,8 +201,11 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
               showDot={false}
               className='border-border/60 bg-muted/30 max-w-full truncate rounded-md border px-1.5 py-0.5 font-mono'
             />
-            <span className='text-muted-foreground/60 truncate text-[11px]'>
-              {t(log.platform)} · {t(taskActionMapper.getLabel(log.action))}
+            <span
+              title={modelLabel}
+              className='text-muted-foreground/60 truncate text-[11px]'
+            >
+              {modelLabel} · {t(taskActionMapper.getLabel(log.action))}
             </span>
           </div>
         )

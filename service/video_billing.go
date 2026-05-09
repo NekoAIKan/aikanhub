@@ -237,5 +237,27 @@ func normalizeVideoBillingInput(profile videobilling.VideoBillingProfile, input 
 		input.GroupRatio = 1
 	}
 	input.Resolution = strings.TrimSpace(strings.ToLower(input.Resolution))
+	// Per_second profiles key their rates by alias (e.g. "540p"). When the
+	// request omits the alias, billing would otherwise fall through to the
+	// flat `price_per_second` (often unset → 0 → free task). Reverse-look
+	// up the alias from the dimensions we just resolved so the rate table
+	// can match. We pick the shortest matching alias so canonical names
+	// ("720p") win over equivalents ("1280x720") deterministically.
+	if input.Resolution == "" && input.Width > 0 && input.Height > 0 {
+		input.Resolution = aliasForDimensions(profile.ResolutionAliases, input.Width, input.Height)
+	}
 	return input
+}
+
+func aliasForDimensions(aliases map[string]videobilling.VideoResolution, w, h int) string {
+	best := ""
+	for name, dim := range aliases {
+		if dim.Width != w || dim.Height != h {
+			continue
+		}
+		if best == "" || len(name) < len(best) {
+			best = name
+		}
+	}
+	return best
 }

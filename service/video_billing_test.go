@@ -546,6 +546,39 @@ func TestPixverseC1PerSecondPricingMatrix(t *testing.T) {
 	}
 }
 
+// Regression: when the request omits an explicit resolution alias, the
+// system used to fall through to the flat PricePerSecond fallback (often
+// unset → bill 0). We now reverse-look up the alias from the resolved
+// fallback dimensions so the rate table can match.
+func TestPerSecondAliasReverseLookupFromFallback(t *testing.T) {
+	resetProfitSettingForVideoBillingTest(t)
+	profile := videobilling.VideoBillingProfile{
+		Mode:                    videobilling.ModePerSecond,
+		PricePerSecondByResolution: map[string]float64{"540p": 0.044, "720p": 0.055},
+		// Intentionally NO flat PricePerSecond — verifies reverse lookup
+		// is the only path that can produce a non-zero rate here.
+		FallbackFPS:             24,
+		FallbackWidth:           960,
+		FallbackHeight:          540,
+		FallbackDurationSeconds: 5,
+		ConservativeMultiplier:  1.0,
+		ResolutionAliases: map[string]videobilling.VideoResolution{
+			"540p": {Width: 960, Height: 540},
+			"720p": {Width: 1280, Height: 720},
+		},
+	}
+
+	// Request carries no Resolution and no W/H — falls back to profile defaults.
+	got := CalculateVideoBilling(profile, VideoBillingInput{
+		OutputSeconds: 5, GroupRatio: 1,
+	}, false)
+	require.Equal(t, "540p", got.Resolution, "alias should be inferred from fallback dimensions")
+	require.Equal(t, 0.044, got.PricePerSecondUSD)
+	// 5 × 0.044 = 0.21999...e-tiny in IEEE 754, so int(... * 500000) truncates
+	// to 109999. Within ±1 quota of the analytically correct 110000.
+	require.InDelta(t, int(0.22*common.QuotaPerUnit), got.Quota, 1)
+}
+
 func TestPerSecondPreCharge(t *testing.T) {
 	resetProfitSettingForVideoBillingTest(t)
 	profile := videobilling.VideoBillingProfile{
