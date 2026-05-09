@@ -295,3 +295,21 @@ Things that are NOT allowed in source:
 When you need to "preview" or "test" pricing, run the actual billing engine against admin-configured data — see `controller/video_billing_preview.go` for the pattern (canonical request shapes server-side, runtime resolves them through the same `service.CalculateVideoBilling` the request path uses).
 
 Operator handover for the video billing schema lives at `setting/video_billing_setting/profiles.md`. Update it in the same PR when you add or repurpose a profile field.
+
+### Rule 20: Don't relax authorization boundaries to make a UI symptom go away
+
+Any change that lets a caller see, modify, or download data they previously couldn't is a security boundary change — pause and ask before writing code, even when the symptom is "404 / Failed to load X" in a dashboard you trust.
+
+Common shape of the trap: a handler scopes a query to `userID` (`GetByTaskId(userID, taskID)`), an admin reports they can't see another user's resource, and the obvious "fix" is to bypass the scope when `role >= RoleAdminUser`. That is not a bug fix — it is a deliberate broadening of who can see what. The original scope might have been intentional (e.g. video proxy serving signed URLs, draft logs, raw API keys, billing context) and the right answer might be:
+
+- The caller should log in as the resource owner.
+- The dashboard should hide the affected row entirely instead of trying to render it.
+- The data really should be admin-visible — but that is a product decision, not a debugging conclusion.
+
+Checklist before touching anything that reads `c.GetInt("role")`, `c.GetInt("id")` for ownership, or any `WHERE user_id = ?` clause:
+
+1. Is the current scoping intentional? Read the surrounding code, the route's middleware, and the data being returned. Would a malicious caller benefit from the relaxation?
+2. Ask the user whether the broader visibility is desired. Quote the current behaviour and the proposed behaviour explicitly: "Right now only the task owner can fetch the result video. You want admins to be able to fetch any user's? — yes / no."
+3. Only after explicit yes, make the change. Limit it to the smallest possible scope (one route, one resource type, one role tier). Never piggy-back additional context (like setting `role` in middlewares for unrelated reasons) onto the same commit — that turns a focused security review into a hunt.
+
+If the user pushes back later, revert immediately rather than negotiate. The cost of a wasted commit is far smaller than the cost of an unintended access path.
