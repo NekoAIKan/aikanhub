@@ -35,7 +35,42 @@ type Pricing struct {
 	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
 	BillingMode            string                  `json:"billing_mode,omitempty"`
 	BillingExpr            string                  `json:"billing_expr,omitempty"`
+	VideoBilling           *VideoBillingPricing    `json:"video_billing,omitempty"`
 	PricingVersion         string                  `json:"pricing_version,omitempty"`
+}
+
+// QuotaType values surfaced to the frontend. 0 = token-based ratio,
+// 1 = per-call fixed price, 2 = per-token video formula. The frontend
+// picks how to render each row based on this value.
+const (
+	QuotaTypeTokenRatio     = 0
+	QuotaTypePerCallFixed   = 1
+	QuotaTypeVideoFormula   = 2
+)
+
+// VideoBillingPricing is the client-facing pricing summary for a model
+// that bills via the video formula path. It packages the headline price
+// (the canonical 720p / 5 s text-only scenario), a matrix of canonical
+// (resolution × duration × with-video) cells, and any free-form rules
+// the operator wants to surface. All numbers are derived at request
+// time from `video_billing_setting.profiles[model]` — no values cached.
+type VideoBillingPricing struct {
+	Headline VideoBillingPricingPoint   `json:"headline"`
+	Matrix   []VideoBillingPricingPoint `json:"matrix"`
+	Rules    []string                   `json:"rules,omitempty"`
+}
+
+type VideoBillingPricingPoint struct {
+	Resolution          string  `json:"resolution,omitempty"`
+	Width               int     `json:"width"`
+	Height              int     `json:"height"`
+	DurationSeconds     int     `json:"duration_seconds"`
+	HasVideoInput       bool    `json:"has_video_input"`
+	Tokens              int     `json:"tokens"`
+	UnitPricePerMillion float64 `json:"unit_price_per_million"`
+	PriceUSD            float64 `json:"price_usd"`
+	Quota               int     `json:"quota"`
+	Scenario            string  `json:"scenario,omitempty"`
 }
 
 type PricingVendor struct {
@@ -304,15 +339,26 @@ func updatePricing() {
 			pricing.Tags = meta.Tags
 			pricing.VendorID = meta.VendorID
 		}
-		modelPrice, findPrice := ratio_setting.GetModelPrice(model, false)
-		if findPrice {
-			pricing.ModelPrice = modelPrice
-			pricing.QuotaType = 1
+		// Video formula models bypass both ModelPrice (per-call) and
+		// ModelRatio (per-token). When a profile is set with mode=formula
+		// the runtime uses video_billing_setting; surface it as a
+		// dedicated quota_type so the frontend can render the matrix
+		// rather than a meaningless "$0.885 / call" cell read from the
+		// admin ratio page.
+		if videoBilling := buildVideoBillingPricing(model); videoBilling != nil {
+			pricing.QuotaType = QuotaTypeVideoFormula
+			pricing.VideoBilling = videoBilling
 		} else {
-			modelRatio, _, _ := ratio_setting.GetModelRatio(model)
-			pricing.ModelRatio = modelRatio
-			pricing.CompletionRatio = ratio_setting.GetCompletionRatio(model)
-			pricing.QuotaType = 0
+			modelPrice, findPrice := ratio_setting.GetModelPrice(model, false)
+			if findPrice {
+				pricing.ModelPrice = modelPrice
+				pricing.QuotaType = QuotaTypePerCallFixed
+			} else {
+				modelRatio, _, _ := ratio_setting.GetModelRatio(model)
+				pricing.ModelRatio = modelRatio
+				pricing.CompletionRatio = ratio_setting.GetCompletionRatio(model)
+				pricing.QuotaType = QuotaTypeTokenRatio
+			}
 		}
 		if cacheRatio, ok := ratio_setting.GetCacheRatio(model); ok {
 			pricing.CacheRatio = &cacheRatio

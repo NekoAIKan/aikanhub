@@ -103,6 +103,7 @@ export const EXCLUDED_GROUPS = ['', 'auto']
 export const QUOTA_TYPE_VALUES = {
   TOKEN: 0,
   REQUEST: 1,
+  VIDEO_FORMULA: 2,
 } as const
 
 /** Token unit divisors */

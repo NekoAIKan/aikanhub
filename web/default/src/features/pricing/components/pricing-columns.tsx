@@ -121,10 +121,13 @@ export function usePricingColumns(
       meta: { label: t('Type') },
       header: t('Type'),
       cell: ({ row }) => {
-        const isTokenBased = row.original.quota_type === QUOTA_TYPE_VALUES.TOKEN
+        const qt = row.original.quota_type
+        let label = t('Request')
+        if (qt === QUOTA_TYPE_VALUES.TOKEN) label = t('Token')
+        else if (qt === QUOTA_TYPE_VALUES.VIDEO_FORMULA) label = t('Video')
         return (
           <span className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
-            {isTokenBased ? t('Token') : t('Request')}
+            {label}
           </span>
         )
       },
@@ -141,6 +144,35 @@ export function usePricingColumns(
       ),
       cell: ({ row }) => {
         const model = row.original
+
+        // Video formula models bypass model_ratio / model_price entirely;
+        // render the canonical headline ($/video at 720p / 5s text) plus
+        // a deep-link to the matrix + live calculator on the per-model
+        // details page. Without this branch the column would display the
+        // stale ModelPrice the admin set on the (bypassed) ratio page.
+        if (
+          model.quota_type === QUOTA_TYPE_VALUES.VIDEO_FORMULA &&
+          model.video_billing
+        ) {
+          const headline = model.video_billing.headline
+          return (
+            <div className='min-w-[180px]'>
+              <div className='font-mono text-sm tabular-nums'>
+                {`$${headline.price_usd.toFixed(headline.price_usd < 1 ? 4 : 3)}`}
+              </div>
+              <div className='text-muted-foreground/70 text-[11px]'>
+                {t('from')} {headline.scenario || `${headline.resolution} / ${headline.duration_seconds}s text`}
+              </div>
+              <a
+                className='text-primary mt-0.5 inline-block text-[11px] underline underline-offset-2'
+                href={`/pricing/${encodeURIComponent(model.model_name)}`}
+              >
+                {t('See pricing matrix')}
+              </a>
+            </div>
+          )
+        }
+
         const dynamicSummary = getDynamicPricingSummary(model, {
           tokenUnit,
           showRechargePrice,
