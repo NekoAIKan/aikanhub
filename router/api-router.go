@@ -181,6 +181,7 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.POST("/bundle/import/preview", controller.PreviewOptionBundleImport)
 			optionRoute.POST("/bundle/import/apply", controller.ApplyOptionBundleImport)
 			optionRoute.POST("/rest_model_ratio", controller.ResetModelRatio)
+			optionRoute.POST("/video_billing/preview", controller.PreviewVideoBilling)
 			optionRoute.POST("/migrate_console_setting", controller.MigrateConsoleSetting) // 用于迁移检测的旧键，下个版本会删除
 		}
 		inviteCampaignRoute := apiRouter.Group("/invite_campaign")
