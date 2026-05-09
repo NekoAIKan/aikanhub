@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { StatusBadge } from '@/components/status-badge'
 import { DEFAULT_TOKEN_UNIT, QUOTA_TYPE_VALUES } from '../constants'
+import { localizedDescription } from '../lib/description'
 import {
   getDynamicDisplayGroupRatio,
   getDynamicPricingSummary,
@@ -25,7 +26,11 @@ export interface ModelCardProps {
 }
 
 export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const description = localizedDescription(
+    props.model.description,
+    i18n.language
+  )
   const { copyToClipboard } = useCopyToClipboard()
   const tokenUnit = props.tokenUnit ?? DEFAULT_TOKEN_UNIT
   const priceRate = props.priceRate ?? 1
@@ -227,7 +232,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
 
       {/* Description */}
       <p className='text-muted-foreground mt-2 line-clamp-1 flex-1 text-[13px] leading-relaxed sm:mt-4 sm:line-clamp-2 sm:min-h-[2.5rem]'>
-        {props.model.description || t('No description available.')}
+        {description || t('No description available.')}
       </p>
 
       {/* Footer row 1: group + billing type */}

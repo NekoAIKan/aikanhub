@@ -41,6 +41,7 @@ import { formatGroupPrice, formatFixedPrice } from '../lib/price'
 import type { PricingModel, TokenUnit, PriceType } from '../types'
 import { DynamicPricingBreakdown } from './dynamic-pricing-breakdown'
 import { VideoBillingSection } from './video-billing-section'
+import { localizedDescription } from '../lib/description'
 
 function SectionTitle(props: { children: React.ReactNode }) {
   return (
@@ -51,12 +52,17 @@ function SectionTitle(props: { children: React.ReactNode }) {
 }
 
 function ModelHeader(props: { model: PricingModel }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const model = props.model
   const vendorIcon = model.vendor_icon
     ? getLobeIcon(model.vendor_icon, 20)
     : null
-  const description = model.description || model.vendor_description || null
+  const localizedModel = localizedDescription(model.description, i18n.language)
+  const localizedVendor = localizedDescription(
+    model.vendor_description,
+    i18n.language
+  )
+  const description = localizedModel || localizedVendor || null
   const tags = parseTags(model.tags)
   const isSpecialExpression =
     model.billing_mode === 'tiered_expr' &&
