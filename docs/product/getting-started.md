@@ -20,7 +20,7 @@
 
 ```bash
 curl /v1/chat/completions \
-  -H "Authorization: Bearer $AIKANHUB_API_KEY" \
+  -H "Authorization: Bearer $KITTYVIBE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4o-mini",

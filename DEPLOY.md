@@ -1,6 +1,6 @@
 # 部署指南
 
-> 本指南覆盖 AIKanHub 的本地 Docker 部署。生产环境（k8s / 多区域 / CDN）暂未在本指南覆盖范围内。
+> 本指南覆盖 KittyVibe 的本地 Docker 部署。生产环境（k8s / 多区域 / CDN）暂未在本指南覆盖范围内。
 
 ## 一、前置要求
 
@@ -82,7 +82,7 @@ until curl -sf http://localhost:3000/api/status > /dev/null; do sleep 2; done &&
 4. **测试 API**：
 
 ```bash
-export AIKANHUB_TOKEN=sk-xxxxxxxx
+export KITTYVIBE_TOKEN=sk-xxxxxxxx
 bash tools/test-seedance.sh
 ```
 
@@ -211,7 +211,7 @@ docker compose -f docker-compose.local.yml --env-file .env.local build --no-cach
 
 DB 里 `SystemName` Option 还是初始值。两种处理：
 
-- 进 admin 后台 → 系统设置 → 站点信息，改成 `AIKanHub`
+- 进 admin 后台 → 系统设置 → 站点信息，改成 `KittyVibe`
 - 或浏览器控制台跑：
 
 ```javascript
@@ -222,7 +222,7 @@ fetch('/api/option/', {
     'New-Api-User': '1',
     'Authorization': 'Bearer ' + localStorage.getItem('access_token'),
   },
-  body: JSON.stringify({key: 'SystemName', value: 'AIKanHub'}),
+  body: JSON.stringify({key: 'SystemName', value: 'KittyVibe'}),
 }).then(r => r.json()).then(console.log)
 ```
 

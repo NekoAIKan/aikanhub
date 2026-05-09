@@ -1,6 +1,6 @@
 # NOTICE
 
-AIKanHub is a fork of [**new-api**](https://github.com/Calcium-Ion/new-api)
+KittyVibe is a fork of [**new-api**](https://github.com/Calcium-Ion/new-api)
 by [**QuantumNous**](https://github.com/QuantumNous), licensed under the
 GNU Affero General Public License v3.0 (AGPL-3.0).
 
@@ -9,7 +9,7 @@ by [**JustSong**](https://github.com/songquanpeng), originally licensed under MI
 
 ## Modifications
 
-This fork has been modified for the AIKanHub project. Per AGPL §5(a), modifications
+This fork has been modified for the KittyVibe project. Per AGPL §5(a), modifications
 include — but are not limited to — the following areas:
 
 - Project branding (README, HTML titles, package names, frontend metadata)

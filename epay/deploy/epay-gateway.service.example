@@ -1,0 +1,22 @@
+[Unit]
+Description=kittyvibe EPay-Alipay gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=epay-gateway
+Group=epay-gateway
+WorkingDirectory=/opt/aikanhub
+EnvironmentFile=/etc/epay-gateway.env
+ExecStart=/opt/aikanhub/epay-gateway
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/epay-gateway
+
+[Install]
+WantedBy=multi-user.target

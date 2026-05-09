@@ -25,7 +25,7 @@ func TestOptionBundleExportExcludesSensitiveKeys(t *testing.T) {
 	setupGrowthControllerTestDB(t)
 	common.OptionMapRWMutex.Lock()
 	common.OptionMap = map[string]string{
-		"SystemName":         "kittyvibe",
+		"SystemName":         "KittyVibe",
 		"GitHubClientSecret": "super-secret",
 		"TurnstileSiteKey":   "site-secret-too",
 		"ModelRatio":         `{"gpt":1}`,
@@ -49,9 +49,9 @@ func TestOptionBundleExportExcludesSensitiveKeys(t *testing.T) {
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
 	require.True(t, response.Success)
 	require.Equal(t, 2, response.Data.SchemaVersion)
-	require.Equal(t, "aikanhub", response.Data.App)
+	require.Equal(t, "kittyvibe", response.Data.App)
 	require.NotZero(t, response.Data.ExportedAt)
-	require.Equal(t, "kittyvibe", response.Data.Options["SystemName"])
+	require.Equal(t, "KittyVibe", response.Data.Options["SystemName"])
 	require.NotContains(t, response.Data.Options, "GitHubClientSecret")
 	require.NotContains(t, response.Data.Options, "TurnstileSiteKey")
 	require.ElementsMatch(t, []string{"GitHubClientSecret", "TurnstileSiteKey"}, response.Data.Redacted)
@@ -110,7 +110,7 @@ func TestOptionBundleImportAcceptsRawSchemaV2Bundle(t *testing.T) {
 	model.InitOptionMap()
 	require.NoError(t, model.UpdateOption("SystemName", "Before"))
 
-	body := `{"schema_version":2,"app":"aikanhub","options":{"SystemName":"RawAfter"}}`
+	body := `{"schema_version":2,"app":"kittyvibe","options":{"SystemName":"RawAfter"}}`
 	ctx, recorder := newOptionBundleContext(t, http.MethodPost, "/api/option/bundle/import/apply", body)
 	ApplyOptionBundleImport(ctx)
 	require.Equal(t, http.StatusOK, recorder.Code)
@@ -155,7 +155,7 @@ func TestOptionBundleImportPreviewRejectsInvalidOptionsWithoutMutation(t *testin
 	require.NoError(t, model.UpdateOption("GroupRatio", `{"default":1}`))
 	require.NoError(t, model.UpdateOption("SystemName", "Before"))
 
-	body := `{"bundle":{"schema_version":2,"app":"aikanhub","options":{"GroupRatio":"not-json"}}}`
+	body := `{"bundle":{"schema_version":2,"app":"kittyvibe","options":{"GroupRatio":"not-json"}}}`
 	ctx, recorder := newOptionBundleContext(t, http.MethodPost, "/api/option/bundle/import/preview", body)
 	PreviewOptionBundleImport(ctx)
 	require.Equal(t, http.StatusOK, recorder.Code)
@@ -183,7 +183,7 @@ func TestOptionBundleApplyRejectsInvalidOptionsWithoutMutation(t *testing.T) {
 	model.InitOptionMap()
 	require.NoError(t, model.UpdateOption("GroupRatio", `{"default":1}`))
 
-	body := `{"bundle":{"schema_version":2,"app":"aikanhub","options":{"GroupRatio":"not-json","SystemName":"After"}}}`
+	body := `{"bundle":{"schema_version":2,"app":"kittyvibe","options":{"GroupRatio":"not-json","SystemName":"After"}}}`
 	ctx, recorder := newOptionBundleContext(t, http.MethodPost, "/api/option/bundle/import/apply", body)
 	ApplyOptionBundleImport(ctx)
 	require.Equal(t, http.StatusOK, recorder.Code)
@@ -210,7 +210,7 @@ func TestOptionBundleApplyWritesAuditLog(t *testing.T) {
 	model.InitOptionMap()
 	require.NoError(t, model.UpdateOption("SystemName", "Before"))
 
-	body := `{"bundle":{"schema_version":2,"app":"aikanhub","options":{"SystemName":"After"}}}`
+	body := `{"bundle":{"schema_version":2,"app":"kittyvibe","options":{"SystemName":"After"}}}`
 	ctx, recorder := newOptionBundleContext(t, http.MethodPost, "/api/option/bundle/import/apply", body)
 	ctx.Set("id", 42)
 	ctx.Set("username", "root")

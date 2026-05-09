@@ -1,6 +1,6 @@
 # E2E test results (Seedance routes)
 
-Run against `aikanhub-app` docker container on `http://localhost:3000`,
+Run against `kittyvibe-app` docker container on `http://localhost:3000`,
 token from `aikanhub/.env.maomao`. Each row is a real generation against the
 Doubao upstream — no mocks.
 
@@ -75,6 +75,6 @@ bash fetch-assets.sh
 python run.py
 ```
 
-Token comes from `../../../.env.maomao` (`AIKANHUB_TOKEN=sk-...`). Override
-endpoint with `AIKANHUB_BASE_URL`. Per-task timeout is 900 s — heavier flows
+Token comes from `../../../.env.maomao` (`KITTYVIBE_TOKEN=sk-...`). Override
+endpoint with `KITTYVIBE_BASE_URL`. Per-task timeout is 900 s — heavier flows
 (multimodal, edit) routinely take 5–10 min on the Doubao side.

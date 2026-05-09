@@ -1,12 +1,12 @@
 """Replay-mode end-to-end test.
 
 Assumes:
-  - aikanhub running on $AIKANHUB_BASE_URL (default http://localhost:3000)
+  - kittyvibe running on $KITTYVIBE_BASE_URL (default http://localhost:3000)
   - mock_volcano.py running on host port 8721
   - Channel #1 (or any Doubao type=54 channel) configured with
       base_url=http://host.docker.internal:8721
       models=doubao-seedance-2-0-fast-260128,doubao-seedance-2-0-260128
-  - $AIKANHUB_GATEWAY_TOKEN set to a sk- token
+  - $KITTYVIBE_GATEWAY_TOKEN set to a sk- token
 
 Submits one of each PR #27 task shape against the mocked upstream and
 asserts:
@@ -31,11 +31,18 @@ from dotenv import load_dotenv
 HERE = Path(__file__).resolve().parent
 load_dotenv(HERE.parent.parent.parent / ".env.maomao")
 
-BASE = os.environ.get("AIKANHUB_BASE_URL", "http://localhost:3000")
-TOKEN = os.environ["AIKANHUB_GATEWAY_TOKEN"]
-DB = os.environ.get("AIKANHUB_DB", "/Users/randomradio/src/aikanhub/data/one-api.db")
+def require_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise RuntimeError(f"set {name}")
+    return value
+
+
+BASE = os.environ.get("KITTYVIBE_BASE_URL", "http://localhost:3000")
+TOKEN = require_env("KITTYVIBE_GATEWAY_TOKEN")
+DB = os.environ.get("KITTYVIBE_DB", "/Users/randomradio/src/aikanhub/data/one-api.db")
 TIMEOUT = int(os.environ.get("REPLAY_TIMEOUT", "120"))
-MOCK_BASE = os.environ.get("AIKANHUB_E2E_MOCK_BASE_URL", "http://host.docker.internal:8721")
+MOCK_BASE = os.environ.get("KITTYVIBE_E2E_MOCK_BASE_URL", "http://host.docker.internal:8721")
 
 FAST = "doubao-seedance-2-0-fast-260128"
 FULL = "doubao-seedance-2-0-260128"
@@ -236,7 +243,7 @@ def _billing_evidence(task_id: str, row: dict) -> dict:
 
 def _assert_mock_channel_configured() -> None:
     if not os.path.exists(DB):
-        raise RuntimeError(f"AIKANHUB_DB does not exist: {DB}")
+        raise RuntimeError(f"KITTYVIBE_DB does not exist: {DB}")
     con = sqlite3.connect(DB)
     con.row_factory = sqlite3.Row
     try:

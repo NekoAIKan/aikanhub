@@ -37,7 +37,7 @@ type WorkspaceSwitcherProps = {
  */
 export function WorkspaceSwitcher({
   workspaces,
-  defaultName = 'kittyvibe',
+  defaultName = 'KittyVibe',
   defaultVersion,
 }: WorkspaceSwitcherProps) {
   const { t } = useTranslation()
@@ -124,11 +124,11 @@ export function WorkspaceSwitcher({
   const workspaceButtonContent = (
     <>
       {activeWorkspace.id === WORKSPACE_IDS.SYSTEM_SETTINGS ? (
-        <div className='bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg'>
-          <activeWorkspace.logo className='size-4' />
+        <div className='bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-10 items-center justify-center rounded-lg'>
+          <activeWorkspace.logo className='size-5' />
         </div>
       ) : (
-        <div className='flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg'>
+        <div className='flex aspect-square size-10 items-center justify-center overflow-hidden rounded-lg'>
           <img
             src={logo}
             alt={t('Logo')}

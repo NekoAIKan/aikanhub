@@ -1,6 +1,6 @@
 <div align="center">
 
-# AIKanHub
+# KittyVibe
 
 **给开发者的视频生成 API 平台，一个 key 调用所有主流模型。**
 
@@ -12,7 +12,7 @@
 
 ## 这是什么
 
-AIKanHub 是一个聚合视频生成模型 API 的网关。开发者用统一的 key 和接口，就能调用 Seedance、Pixverse 等主流视频生成模型，不用一家家上游对接、管 key、对账单。
+KittyVibe 是一个聚合视频生成模型 API 的网关。开发者用统一的 key 和接口，就能调用 Seedance、Pixverse 等主流视频生成模型，不用一家家上游对接、管 key、对账单。
 
 ## 当前支持
 
@@ -47,12 +47,12 @@ open http://localhost:3000
 部署完成后，登录后台 → **令牌** 创建一个 `sk-xxx`，然后：
 
 ```bash
-export AIKANHUB_TOKEN=sk-你的token
-export AIKANHUB_HOST=http://localhost:3000   # 部署地址
+export KITTYVIBE_TOKEN=sk-你的token
+export KITTYVIBE_HOST=http://localhost:3000   # 部署地址
 
 # 1) 提交视频生成任务（异步）
-curl -X POST $AIKANHUB_HOST/v1/video/generations \
-  -H "Authorization: Bearer $AIKANHUB_TOKEN" \
+curl -X POST $KITTYVIBE_HOST/v1/video/generations \
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "doubao-seedance-2-0-fast-260128",
@@ -64,8 +64,8 @@ curl -X POST $AIKANHUB_HOST/v1/video/generations \
 # → {"task_id": "task_xxx", "status": "queued"}
 
 # 2) 轮询状态（5s 一次，通常 90-120s 完成）
-curl $AIKANHUB_HOST/v1/video/generations/task_xxx \
-  -H "Authorization: Bearer $AIKANHUB_TOKEN"
+curl $KITTYVIBE_HOST/v1/video/generations/task_xxx \
+  -H "Authorization: Bearer $KITTYVIBE_TOKEN"
 # → {"data": {"status": "SUCCESS", "data": {"content": {"video_url": "https://..."}}}}
 ```
 
@@ -86,8 +86,8 @@ curl $AIKANHUB_HOST/v1/video/generations/task_xxx \
 
 ## 协议
 
-[AGPL-3.0](./LICENSE)。如果你用 AIKanHub 对外提供网络服务，必须向用户开放完整源码（包括你的修改）。如需闭源商用，请联系上游 [QuantumNous](mailto:support@quantumnous.com)。
+[AGPL-3.0](./LICENSE)。如果你用 KittyVibe 对外提供网络服务，必须向用户开放完整源码（包括你的修改）。如需闭源商用，请联系上游 [QuantumNous](mailto:support@quantumnous.com)。
 
 ## 致谢
 
-AIKanHub 基于 [Calcium-Ion/new-api](https://github.com/Calcium-Ion/new-api) fork 而来，详见 [NOTICE.md](./NOTICE.md)。
+KittyVibe 基于 [Calcium-Ion/new-api](https://github.com/Calcium-Ion/new-api) fork 而来，详见 [NOTICE.md](./NOTICE.md)。
