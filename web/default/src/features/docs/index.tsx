@@ -887,6 +887,39 @@ export function Docs() {
         ],
       },
       {
+        label: t('Image audit'),
+        items: [
+          {
+            id: 'audit-overview',
+            label: t('When to pre-audit vs auto-audit'),
+            isNew: true,
+          },
+          {
+            id: 'audit-create',
+            label: t('Create an audit'),
+            method: 'POST',
+            isNew: true,
+          },
+          {
+            id: 'audit-get',
+            label: t('Get an audit record'),
+            method: 'GET',
+            isNew: true,
+          },
+          {
+            id: 'audit-list',
+            label: t('List audit records'),
+            method: 'GET',
+            isNew: true,
+          },
+          {
+            id: 'audit-errors',
+            label: t('Per-image error response'),
+            isNew: true,
+          },
+        ],
+      },
+      {
         label: t('Appendix'),
         items: [
           { id: 'pricing', label: t('Pricing') },
@@ -2547,6 +2580,233 @@ export function Docs() {
                           <td className='px-4 py-2'>{t('Server error')}</td>
                           <td className='px-4 py-2'>
                             {t('Retry; if persistent, contact support.')}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </Section>
+
+                {/* ============================ Image audit ============================ */}
+                <Section
+                  id='audit-overview'
+                  title={t('When to pre-audit vs auto-audit')}
+                  description={t(
+                    'Real-person images submitted directly to video generation get blocked by an upstream privacy filter. The asset library bypasses this for content you have rights to use. KittyVibe exposes two ways to drive it.'
+                  )}
+                >
+                  <div className='overflow-hidden rounded-lg border'>
+                    <table className='w-full text-sm'>
+                      <thead className='bg-muted'>
+                        <tr className='text-left'>
+                          <th className='px-4 py-2 font-medium'>{t('Mode')}</th>
+                          <th className='px-4 py-2 font-medium'>{t('How')}</th>
+                          <th className='px-4 py-2 font-medium'>
+                            {t('Best for')}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className='divide-y text-xs'>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>
+                            audit_image=true
+                          </td>
+                          <td className='px-4 py-2'>
+                            {t(
+                              'Set metadata.audit_image=true on /v1/video/generations. Images get audited inline before submission, replaced with asset:// URIs upstream.'
+                            )}
+                          </td>
+                          <td className='px-4 py-2'>
+                            {t(
+                              'Casual one-off jobs. Audit latency is paid on the video request itself.'
+                            )}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>
+                            /v1/image-audits
+                          </td>
+                          <td className='px-4 py-2'>
+                            {t(
+                              'POST once to audit, store the returned asset:// URI, paste it into the images field of every future video request — no re-audit, no extra latency.'
+                            )}
+                          </td>
+                          <td className='px-4 py-2'>
+                            {t(
+                              'Reusable project-level avatars / reference images, batch jobs, multi-step pipelines.'
+                            )}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <Callout type='info'>
+                    <strong>{t('Both modes share the same dedup cache.')}</strong>{' '}
+                    {t(
+                      'Repeated submissions of the same source string (URL or base64) hit the cached audit result, including failed audits — moderation decisions are deterministic, so we never re-spend ARK quota on a known rejection.'
+                    )}
+                  </Callout>
+                </Section>
+
+                <Section
+                  id='audit-create'
+                  title={t('Create an audit')}
+                  description={t(
+                    'Submit one image. Returns immediately with status=processing (or status=active when the cache hits). Poll the GET endpoint until status is terminal, or pass wait=true to block synchronously.'
+                  )}
+                >
+                  <EndpointCard
+                    method='POST'
+                    path='/v1/image-audits'
+                    description={t('Create a single image audit job.')}
+                  />
+                  <CodeBlock
+                    lang='bash'
+                    code={`curl -X POST ${ENDPOINT_BASE}/v1/image-audits \\
+  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "image": "https://example.com/avatar.jpg"
+  }'`}
+                  />
+                  <Callout type='tip'>
+                    {t(
+                      'image accepts an HTTPS URL or a base64 data URI (data:image/jpeg;base64,...). Base64 inputs are uploaded to the platform-managed object store before being handed to upstream audit.'
+                    )}
+                  </Callout>
+                  <p className='mt-3 text-sm'>
+                    <strong>{t('Sample response')}</strong> (
+                    {t('async, status=processing')}):
+                  </p>
+                  <CodeBlock
+                    lang='json'
+                    code={`{
+  "id": "imgaudit_b7e501f46e485977",
+  "user_id": 2,
+  "token_id": 2,
+  "source_kind": "url",
+  "project": "default",
+  "group_id": "group-20260507232332-259pn",
+  "asset_id": "asset-20260507192856-dntpd",
+  "asset_uri": "asset://asset-20260507192856-dntpd",
+  "status": "processing",
+  "created_at": 1778326136,
+  "updated_at": 1778326136
+}`}
+                  />
+                  <p className='mt-3 text-sm'>
+                    <strong>{t('Synchronous mode')}</strong>:{' '}
+                    {t(
+                      'add ?wait=true (or "wait": true in the body) to block until terminal. Audit latency is uncontrolled — typical 5–15s, hard cap at the configured ARK_ASSETS_POLL_TIMEOUT.'
+                    )}
+                  </p>
+                </Section>
+
+                <Section
+                  id='audit-get'
+                  title={t('Get an audit record')}
+                  description={t(
+                    "Look up an audit record by its imgaudit_<id>. Scoped to the calling user's records — other users' records return 404."
+                  )}
+                >
+                  <EndpointCard
+                    method='GET'
+                    path='/v1/image-audits/:id'
+                    description={t('Fetch a single audit record.')}
+                  />
+                  <CodeBlock
+                    lang='bash'
+                    code={`curl ${ENDPOINT_BASE}/v1/image-audits/imgaudit_b7e501f46e485977 \\
+  -H "Authorization: Bearer $AIKANHUB_TOKEN"`}
+                  />
+                  <Callout type='info'>
+                    <strong>{t('Reusing the audit')}</strong>:{' '}
+                    {t(
+                      'when status=active, paste asset_uri (asset://...) directly into the images field of any /v1/video/generations request. The video task skips the audit step entirely.'
+                    )}
+                  </Callout>
+                </Section>
+
+                <Section
+                  id='audit-list'
+                  title={t('List audit records')}
+                  description={t(
+                    'List your audit records, newest first. Page size capped at 100.'
+                  )}
+                >
+                  <EndpointCard
+                    method='GET'
+                    path='/v1/image-audits?page=1&limit=20'
+                    description={t('Paginated list of the caller’s records.')}
+                  />
+                </Section>
+
+                <Section
+                  id='audit-errors'
+                  title={t('Per-image error response')}
+                  description={t(
+                    "When metadata.audit_image=true and one of multiple images fails audit, the error response identifies exactly which image so the client can prompt the user to replace it."
+                  )}
+                >
+                  <CodeBlock
+                    lang='json'
+                    code={`{
+  "code": "image_audit_failed",
+  "message": "image[2] role=reference_image: imageaudit: ...",
+  "data": {
+    "failed_image": {
+      "index": 2,
+      "role": "reference_image",
+      "source": "https://example.com/bad.jpg",
+      "asset_id": "asset-...",
+      "reason": "..."
+    }
+  }
+}`}
+                  />
+                  <div className='mt-3 overflow-hidden rounded-lg border'>
+                    <table className='w-full text-sm'>
+                      <thead className='bg-muted'>
+                        <tr className='text-left'>
+                          <th className='px-4 py-2 font-medium'>{t('Code')}</th>
+                          <th className='px-4 py-2 font-medium'>HTTP</th>
+                          <th className='px-4 py-2 font-medium'>
+                            {t('Meaning')}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className='divide-y text-xs'>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>
+                            image_audit_failed
+                          </td>
+                          <td className='px-4 py-2 font-mono'>400</td>
+                          <td className='px-4 py-2'>
+                            {t(
+                              'Moderation rejected this image. Replace it; retrying as-is hits the same cached failure.'
+                            )}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>
+                            image_audit_error
+                          </td>
+                          <td className='px-4 py-2 font-mono'>502</td>
+                          <td className='px-4 py-2'>
+                            {t(
+                              'Infrastructure error (URL unreachable, transient ARK failure). Worth a retry; data.failed_image.source identifies which image to check.'
+                            )}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className='px-4 py-2 font-mono'>
+                            asset_uri_not_auditable
+                          </td>
+                          <td className='px-4 py-2 font-mono'>400</td>
+                          <td className='px-4 py-2'>
+                            {t(
+                              'POST /v1/image-audits with image="asset://..." — asset URIs are already audited references; pass a URL or base64 instead.'
+                            )}
                           </td>
                         </tr>
                       </tbody>

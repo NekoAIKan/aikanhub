@@ -224,7 +224,7 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	// submitting upstream. Each URL becomes asset://<id>. Unset / false keeps
 	// the original passthrough behaviour.
 	if shouldAuditImages(req.Metadata) {
-		if err := a.auditImageContent(c, body); err != nil {
+		if err := a.auditImageContent(c, info, body); err != nil {
 			return nil, err
 		}
 	}
@@ -272,21 +272,32 @@ func shouldAuditImages(metadata map[string]any) bool {
 }
 
 // auditImageContent walks body.Content, replaces every image_url URL with the
-// audited asset:// URI, and short-circuits with a clear error on the first
-// audit failure. Audit failures (Status=Failed) carry a stable error code so
-// API clients can distinguish moderation rejection from infrastructure issues.
-func (a *TaskAdaptor) auditImageContent(c *gin.Context, body *requestPayload) error {
+// audited asset:// URI, and short-circuits on the first audit failure. The
+// returned error wraps an *imageaudit.PerImageAuditError when a specific image
+// was rejected, so the upstream error envelope can identify which image
+// (index, role, source) needs replacing.
+//
+// Dedup happens at the imageaudit.Submit layer via the (user_id, source_hash)
+// composite index, so identical images across replicas share one audit.
+func (a *TaskAdaptor) auditImageContent(c *gin.Context, info *relaycommon.RelayInfo, body *requestPayload) error {
+	ctx := c.Request.Context()
 	for i := range body.Content {
 		item := &body.Content[i]
 		if item.Type != "image_url" || item.ImageURL == nil || item.ImageURL.URL == "" {
 			continue
 		}
-		audited, err := imageaudit.EnsureAuditedCached(c.Request.Context(), item.ImageURL.URL)
+		audited, err := imageaudit.EnsureAudited(ctx, item.ImageURL.URL, info.UserId, info.TokenId)
 		if err != nil {
-			if imageaudit.IsAuditFailure(err) {
-				return errors.Wrap(err, "image_audit_failed")
+			perImg := &imageaudit.PerImageAuditError{
+				Index:  i,
+				Role:   item.Role,
+				Source: item.ImageURL.URL,
+				Err:    err,
 			}
-			return errors.Wrap(err, "image_audit_error")
+			if imageaudit.IsAuditFailure(err) {
+				return errors.Wrap(perImg, "image_audit_failed")
+			}
+			return errors.Wrap(perImg, "image_audit_error")
 		}
 		item.ImageURL.URL = audited
 	}
