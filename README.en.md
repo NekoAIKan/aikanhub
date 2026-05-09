@@ -1,6 +1,6 @@
 <div align="center">
 
-# AIKanHub
+# KittyVibe
 
 **A video generation API platform for developers. One key, all major models.**
 
@@ -12,7 +12,7 @@
 
 ## What is this
 
-AIKanHub is an API gateway that aggregates video generation models. Developers use a single key and interface to call Seedance, Pixverse, and other mainstream video models — no need to onboard each upstream, manage keys, or reconcile bills separately.
+KittyVibe is an API gateway that aggregates video generation models. Developers use a single key and interface to call Seedance, Pixverse, and other mainstream video models — no need to onboard each upstream, manage keys, or reconcile bills separately.
 
 ## Current Support
 
@@ -44,8 +44,8 @@ open http://localhost:3000
 
 ## License
 
-[AGPL-3.0](./LICENSE). If you run AIKanHub as a network service, you must offer your users access to the complete source (including modifications). For closed-source commercial use, contact upstream [QuantumNous](mailto:support@quantumnous.com).
+[AGPL-3.0](./LICENSE). If you run KittyVibe as a network service, you must offer your users access to the complete source (including modifications). For closed-source commercial use, contact upstream [QuantumNous](mailto:support@quantumnous.com).
 
 ## Acknowledgments
 
-AIKanHub is forked from [Calcium-Ion/new-api](https://github.com/Calcium-Ion/new-api). See [NOTICE.md](./NOTICE.md) for details.
+KittyVibe is forked from [Calcium-Ion/new-api](https://github.com/Calcium-Ion/new-api). See [NOTICE.md](./NOTICE.md) for details.
