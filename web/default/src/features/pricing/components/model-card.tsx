@@ -5,7 +5,7 @@ import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { StatusBadge } from '@/components/status-badge'
-import { DEFAULT_TOKEN_UNIT } from '../constants'
+import { DEFAULT_TOKEN_UNIT, QUOTA_TYPE_VALUES } from '../constants'
 import {
   getDynamicDisplayGroupRatio,
   getDynamicPricingSummary,
@@ -32,6 +32,9 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const usdExchangeRate = props.usdExchangeRate ?? 1
   const showRechargePrice = props.showRechargePrice ?? false
   const isTokenBased = isTokenBasedModel(props.model)
+  const isVideoFormula =
+    props.model.quota_type === QUOTA_TYPE_VALUES.VIDEO_FORMULA &&
+    Boolean(props.model.video_billing)
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
   const tags = parseTags(props.model.tags)
   const groups = props.model.enable_groups || []
@@ -84,11 +87,32 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             )}
           </div>
           <div className='min-w-0'>
-            <h3 className='text-foreground truncate font-mono text-[15px] leading-tight font-bold'>
+            <h3
+              title={props.model.model_name}
+              className='text-foreground font-mono text-[15px] leading-tight font-bold break-words'
+            >
               {props.model.model_name}
             </h3>
             <div className='mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs sm:mt-1 sm:gap-x-3'>
-              {dynamicSummary ? (
+              {isVideoFormula && props.model.video_billing ? (
+                // Video formula: show the canonical headline ($/video at
+                // 720p / 5s text) and let the user click through to the
+                // matrix + live calculator on the details page. We don't
+                // try to fit the matrix into the card.
+                <span className='text-muted-foreground whitespace-nowrap'>
+                  <span className='text-foreground font-mono font-semibold'>
+                    {(() => {
+                      const p = props.model.video_billing.headline.price_usd
+                      if (!Number.isFinite(p) || p <= 0) return '$0'
+                      if (p < 1) return `$${p.toFixed(3)}`
+                      return `$${p.toFixed(2)}`
+                    })()}
+                  </span>{' '}
+                  {t('from')}{' '}
+                  {props.model.video_billing.headline.scenario ||
+                    `${props.model.video_billing.headline.resolution} / ${props.model.video_billing.headline.duration_seconds}s text`}
+                </span>
+              ) : dynamicSummary ? (
                 dynamicSummary.isSpecialExpression ? (
                   <span className='min-w-0'>
                     <span className='text-amber-700 dark:text-amber-300'>
@@ -214,7 +238,11 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           </span>
         )}
         <span className='text-muted-foreground text-xs font-medium'>
-          {isTokenBased ? t('Token-based') : t('Per Request')}
+          {isVideoFormula
+            ? t('Video')
+            : isTokenBased
+              ? t('Token-based')
+              : t('Per Request')}
         </span>
         {isDynamicPricing && (
           <StatusBadge
