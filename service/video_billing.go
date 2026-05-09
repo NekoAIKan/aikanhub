@@ -3,6 +3,7 @@ package service
 import (
 	"crypto/sha256"
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/profit_setting"
@@ -15,11 +16,15 @@ const (
 )
 
 type VideoBillingInput struct {
-	InputSeconds        int
-	OutputSeconds       int
-	Width               int
-	Height              int
-	FPS                 int
+	InputSeconds  int
+	OutputSeconds int
+	Width         int
+	Height        int
+	FPS           int
+	// Resolution is the alias the caller used (e.g. "720p", "1080p"); empty
+	// when the request only specified raw width/height. Used to look up
+	// per-resolution unit prices in the profile.
+	Resolution          string
 	GroupRatio          float64
 	Draft               bool
 	UpstreamTotalTokens int
@@ -36,6 +41,7 @@ type VideoBillingResult struct {
 	Width             int
 	Height            int
 	FPS               int
+	Resolution        string
 	HasReferenceMedia bool
 	RetailUnitPrice   float64
 	UpstreamUnitCost  float64
@@ -53,8 +59,14 @@ func CalculateVideoBilling(profile videobilling.VideoBillingProfile, input Video
 		tokens = normalized.UpstreamTotalTokens
 		basis = VideoBillingBasisUpstreamUsage
 	}
+	// Vendors with reference-media inputs (e.g. Volcano Seedance video-edit)
+	// publish minimum-token floors. Apply only when the request actually
+	// carries video and the formula/upstream value is below the floor.
+	if normalized.HasReferenceMedia && profile.MinTokensWithVideo > 0 && tokens < profile.MinTokensWithVideo {
+		tokens = profile.MinTokensWithVideo
+	}
 
-	retailUnitPrice, upstreamUnitCost, markupPercent := resolveVideoRetailUnitPrice(profile)
+	retailUnitPrice, upstreamUnitCost, markupPercent := resolveVideoRetailUnitPrice(profile, normalized.HasReferenceMedia, normalized.Resolution)
 	rawCost := float64(tokens) * retailUnitPrice
 	if normalized.Draft && profile.DraftMultiplier > 0 {
 		rawCost *= profile.DraftMultiplier
@@ -81,6 +93,7 @@ func CalculateVideoBilling(profile videobilling.VideoBillingProfile, input Video
 		Width:             normalized.Width,
 		Height:            normalized.Height,
 		FPS:               normalized.FPS,
+		Resolution:        normalized.Resolution,
 		HasReferenceMedia: normalized.HasReferenceMedia,
 		RetailUnitPrice:   retailUnitPrice,
 		UpstreamUnitCost:  upstreamUnitCost,
@@ -90,7 +103,22 @@ func CalculateVideoBilling(profile videobilling.VideoBillingProfile, input Video
 	}
 }
 
-func resolveVideoRetailUnitPrice(profile videobilling.VideoBillingProfile) (retailUnitPrice float64, upstreamUnitCost float64, markupPercent float64) {
+// resolveVideoRetailUnitPrice picks the unit price (USD per 1M tokens) the
+// caller's request resolves to. Lookup precedence (first match wins):
+//
+//  1. Request has reference media → UnitPriceWithVideoByResolution[resolution]
+//  2. Request has reference media → UnitPriceWithVideo
+//  3. UnitPriceByResolution[resolution]
+//  4. UnitPrice
+//  5. profit_setting.upstream_cost_per_million_tokens × (1 + markup%) when
+//     ApplyToDefaultVideoProfiles is set
+//  6. 0 — the request is treated as free.
+//
+// Step 6 is intentionally not a magic-number fallback ($1/M was historical):
+// shipping a non-zero default would bake vendor-agnostic pricing into the
+// open-source binary, so we return zero and force the operator to configure
+// either the per-profile fields or the global profit_setting.
+func resolveVideoRetailUnitPrice(profile videobilling.VideoBillingProfile, hasReferenceMedia bool, resolution string) (retailUnitPrice float64, upstreamUnitCost float64, markupPercent float64) {
 	profit := profit_setting.GetProfitSetting()
 	upstreamUnitCost = profit.UpstreamCostPerMillionTokens
 	if upstreamUnitCost < 0 {
@@ -98,19 +126,44 @@ func resolveVideoRetailUnitPrice(profile videobilling.VideoBillingProfile) (reta
 	}
 	markupPercent = profit.DefaultMarkupPercent
 
+	if hasReferenceMedia {
+		if price, ok := lookupResolutionPrice(profile.UnitPriceWithVideoByResolution, resolution); ok {
+			return price, upstreamUnitCost, markupPercent
+		}
+		if profile.UnitPriceWithVideo > 0 {
+			return profile.UnitPriceWithVideo, upstreamUnitCost, markupPercent
+		}
+	}
+	if price, ok := lookupResolutionPrice(profile.UnitPriceByResolution, resolution); ok {
+		return price, upstreamUnitCost, markupPercent
+	}
 	if profile.UnitPrice > 0 {
 		return profile.UnitPrice, upstreamUnitCost, markupPercent
 	}
 	if upstreamUnitCost > 0 && profit.ApplyToDefaultVideoProfiles {
 		return upstreamUnitCost * (1 + markupPercent/100), upstreamUnitCost, markupPercent
 	}
-	return 1, upstreamUnitCost, markupPercent
+	return 0, upstreamUnitCost, markupPercent
+}
+
+func lookupResolutionPrice(table map[string]float64, resolution string) (float64, bool) {
+	if len(table) == 0 || resolution == "" {
+		return 0, false
+	}
+	if price, ok := table[resolution]; ok && price > 0 {
+		return price, true
+	}
+	return 0, false
 }
 
 func videoPricingHash(profile videobilling.VideoBillingProfile, retailUnitPrice float64, upstreamUnitCost float64, markupPercent float64) string {
 	payload := struct {
 		Mode                            string                                  `json:"mode"`
 		ProfileUnitPrice                float64                                 `json:"profile_unit_price"`
+		ProfileUnitPriceWithVideo       float64                                 `json:"profile_unit_price_with_video,omitempty"`
+		ProfileUnitPriceByResolution    map[string]float64                      `json:"profile_unit_price_by_resolution,omitempty"`
+		ProfileUnitPriceWithVideoByRes  map[string]float64                      `json:"profile_unit_price_with_video_by_resolution,omitempty"`
+		MinTokensWithVideo              int                                     `json:"min_tokens_with_video,omitempty"`
 		RetailUnitPrice                 float64                                 `json:"retail_unit_price"`
 		UpstreamUnitCost                float64                                 `json:"upstream_unit_cost"`
 		MarkupPercent                   float64                                 `json:"markup_percent"`
@@ -126,6 +179,10 @@ func videoPricingHash(profile videobilling.VideoBillingProfile, retailUnitPrice 
 	}{
 		Mode:                            profile.Mode,
 		ProfileUnitPrice:                profile.UnitPrice,
+		ProfileUnitPriceWithVideo:       profile.UnitPriceWithVideo,
+		ProfileUnitPriceByResolution:    profile.UnitPriceByResolution,
+		ProfileUnitPriceWithVideoByRes:  profile.UnitPriceWithVideoByResolution,
+		MinTokensWithVideo:              profile.MinTokensWithVideo,
 		RetailUnitPrice:                 retailUnitPrice,
 		UpstreamUnitCost:                upstreamUnitCost,
 		MarkupPercent:                   markupPercent,
@@ -160,5 +217,6 @@ func normalizeVideoBillingInput(profile videobilling.VideoBillingProfile, input 
 	if input.GroupRatio <= 0 {
 		input.GroupRatio = 1
 	}
+	input.Resolution = strings.TrimSpace(strings.ToLower(input.Resolution))
 	return input
 }

@@ -14,9 +14,35 @@ type VideoResolution struct {
 	Height int `json:"height"`
 }
 
+// VideoBillingProfile is the per-model billing recipe for a video task.
+// All pricing fields are admin-configured at runtime via the
+// `video_billing_setting.profiles` option; nothing in this repo ships
+// vendor-specific prices.
 type VideoBillingProfile struct {
-	Mode                            string                     `json:"mode"`
-	UnitPrice                       float64                    `json:"unit_price"`
+	Mode      string  `json:"mode"`
+	UnitPrice float64 `json:"unit_price"`
+
+	// UnitPriceWithVideo overrides UnitPrice when the request carries video
+	// reference media. Vendors typically charge less when the input is a
+	// video clip rather than text/image; admins capture that gap here.
+	UnitPriceWithVideo float64 `json:"unit_price_with_video,omitempty"`
+
+	// UnitPriceByResolution lets admins price each output resolution
+	// distinctly. Keys match the `Resolution` alias surfaced by the request
+	// (e.g. "720p", "1080p"); no entry → fall back to UnitPrice.
+	UnitPriceByResolution map[string]float64 `json:"unit_price_by_resolution,omitempty"`
+
+	// UnitPriceWithVideoByResolution is the with-video variant of
+	// UnitPriceByResolution; resolved before UnitPriceByResolution when the
+	// request has reference media.
+	UnitPriceWithVideoByResolution map[string]float64 `json:"unit_price_with_video_by_resolution,omitempty"`
+
+	// MinTokensWithVideo is a token floor applied only when reference media
+	// is present and the formula-derived (or upstream-reported) token count
+	// falls below it. Mirrors vendors that set per-call minimums on
+	// video-input requests.
+	MinTokensWithVideo int `json:"min_tokens_with_video,omitempty"`
+
 	FallbackFPS                     int                        `json:"fallback_fps"`
 	FallbackWidth                   int                        `json:"fallback_width"`
 	FallbackHeight                  int                        `json:"fallback_height"`
@@ -36,48 +62,15 @@ var videoBillingSetting = VideoBillingSetting{
 	Profiles: map[string]VideoBillingProfile{},
 }
 
-var defaultProfiles = map[string]VideoBillingProfile{
-	"doubao-seedance-1-0-pro-250528":  defaultSeedanceProfile(),
-	"doubao-seedance-1-0-lite-t2v":    defaultSeedanceProfile(),
-	"doubao-seedance-1-0-lite-i2v":    defaultSeedanceProfile(),
-	"doubao-seedance-1-5-pro-251215":  defaultSeedanceProfile(),
-	"doubao-seedance-2-0-260128":      defaultSeedanceProfile(),
-	"doubao-seedance-2-0-fast-260128": defaultSeedanceProfile(),
-}
-
 func init() {
 	config.GlobalConfig.Register("video_billing_setting", &videoBillingSetting)
 }
 
-func defaultSeedanceProfile() VideoBillingProfile {
-	return VideoBillingProfile{
-		Mode:                            ModeFormula,
-		UnitPrice:                       0,
-		FallbackFPS:                     24,
-		FallbackWidth:                   1280,
-		FallbackHeight:                  720,
-		FallbackDurationSeconds:         5,
-		UseUpstreamUsage:                true,
-		ConservativeMultiplier:          1.25,
-		ReferenceConservativeMultiplier: 2,
-		DraftMultiplier:                 0.5,
-		ResolutionAliases: map[string]VideoResolution{
-			"480p":      {Width: 832, Height: 480},
-			"720p":      {Width: 1280, Height: 720},
-			"1080p":     {Width: 1920, Height: 1080},
-			"1280x720":  {Width: 1280, Height: 720},
-			"720x1280":  {Width: 720, Height: 1280},
-			"1920x1080": {Width: 1920, Height: 1080},
-			"1080x1920": {Width: 1080, Height: 1920},
-		},
-	}
-}
-
+// GetProfile returns the admin-configured profile for `model`, or false if
+// none is registered. The repo intentionally ships no defaults: all
+// per-model billing parameters must be set at runtime by the operator.
 func GetProfile(model string) (VideoBillingProfile, bool) {
-	if profile, ok := videoBillingSetting.Profiles[model]; ok {
-		return cloneProfile(profile), true
-	}
-	profile, ok := defaultProfiles[model]
+	profile, ok := videoBillingSetting.Profiles[model]
 	if !ok {
 		return VideoBillingProfile{}, false
 	}
@@ -86,5 +79,7 @@ func GetProfile(model string) (VideoBillingProfile, bool) {
 
 func cloneProfile(profile VideoBillingProfile) VideoBillingProfile {
 	profile.ResolutionAliases = lo.Assign(profile.ResolutionAliases)
+	profile.UnitPriceByResolution = lo.Assign(profile.UnitPriceByResolution)
+	profile.UnitPriceWithVideoByResolution = lo.Assign(profile.UnitPriceWithVideoByResolution)
 	return profile
 }

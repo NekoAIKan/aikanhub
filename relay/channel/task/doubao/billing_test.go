@@ -47,7 +47,7 @@ func TestExtractRequestBillingInput(t *testing.T) {
 					"resolution": "1080p",
 				},
 			},
-			want: service.VideoBillingInput{OutputSeconds: 5, Width: 1920, Height: 1080, FPS: 24, GroupRatio: 1},
+			want: service.VideoBillingInput{OutputSeconds: 5, Width: 1920, Height: 1080, FPS: 24, Resolution: "1080p", GroupRatio: 1},
 		},
 		{
 			name: "seconds and size aliases",
@@ -55,7 +55,7 @@ func TestExtractRequestBillingInput(t *testing.T) {
 				Seconds: "6",
 				Size:    "1280x720",
 			},
-			want: service.VideoBillingInput{OutputSeconds: 6, Width: 1280, Height: 720, FPS: 24, GroupRatio: 1},
+			want: service.VideoBillingInput{OutputSeconds: 6, Width: 1280, Height: 720, FPS: 24, Resolution: "1280x720", GroupRatio: 1},
 		},
 		{
 			name: "metadata seconds draft and content video",
@@ -108,6 +108,7 @@ func TestExtractRequestBillingInputUsesTopLevelResolution(t *testing.T) {
 		Width:         832,
 		Height:        480,
 		FPS:           24,
+		Resolution:    "480p",
 		GroupRatio:    1,
 	}, got)
 }
@@ -127,6 +128,7 @@ func TestExtractRequestBillingInputMetadataOverridesTopLevel(t *testing.T) {
 		Width:         1920,
 		Height:        1080,
 		FPS:           24,
+		Resolution:    "1080p",
 		GroupRatio:    1,
 	}, got)
 }
@@ -186,6 +188,7 @@ func TestExtractResponseBillingInput(t *testing.T) {
 		Width:               1920,
 		Height:              1080,
 		FPS:                 30,
+		Resolution:          "1080p",
 		GroupRatio:          1,
 		UpstreamTotalTokens: 12345,
 	}, got)
