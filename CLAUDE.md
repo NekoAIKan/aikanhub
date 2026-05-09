@@ -313,3 +313,15 @@ Checklist before touching anything that reads `c.GetInt("role")`, `c.GetInt("id"
 3. Only after explicit yes, make the change. Limit it to the smallest possible scope (one route, one resource type, one role tier). Never piggy-back additional context (like setting `role` in middlewares for unrelated reasons) onto the same commit — that turns a focused security review into a hunt.
 
 If the user pushes back later, revert immediately rather than negotiate. The cost of a wasted commit is far smaller than the cost of an unintended access path.
+
+### Rule 21: New task channel types must be registered in `common/endpoint_type.go`
+
+`common/endpoint_type.go::GetEndpointTypesByChannelType` is a switch that maps `channel.type` (an int constant) to the `EndpointType` set the model exposes. The `default` branch returns `EndpointTypeOpenAI` (Chat). Any video task channel that falls through to default appears in /pricing under "Chat" instead of "Video", and the sidebar `视频` filter shows 0 even though video models are configured.
+
+When adding a new channel `constant.ChannelTypeXxx`:
+
+1. Add it to the appropriate `case` in `GetEndpointTypesByChannelType` (e.g. video task channels join the same case clause as `ChannelTypeSora` / `ChannelTypeDoubaoVideo`).
+2. If it's a video task channel, also confirm `pkg/billingexpr` / `setting/video_billing_setting` etc. handle the model id naturally (no per-vendor enum to extend).
+3. Manually verify on `/pricing`: the model's badge shows `Video` (not `Chat`), the endpoint type column shows `openai-video`, the sidebar `视频 N` count includes it.
+
+Skipping step 1 caught us once; the symptoms surface in the user-facing pricing page rather than the API path so it's easy to miss until a customer asks.
