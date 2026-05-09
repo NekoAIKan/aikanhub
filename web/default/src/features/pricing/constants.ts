@@ -30,6 +30,7 @@ export const QUOTA_TYPES = {
   ALL: 'all',
   TOKEN: 'token',
   REQUEST: 'request',
+  VIDEO: 'video',
 } as const
 
 export type QuotaTypeOption = (typeof QUOTA_TYPES)[keyof typeof QUOTA_TYPES]
@@ -42,6 +43,7 @@ export function getQuotaTypeLabels(
     [QUOTA_TYPES.ALL]: t('All Models'),
     [QUOTA_TYPES.TOKEN]: t('Token-based'),
     [QUOTA_TYPES.REQUEST]: t('Per Request'),
+    [QUOTA_TYPES.VIDEO]: t('Video'),
   }
 }
 

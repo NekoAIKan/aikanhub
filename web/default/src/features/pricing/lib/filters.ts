@@ -60,10 +60,24 @@ export function filterByQuotaType(
   quotaType: string
 ): PricingModel[] {
   if (quotaType === QUOTA_TYPES.ALL) return models
-  const targetType =
-    quotaType === QUOTA_TYPES.TOKEN
-      ? QUOTA_TYPE_VALUES.TOKEN
-      : QUOTA_TYPE_VALUES.REQUEST
+  let targetType: number
+  switch (quotaType) {
+    case QUOTA_TYPES.TOKEN:
+      targetType = QUOTA_TYPE_VALUES.TOKEN
+      break
+    case QUOTA_TYPES.VIDEO:
+      targetType = QUOTA_TYPE_VALUES.VIDEO_FORMULA
+      break
+    case QUOTA_TYPES.REQUEST:
+    default:
+      // Pre-2.0 behaviour: any non-token quota type collapsed to
+      // "Request". Now that VIDEO_FORMULA is its own first-class option,
+      // a literal REQUEST filter must select only quota_type=1, not
+      // anything-non-zero — otherwise the count and the rendered list
+      // disagree (sidebar shows 32, table renders 34).
+      targetType = QUOTA_TYPE_VALUES.REQUEST
+      break
+  }
   return models.filter((m) => m.quota_type === targetType)
 }
 
