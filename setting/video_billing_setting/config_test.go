@@ -47,14 +47,26 @@ func TestLoadProfilesFromDBAndReturnDefensiveCopy(t *testing.T) {
 	require.Equal(t, VideoResolution{Width: 1280, Height: 720}, again.ResolutionAliases["720p"])
 }
 
-func TestDefaultSeedanceProfilesExistAndCanBeOverridden(t *testing.T) {
-	profile, ok := GetProfile("doubao-seedance-2-0-260128")
-	require.True(t, ok)
-	require.Equal(t, ModeFormula, profile.Mode)
-	require.Zero(t, profile.UnitPrice)
-	require.Equal(t, 2.0, profile.ReferenceConservativeMultiplier)
-	require.Positive(t, profile.FallbackFPS)
-	require.Contains(t, profile.ResolutionAliases, "1080p")
+// TestNoBuiltInProfilesShipped guards Rule 5 (fork attribution) and the
+// open-source posture: nothing in this repo should embed vendor-specific
+// pricing or fallback parameters. GetProfile must return false until an
+// operator loads a profile via the `video_billing_setting.profiles` option.
+func TestNoBuiltInProfilesShipped(t *testing.T) {
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"video_billing_setting.profiles": `{}`,
+	}))
+
+	for _, model := range []string{
+		"doubao-seedance-1-0-pro-250528",
+		"doubao-seedance-1-0-lite-t2v",
+		"doubao-seedance-1-0-lite-i2v",
+		"doubao-seedance-1-5-pro-251215",
+		"doubao-seedance-2-0-260128",
+		"doubao-seedance-2-0-fast-260128",
+	} {
+		_, ok := GetProfile(model)
+		require.Falsef(t, ok, "profile %q must not ship as a built-in default", model)
+	}
 
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
 		"video_billing_setting.profiles": `{"doubao-seedance-2-0-260128":{"mode":"formula","unit_price":9,"fallback_fps":30,"fallback_width":640,"fallback_height":360,"fallback_duration_seconds":3,"use_upstream_usage":false,"conservative_multiplier":2,"reference_conservative_multiplier":3,"draft_multiplier":0.25,"resolution_aliases":{"small":{"width":640,"height":360}}}}`,
@@ -65,6 +77,5 @@ func TestDefaultSeedanceProfilesExistAndCanBeOverridden(t *testing.T) {
 	require.Equal(t, 9.0, overridden.UnitPrice)
 	require.Equal(t, 3.0, overridden.ReferenceConservativeMultiplier)
 	require.Equal(t, 30, overridden.FallbackFPS)
-	require.NotContains(t, overridden.ResolutionAliases, "1080p")
 	require.Equal(t, VideoResolution{Width: 640, Height: 360}, overridden.ResolutionAliases["small"])
 }

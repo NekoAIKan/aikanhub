@@ -164,10 +164,97 @@ func TestVideoBillingUnitPriceResolution(t *testing.T) {
 	require.InDelta(t, 140400.0, gotDerived.RawCost, 0.000001)
 
 	resetProfitSettingForVideoBillingTest(t)
+	// With no per-profile UnitPrice and no profit_setting upstream cost,
+	// the resolver must report a zero price rather than silently fall back
+	// to a built-in magic number — the OSS binary ships no defaults.
 	gotLegacy := CalculateVideoBilling(derived, VideoBillingInput{GroupRatio: 1}, false)
-	require.Equal(t, 1.0, gotLegacy.RetailUnitPrice)
+	require.Zero(t, gotLegacy.RetailUnitPrice)
 	require.Zero(t, gotLegacy.UpstreamUnitCost)
-	require.Equal(t, 108000.0, gotLegacy.RawCost)
+	require.Zero(t, gotLegacy.RawCost)
+	require.Zero(t, gotLegacy.Quota)
+}
+
+func TestVideoBillingResolutionAndWithVideoOverride(t *testing.T) {
+	resetProfitSettingForVideoBillingTest(t)
+	profile := videobilling.VideoBillingProfile{
+		Mode:                    videobilling.ModeFormula,
+		UnitPrice:               6.39,
+		UnitPriceWithVideo:      3.89,
+		FallbackFPS:             24,
+		FallbackWidth:           1280,
+		FallbackHeight:          720,
+		FallbackDurationSeconds: 5,
+		ConservativeMultiplier:  1,
+		MinTokensWithVideo:      150_000,
+		UnitPriceByResolution: map[string]float64{
+			"720p":  6.39,
+			"1080p": 7.08,
+		},
+		UnitPriceWithVideoByResolution: map[string]float64{
+			"720p":  3.89,
+			"1080p": 4.31,
+		},
+	}
+
+	gotPlain720 := CalculateVideoBilling(profile, VideoBillingInput{
+		Width: 1280, Height: 720, FPS: 24, OutputSeconds: 5, GroupRatio: 1, Resolution: "720p",
+	}, false)
+	require.Equal(t, 6.39, gotPlain720.RetailUnitPrice)
+
+	gotPlain1080 := CalculateVideoBilling(profile, VideoBillingInput{
+		Width: 1920, Height: 1080, FPS: 24, OutputSeconds: 5, GroupRatio: 1, Resolution: "1080p",
+	}, false)
+	require.Equal(t, 7.08, gotPlain1080.RetailUnitPrice)
+
+	gotWithVideo720 := CalculateVideoBilling(profile, VideoBillingInput{
+		Width: 1280, Height: 720, FPS: 24, OutputSeconds: 5, GroupRatio: 1, Resolution: "720p", HasReferenceMedia: true,
+	}, false)
+	require.Equal(t, 3.89, gotWithVideo720.RetailUnitPrice)
+
+	gotWithVideo1080 := CalculateVideoBilling(profile, VideoBillingInput{
+		Width: 1920, Height: 1080, FPS: 24, OutputSeconds: 5, GroupRatio: 1, Resolution: "1080p", HasReferenceMedia: true,
+	}, false)
+	require.Equal(t, 4.31, gotWithVideo1080.RetailUnitPrice)
+
+	// Resolution alias unknown to the table → fall back to UnitPriceWithVideo
+	gotWithVideoUnknown := CalculateVideoBilling(profile, VideoBillingInput{
+		Width: 832, Height: 480, FPS: 24, OutputSeconds: 5, GroupRatio: 1, Resolution: "480p", HasReferenceMedia: true,
+	}, false)
+	require.Equal(t, 3.89, gotWithVideoUnknown.RetailUnitPrice)
+}
+
+func TestVideoBillingMinTokensWithVideoFloor(t *testing.T) {
+	resetProfitSettingForVideoBillingTest(t)
+	profile := videobilling.VideoBillingProfile{
+		Mode:                    videobilling.ModeFormula,
+		UnitPrice:               1,
+		FallbackFPS:             24,
+		FallbackWidth:           1280,
+		FallbackHeight:          720,
+		FallbackDurationSeconds: 5,
+		UseUpstreamUsage:        true,
+		ConservativeMultiplier:  1,
+		MinTokensWithVideo:      200_000,
+	}
+
+	// formula tokens (5 × 1280 × 720 × 24 / 1024 = 108_000) < 200_000 → floor
+	belowFloor := CalculateVideoBilling(profile, VideoBillingInput{
+		OutputSeconds: 5, Width: 1280, Height: 720, FPS: 24, GroupRatio: 1, HasReferenceMedia: true, InputSeconds: 0,
+	}, false)
+	require.Equal(t, 200_000, belowFloor.Tokens)
+
+	// upstream-reported value already above floor → keep as-is
+	aboveFloor := CalculateVideoBilling(profile, VideoBillingInput{
+		OutputSeconds: 5, Width: 1280, Height: 720, FPS: 24, GroupRatio: 1, HasReferenceMedia: true,
+		UpstreamTotalTokens: 500_000,
+	}, false)
+	require.Equal(t, 500_000, aboveFloor.Tokens)
+
+	// floor only applies when reference media is present
+	noReference := CalculateVideoBilling(profile, VideoBillingInput{
+		OutputSeconds: 5, Width: 1280, Height: 720, FPS: 24, GroupRatio: 1,
+	}, false)
+	require.Equal(t, 108_000, noReference.Tokens)
 }
 
 func TestVideoBillingReferencePrechargeUsesHigherMultiplier(t *testing.T) {

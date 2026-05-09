@@ -107,6 +107,9 @@ func ApplyVideoBillingResultToTaskBillingContext(bc *model.TaskBillingContext, r
 	bc.VideoParams["width"] = result.Width
 	bc.VideoParams["height"] = result.Height
 	bc.VideoParams["fps"] = result.FPS
+	if result.Resolution != "" {
+		bc.VideoParams["resolution"] = result.Resolution
+	}
 	if result.HasReferenceMedia {
 		bc.VideoParams["has_reference_media"] = true
 	}
@@ -131,7 +134,7 @@ func addVideoBillingResultToOther(other map[string]interface{}, result VideoBill
 	other["pricing_version"] = result.PricingVersion
 	other["pricing_hash"] = result.PricingHash
 	other["has_reference_media"] = result.HasReferenceMedia
-	other["video_params"] = map[string]any{
+	videoParams := map[string]any{
 		"input_seconds":       result.InputSeconds,
 		"output_seconds":      result.OutputSeconds,
 		"width":               result.Width,
@@ -139,6 +142,10 @@ func addVideoBillingResultToOther(other map[string]interface{}, result VideoBill
 		"fps":                 result.FPS,
 		"has_reference_media": result.HasReferenceMedia,
 	}
+	if result.Resolution != "" {
+		videoParams["resolution"] = result.Resolution
+	}
+	other["video_params"] = videoParams
 }
 
 // ---------------------------------------------------------------------------

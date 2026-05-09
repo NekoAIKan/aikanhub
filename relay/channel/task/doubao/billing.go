@@ -13,7 +13,8 @@ import (
 
 func ExtractRequestBillingInput(req relaycommon.TaskSubmitReq, profile videobilling.VideoBillingProfile, groupRatio float64) service.VideoBillingInput {
 	outputSeconds := firstPositiveInt(intFromMap(req.Metadata, "duration"), req.Duration, atoi(req.Seconds), intFromMap(req.Metadata, "seconds"))
-	width, height := resolveVideoDimensions(profile, firstString(stringFromMap(req.Metadata, "resolution"), req.Resolution, req.Size, stringFromMap(req.Metadata, "size")))
+	resolution := firstString(stringFromMap(req.Metadata, "resolution"), req.Resolution, req.Size, stringFromMap(req.Metadata, "size"))
+	width, height := resolveVideoDimensions(profile, resolution)
 	fps := firstPositiveInt(intFromMap(req.Metadata, "fps"), intFromMap(req.Metadata, "framespersecond"), profile.FallbackFPS)
 	draft := boolFromMap(req.Metadata, "draft")
 
@@ -38,6 +39,7 @@ func ExtractRequestBillingInput(req relaycommon.TaskSubmitReq, profile videobill
 		Width:             width,
 		Height:            height,
 		FPS:               fps,
+		Resolution:        normalizeResolutionAlias(resolution),
 		GroupRatio:        groupRatio,
 		Draft:             draft,
 		HasReferenceMedia: hasReferenceMedia,
@@ -56,9 +58,14 @@ func ExtractResponseBillingInput(body []byte, profile videobilling.VideoBillingP
 		Width:               width,
 		Height:              height,
 		FPS:                 fps,
+		Resolution:          normalizeResolutionAlias(resTask.Resolution),
 		GroupRatio:          groupRatio,
 		UpstreamTotalTokens: resTask.Usage.TotalTokens,
 	}, nil
+}
+
+func normalizeResolutionAlias(raw string) string {
+	return strings.ToLower(strings.TrimSpace(raw))
 }
 
 func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) int {
@@ -105,6 +112,7 @@ func videoBillingInputFromContext(params map[string]any, groupRatio float64) ser
 		Width:               intFromMap(params, "width"),
 		Height:              intFromMap(params, "height"),
 		FPS:                 intFromMap(params, "fps"),
+		Resolution:          stringFromMap(params, "resolution"),
 		GroupRatio:          groupRatio,
 		Draft:               boolFromMap(params, "draft"),
 		UpstreamTotalTokens: intFromMap(params, "upstream_total_tokens"),
@@ -124,6 +132,9 @@ func mergeVideoBillingInput(base, override service.VideoBillingInput) service.Vi
 	}
 	if override.FPS > 0 {
 		base.FPS = override.FPS
+	}
+	if override.Resolution != "" {
+		base.Resolution = override.Resolution
 	}
 	if override.UpstreamTotalTokens > 0 {
 		base.UpstreamTotalTokens = override.UpstreamTotalTokens
