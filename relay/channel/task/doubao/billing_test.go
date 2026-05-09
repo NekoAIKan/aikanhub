@@ -112,6 +112,25 @@ func TestExtractRequestBillingInputUsesTopLevelResolution(t *testing.T) {
 	}, got)
 }
 
+func TestExtractRequestBillingInputMetadataOverridesTopLevel(t *testing.T) {
+	got := ExtractRequestBillingInput(relaycommon.TaskSubmitReq{
+		Duration:   4,
+		Resolution: "480p",
+		Metadata: map[string]any{
+			"duration":   8,
+			"resolution": "1080p",
+		},
+	}, testProfile(), 1)
+
+	require.Equal(t, service.VideoBillingInput{
+		OutputSeconds: 8,
+		Width:         1920,
+		Height:        1080,
+		FPS:           24,
+		GroupRatio:    1,
+	}, got)
+}
+
 func TestExtractRequestBillingInputMarksReferenceMedia(t *testing.T) {
 	got := ExtractRequestBillingInput(relaycommon.TaskSubmitReq{
 		Duration: 5,
