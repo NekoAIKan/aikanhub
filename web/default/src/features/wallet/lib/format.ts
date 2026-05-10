@@ -64,17 +64,14 @@ export function getDiscountLabel(discount: number): string {
 export function calculatePresetPricing(
   presetValue: number,
   priceRatio: number,
-  discount: number,
-  usdExchangeRate: number = 1
+  discount: number
 ) {
   const originalPrice = presetValue * priceRatio
   const actualPrice = originalPrice * discount
   const savedAmount = originalPrice - actualPrice
   const hasDiscount = discount < 1.0
-  const displayValue = presetValue * usdExchangeRate
 
   return {
-    displayValue,
     originalPrice,
     actualPrice,
     savedAmount,

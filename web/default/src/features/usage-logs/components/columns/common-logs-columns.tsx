@@ -673,9 +673,22 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
       ),
       cell: ({ row }) => {
         const log = row.original
+        const quota = row.getValue('quota') as number
+
+        // Show credit additions (topup / manage / refund) so the user can see
+        // their balance change in this column too, not just in the details text.
+        const isCreditAdd =
+          log.type === 1 || log.type === 3 || log.type === 6
+        if (isCreditAdd && quota > 0) {
+          return (
+            <span className='inline-flex w-fit items-center rounded-md border border-emerald-200/60 bg-emerald-50 px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-300'>
+              +{formatLogQuota(quota)}
+            </span>
+          )
+        }
+
         if (!isDisplayableLogType(log.type)) return null
 
-        const quota = row.getValue('quota') as number
         const other = parseLogOther(log.other)
         const isSubscription = other?.billing_source === 'subscription'
 
