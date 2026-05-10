@@ -325,3 +325,14 @@ When adding a new channel `constant.ChannelTypeXxx`:
 3. Manually verify on `/pricing`: the model's badge shows `Video` (not `Chat`), the endpoint type column shows `openai-video`, the sidebar `视频 N` count includes it.
 
 Skipping step 1 caught us once; the symptoms surface in the user-facing pricing page rather than the API path so it's easy to miss until a customer asks.
+
+### Rule 22: One USD-to-local rate — `USDExchangeRate` is the single source of truth
+
+`operation_setting.USDExchangeRate` is the only USD→local-currency rate. It drives both balance display (when `quotaDisplayType=CNY/CUSTOM`) and Epay checkout charging. The legacy `Price` field has been removed; the option key is still accepted on load (aliased to `USDExchangeRate`) so old DB rows don't break.
+
+Do not reintroduce a second USD-to-local-currency setting. If a new gateway needs its own rate, name it after the gateway (e.g. `StripeUnitPrice`, `WaffoUnitPrice`) — never a generic `Price`.
+
+Two related traps when touching wallet/checkout currency display:
+
+1. **`quotaDisplayType` is the user's display currency, not the gateway's.** When `quotaDisplayType=USD` but the operator runs Epay, "Pay X" amounts come out in CNY (because they're `topup × USDExchangeRate`), not USD. Use `formatPaymentGatewayAmount()` (in `web/default/src/lib/currency.ts`) for any value already multiplied by `priceRatio` — it formats with ¥ when display is USD and the rate is non-1.
+2. **`status.price` is a deprecated alias.** Frontend code should read `status.usd_exchange_rate`. The `price` field is still emitted by `/api/status` for backward compat but is just `USDExchangeRate` under another name.

@@ -557,6 +557,46 @@ export function isCurrencyDisplayEnabled(): boolean {
 }
 
 /**
+ * Format an amount that's already in the payment gateway's local currency.
+ *
+ * Use this for "Pay X" / "You Pay" amounts that have been multiplied by
+ * `priceRatio` (a.k.a. USDExchangeRate) — the result is denominated in the
+ * payment gateway's currency, NOT the user's display currency.
+ *
+ * When `quotaDisplayType` matches the gateway currency (CNY or CUSTOM), this
+ * is the same as `formatLocalCurrencyAmount`. When `quotaDisplayType=USD`
+ * but `usdExchangeRate != 1`, the gateway is implicitly CNY (Epay), so we
+ * format with ¥ rather than the misleading $ symbol from the display config.
+ */
+export function formatPaymentGatewayAmount(
+  amount: number | null | undefined,
+  options?: CurrencyFormatOptions
+): string {
+  if (amount == null || Number.isNaN(amount)) return '-'
+
+  const { config } = getCurrencyDisplay()
+  const merged = mergeOptions(options)
+
+  let meta: DisplayMeta
+  if (
+    config.quotaDisplayType === 'USD' &&
+    config.usdExchangeRate &&
+    config.usdExchangeRate !== 1
+  ) {
+    meta = {
+      kind: 'currency',
+      symbol: '¥',
+      currencyCode: 'CNY',
+      exchangeRate: 1,
+    }
+  } else {
+    meta = getBillingDisplayMeta(config)
+  }
+
+  return formatCurrencyValue(amount, merged, meta)
+}
+
+/**
  * Format an amount that is ALREADY in local currency.
  *
  * ⚠️ CRITICAL: This function does NOT apply exchange rate conversion.
