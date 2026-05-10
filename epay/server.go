@@ -182,7 +182,7 @@ func (g *Gateway) handleAlipayReturn(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.Redirect(w, r, "https://kittyvibe.ai/console/log", http.StatusFound)
+	http.Redirect(w, r, "https://kittyvibe.ai/usage-logs/common", http.StatusFound)
 }
 
 func (g *Gateway) processCallback(order *Order) {

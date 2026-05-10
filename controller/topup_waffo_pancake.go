@@ -107,7 +107,7 @@ func getWaffoPancakeReturnURL() string {
 	if strings.TrimSpace(setting.WaffoPancakeReturnURL) != "" {
 		return setting.WaffoPancakeReturnURL
 	}
-	return strings.TrimRight(system_setting.ServerAddress, "/") + "/console/topup?show_history=true"
+	return strings.TrimRight(system_setting.ServerAddress, "/") + "/wallet?show_history=true"
 }
 
 func RequestWaffoPancakePay(c *gin.Context) {

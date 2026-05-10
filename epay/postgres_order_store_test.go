@@ -35,7 +35,7 @@ func TestPostgresOrderStoreContract(t *testing.T) {
 		Subject:     "TUC10",
 		Amount:      "7.30",
 		NotifyURL:   "https://kittyvibe.ai/api/user/epay/notify",
-		ReturnURL:   "https://kittyvibe.ai/console/log",
+		ReturnURL:   "https://kittyvibe.ai/usage-logs/common",
 	}
 
 	stored, existed, err := store.UpsertFromSubmit(order)
