@@ -276,7 +276,6 @@ export function Wallet(props: WalletProps) {
                   topupLink={topupInfo?.topup_link}
                   loading={topupLoading}
                   priceRatio={(status?.usd_exchange_rate as number) || 1}
-                  usdExchangeRate={effectiveUsdExchangeRate}
                   onOpenBilling={() => setBillingDialogOpen(true)}
                   creemProducts={topupInfo?.creem_products}
                   enableCreemTopup={topupInfo?.enable_creem_topup}
