@@ -133,7 +133,7 @@ func RecordLogWithAdminInfo(userId int, logType int, content string, adminInfo m
 	}
 }
 
-func RecordTopupLog(userId int, content string, callerIp string, paymentMethod string, callbackPaymentMethod string) {
+func RecordTopupLog(userId int, quotaAdded int, content string, callerIp string, paymentMethod string, callbackPaymentMethod string) {
 	username, _ := GetUsernameById(userId, false)
 	adminInfo := map[string]interface{}{
 		"server_ip":               common.GetIp(),
@@ -152,6 +152,7 @@ func RecordTopupLog(userId int, content string, callerIp string, paymentMethod s
 		CreatedAt: common.GetTimestamp(),
 		Type:      LogTypeTopup,
 		Content:   content,
+		Quota:     quotaAdded,
 		Ip:        callerIp,
 		Other:     common.MapToJsonStr(other),
 	}
