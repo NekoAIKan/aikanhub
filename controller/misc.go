@@ -93,7 +93,7 @@ func GetStatus(c *gin.Context) {
 		"default_use_auto_group":        setting.DefaultUseAutoGroup,
 
 		"usd_exchange_rate": operation_setting.USDExchangeRate,
-		"price":             operation_setting.Price,
+		"price":             operation_setting.USDExchangeRate,
 		"stripe_unit_price": setting.StripeUnitPrice,
 
 		// 面板启用开关

@@ -259,7 +259,6 @@ export type IntegrationSettings = {
   PayAddress: string
   EpayId: string
   EpayKey: string
-  Price: number
   MinTopUp: number
   CustomCallbackAddress: string
   PayMethods: string

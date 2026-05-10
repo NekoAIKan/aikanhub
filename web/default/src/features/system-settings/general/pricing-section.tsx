@@ -215,7 +215,7 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                     </FormControl>
                     <FormDescription>
                       {t(
-                        'Real exchange rate between USD and your payment gateway currency'
+                        'Exchange rate between USD and your payment gateway currency. This rate is used both for displaying balances and for charging users at Epay checkout.'
                       )}
                     </FormDescription>
                     <FormMessage />

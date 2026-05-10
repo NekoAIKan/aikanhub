@@ -13,7 +13,8 @@
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "i18n:sync": "node scripts/sync-i18n.mjs",
-    "knip": "knip"
+    "knip": "knip",
+    "test": "bun test"
   },
   "dependencies": {
     "@fontsource-variable/public-sans": "^5.2.7",

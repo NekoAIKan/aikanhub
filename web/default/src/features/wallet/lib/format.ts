@@ -1,4 +1,4 @@
-import { formatLocalCurrencyAmount } from '@/lib/currency'
+import { formatPaymentGatewayAmount } from '@/lib/currency'
 import { DEFAULT_DISCOUNT_RATE } from '../constants'
 
 // ============================================================================
@@ -30,17 +30,21 @@ export function formatQuotaShort(quota: number): string {
 }
 
 /**
- * Format currency amount that is already in local currency.
- * This is used for payment amounts that have been calculated via priceRatio.
+ * Format a payment-side amount (already multiplied by priceRatio).
+ * The currency symbol matches the payment gateway, not necessarily the user's
+ * display currency — see `formatPaymentGatewayAmount` for details.
  */
 export function formatCurrency(amount: number | string): string {
   const numeric =
     typeof amount === 'number' ? amount : Number.parseFloat(String(amount))
-  return formatLocalCurrencyAmount(Number.isFinite(numeric) ? numeric : null, {
-    digitsLarge: 2,
-    digitsSmall: 2,
-    abbreviate: false,
-  })
+  return formatPaymentGatewayAmount(
+    Number.isFinite(numeric) ? numeric : null,
+    {
+      digitsLarge: 2,
+      digitsSmall: 2,
+      abbreviate: false,
+    }
+  )
 }
 
 /**
