@@ -13,7 +13,7 @@ func TestSignEPayParamsMatchesGoEpay(t *testing.T) {
 		"type":         "alipay",
 		"out_trade_no": "USR1NOabc",
 		"notify_url":   "https://kittyvibe.ai/api/user/epay/notify",
-		"return_url":   "https://kittyvibe.ai/console/log",
+		"return_url":   "https://kittyvibe.ai/usage-logs/common",
 		"name":         "TUC10",
 		"money":        "7.30",
 		"device":       "pc",

@@ -103,7 +103,7 @@ func TestAlipayNotifyCallbacksNewAPIOnce(t *testing.T) {
 		Subject:     "TUC10",
 		Amount:      "7.30",
 		NotifyURL:   newAPIServer.URL,
-		ReturnURL:   "https://kittyvibe.ai/console/log",
+		ReturnURL:   "https://kittyvibe.ai/usage-logs/common",
 	})
 	require.NoError(t, err)
 
@@ -139,7 +139,7 @@ func TestAlipayNotifyRejectsAmountMismatch(t *testing.T) {
 		Subject:     "TUC10",
 		Amount:      "7.30",
 		NotifyURL:   "https://kittyvibe.ai/api/user/epay/notify",
-		ReturnURL:   "https://kittyvibe.ai/console/log",
+		ReturnURL:   "https://kittyvibe.ai/usage-logs/common",
 	})
 	require.NoError(t, err)
 

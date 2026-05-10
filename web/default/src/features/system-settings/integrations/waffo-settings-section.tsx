@@ -310,7 +310,7 @@ export function WaffoSettingsSection(props: Props) {
           <div className='grid gap-1.5'>
             <Label>{t('Payment return URL')}</Label>
             <Input
-              placeholder='https://example.com/console/topup'
+              placeholder='https://example.com/wallet'
               {...form.register('WaffoReturnUrl')}
             />
           </div>
