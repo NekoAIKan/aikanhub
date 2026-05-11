@@ -267,50 +267,6 @@ func (e *AuditError) Error() string {
 	return fmt.Sprintf("image audit %s (asset=%s)", e.Status, e.AssetId)
 }
 
-// pollAsset waits for the asset to leave Processing. Returns nil only when
-// Status == "Active". Wraps non-Active terminal states in *AuditError so
-// callers can present a stable error code to API clients.
-func (c *arkClient) pollAsset(ctx context.Context, id string) (*arkAssetResult, error) {
-	deadline := time.Now().Add(c.cfg.ARKPollTimeout)
-	last := ""
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-
-		res, err := c.getAsset(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		if res.Status != last {
-			common.SysLog(fmt.Sprintf("imageaudit: asset=%s status=%s", id, res.Status))
-			last = res.Status
-		}
-		switch res.Status {
-		case "Active":
-			return res, nil
-		case "Failed":
-			return nil, &AuditError{
-				AssetId: id,
-				Status:  res.Status,
-				Reason:  string(res.Error),
-			}
-		}
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("image audit timed out after %s (asset=%s, last status=%s)",
-				c.cfg.ARKPollTimeout, id, last)
-		}
-		// Sleep with cancel-awareness so a request cancellation aborts polling.
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(c.cfg.ARKPollInterval):
-		}
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Volcengine V4 signing (same algorithm as the Python e2e script).
 // ---------------------------------------------------------------------------

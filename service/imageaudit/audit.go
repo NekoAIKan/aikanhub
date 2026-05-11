@@ -19,12 +19,21 @@ import (
 // endpoint; EnsureAudited keeps the per-request `audit_image=true` path
 // working without forcing every caller to refactor.
 //
+// Design: no background goroutines. Submit persists the audit and
+// returns immediately. Terminal-state discovery happens on demand in
+// the GET path (and the Wait loop) via RefreshFromUpstream. Two
+// independent concerns kept independent:
+//
+//	Submit              → write a row, hand back its id (fast)
+//	GET / Wait          → read DB; if non-terminal, ask ARK once,
+//	                      persist if it settled, return the latest row
+//
 // Storage shape:
 //
 //	src (URL or data URI)
 //	    │
 //	    ▼  hashSource()
-//	(user_id, sha256) ──── DB lookup (active row?) ───── yes ──→ return cached
+//	(user_id, sha256) ──── DB lookup (terminal row?) ──── yes ──→ return cached
 //	    │ no
 //	    ▼
 //	materializeURL  → COS upload if base64
@@ -34,13 +43,10 @@ import (
 //	    │
 //	    ▼
 //	model.CreateImageAuditRecord(status=processing)
-//	    │
-//	    ▼
-//	spawnPoller (goroutine)  → GetAsset poll → DB row updated to active/failed
 //
-// Cache hits never spawn a poller. Failed cache hits are NOT auto-
-// retried — moderation rejections are usually deterministic and
-// retrying just spends ARK quota.
+// Cache hits never call ARK. Failed cache hits are NOT auto-retried —
+// moderation rejections are deterministic and retrying just spends
+// ARK quota for the same verdict.
 
 // hashSource is the dedup key. Trimmed first so trailing whitespace
 // from copy/paste still hits the cache.
@@ -57,15 +63,17 @@ func sourceKindOf(src string) model.ImageAuditSource {
 }
 
 // Submit creates a fresh audit record (or returns a cached terminal
-// one) and kicks off a background poller. The returned record's status
-// may be:
+// one). No background work is started; callers drive the lifecycle by
+// re-reading via GET (which refreshes upstream on demand) or by using
+// Wait() to block. The returned record's status may be:
 //
 //   - active     — cache hit on a previously-passed audit. Reusable.
 //   - failed     — cache hit on a previously-failed audit. Caller
 //                  should NOT auto-retry; moderation decisions are
 //                  deterministic per content, retrying just spends
 //                  ARK quota.
-//   - processing — fresh audit, poller running. Use Wait() to block.
+//   - processing — fresh audit; ARK is working on it. The first GET
+//                  (or Wait) will refresh from upstream.
 //
 // userID > 0 scopes the dedup cache to that user. userID=0 disables
 // caching — internal calls without a user context fall straight to
@@ -146,14 +154,11 @@ func Submit(ctx context.Context, src string, userID, tokenID int) (*model.ImageA
 	if err := model.CreateImageAuditRecord(rec); err != nil {
 		// Row creation failed but ARK already accepted the submission.
 		// Log loud — the asset is now orphaned in ARK from our DB's
-		// perspective. Caller gets an error and can resubmit; the
-		// startup sweeper won't find it because we never persisted it.
+		// perspective. Caller gets an error and can resubmit.
 		common.SysLog(fmt.Sprintf("imageaudit: persist record failed (assetID=%s orphaned): %v",
 			assetID, err))
 		return nil, fmt.Errorf("imageaudit: persist record: %w", err)
 	}
-
-	spawnPoller(rec.RecordID, assetID, cfg.ARKPollInterval, cfg.ARKPollTimeout)
 
 	return rec, nil
 }
@@ -195,9 +200,10 @@ func submitAssetPassthrough(src string, userID, tokenID int) (*model.ImageAuditR
 }
 
 // Wait blocks until the record reaches a terminal state, ctx expires,
-// or the audit poll timeout fires. Polls the DB (not an in-memory
-// channel) so it works across replicas where the poller goroutine
-// lives in a different process.
+// or the audit poll timeout fires. Each iteration calls
+// RefreshFromUpstream, which means every replica can drive any record
+// — no shared in-process state. Backs the `?wait=true` convenience for
+// scripts; production callers should poll GET themselves.
 func Wait(ctx context.Context, recordID string) (*model.ImageAuditRecord, error) {
 	cfg := Load()
 	interval := cfg.ARKPollInterval
@@ -210,6 +216,10 @@ func Wait(ctx context.Context, recordID string) (*model.ImageAuditRecord, error)
 		if err != nil {
 			return nil, err
 		}
+		if r.Status.IsTerminal() {
+			return r, nil
+		}
+		r, _ = RefreshFromUpstream(ctx, r)
 		if r.Status.IsTerminal() {
 			return r, nil
 		}

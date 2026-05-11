@@ -139,11 +139,17 @@ func CreateImageAudit(c *gin.Context) {
 
 // GetImageAudit handles GET /v1/image-audits/:id.
 //
-// Lazy refresh: if the record is processing and the in-process poller
-// stalled (no UpdatedAt bump in 3× the poll interval), do a one-shot
-// GetAsset to surface the latest state without waiting for a sweeper.
-// We don't kick off a fresh poller from here — the controller is on
-// the request hot path and the next call will re-check.
+// Two-step lookup, cheap-path first:
+//
+//  1. Read the DB row scoped to userID. Terminal rows are
+//     authoritative; return immediately.
+//  2. For a `processing` row, call ARK once to see if it settled. If
+//     it did, persist and return the new terminal state; if not,
+//     return the still-processing row so the client polls again.
+//
+// Upstream is the source of truth for state transitions; we never
+// keep a long-lived poller. Best-effort: an ARK hiccup here just
+// means the client gets back `processing` and tries again later.
 func GetImageAudit(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
 	if id == "" {
@@ -165,6 +171,7 @@ func GetImageAudit(c *gin.Context) {
 		imageAuditError(c, http.StatusInternalServerError, "db_error", err.Error(), nil)
 		return
 	}
+	rec, _ = imageaudit.RefreshFromUpstream(c.Request.Context(), rec)
 	c.JSON(http.StatusOK, rec)
 }
 

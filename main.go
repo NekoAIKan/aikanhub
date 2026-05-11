@@ -22,7 +22,6 @@ import (
 	"github.com/QuantumNous/new-api/relay"
 	"github.com/QuantumNous/new-api/router"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/service/imageaudit"
 	_ "github.com/QuantumNous/new-api/setting/performance_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
@@ -317,13 +316,6 @@ func InitResources() error {
 		common.SysError("failed to load custom OAuth providers: " + err.Error())
 		// Don't return error, custom OAuth is not critical
 	}
-
-	// Resume any image-audit pollers that were processing when the
-	// previous instance shut down. Orphans (past timeout) are marked
-	// failed so they don't dangle. Best-effort: failures here just
-	// mean a few rows linger as `processing` until next restart, not
-	// a data correctness issue.
-	imageaudit.BootstrapResumePollers()
 
 	return nil
 }
