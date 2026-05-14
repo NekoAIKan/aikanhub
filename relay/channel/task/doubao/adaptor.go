@@ -30,12 +30,13 @@ import (
 // ============================
 
 type ContentItem struct {
-	Type     string    `json:"type,omitempty"`
-	Text     string    `json:"text,omitempty"`
-	ImageURL *MediaURL `json:"image_url,omitempty"`
-	VideoURL *MediaURL `json:"video_url,omitempty"`
-	AudioURL *MediaURL `json:"audio_url,omitempty"`
-	Role     string    `json:"role,omitempty"`
+	Type      string         `json:"type,omitempty"`
+	Text      string         `json:"text,omitempty"`
+	ImageURL  *MediaURL      `json:"image_url,omitempty"`
+	VideoURL  *MediaURL      `json:"video_url,omitempty"`
+	AudioURL  *MediaURL      `json:"audio_url,omitempty"`
+	DraftTask map[string]any `json:"draft_task,omitempty"`
+	Role      string         `json:"role,omitempty"`
 }
 
 type MediaURL struct {
@@ -54,13 +55,14 @@ type requestPayload struct {
 	Tools                 []struct {
 		Type string `json:"type,omitempty"`
 	} `json:"tools,omitempty"`
-	Resolution  string         `json:"resolution,omitempty"`
-	Ratio       string         `json:"ratio,omitempty"`
-	Duration    *dto.IntValue  `json:"duration,omitempty"`
-	Frames      *dto.IntValue  `json:"frames,omitempty"`
-	Seed        *dto.IntValue  `json:"seed,omitempty"`
-	CameraFixed *dto.BoolValue `json:"camera_fixed,omitempty"`
-	Watermark   *dto.BoolValue `json:"watermark,omitempty"`
+	SafetyIdentifier string         `json:"safety_identifier,omitempty"`
+	Resolution       string         `json:"resolution,omitempty"`
+	Ratio            string         `json:"ratio,omitempty"`
+	Duration         *dto.IntValue  `json:"duration,omitempty"`
+	Frames           *dto.IntValue  `json:"frames,omitempty"`
+	Seed             *dto.IntValue  `json:"seed,omitempty"`
+	CameraFixed      *dto.BoolValue `json:"camera_fixed,omitempty"`
+	Watermark        *dto.BoolValue `json:"watermark,omitempty"`
 }
 
 type responsePayload struct {
@@ -122,14 +124,222 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 //
 //   - first_frame + last_frame  → firstTailGenerate (首尾生视频)
 //   - any video_url             → referenceGenerate (参照生视频, covers
-//                                  multi-modal / edit / extend)
+//     multi-modal / edit / extend)
 //   - any image_url             → generate (图生视频)
 //   - text only                 → textGenerate (文生视频)
 //
 // Falling back to plain "generate" mislabels every text-only and
 // multi-modal task as "图生视频" in the dashboard.
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
-	return relaycommon.ValidateBasicTaskRequest(c, info, inferAction(c))
+	if strings.HasPrefix(c.GetHeader("Content-Type"), "multipart/form-data") {
+		return relaycommon.ValidateBasicTaskRequest(c, info, inferAction(c))
+	}
+
+	var req relaycommon.TaskSubmitReq
+	if err := common.UnmarshalBodyReusable(c, &req); err != nil {
+		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+	}
+	var raw map[string]any
+	if err := common.UnmarshalBodyReusable(c, &raw); err != nil {
+		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+	}
+	normalizeSeedanceTaskRequest(&req, raw)
+	if len(req.Images) == 0 && strings.TrimSpace(req.Image) != "" {
+		req.Images = []string{req.Image}
+	}
+	if strings.TrimSpace(req.Prompt) == "" && !hasSeedanceMediaInput(req) {
+		return service.TaskErrorWrapperLocal(fmt.Errorf("prompt is required"), "invalid_request", http.StatusBadRequest)
+	}
+
+	relaycommon.StoreTaskRequest(c, info, inferAction(c), req)
+	return nil
+}
+
+var seedanceRootPassthroughFields = []string{
+	"content",
+	"callback_url",
+	"return_last_frame",
+	"service_tier",
+	"execution_expires_after",
+	"generate_audio",
+	"draft",
+	"tools",
+	"safety_identifier",
+	"resolution",
+	"ratio",
+	"duration",
+	"frames",
+	"seed",
+	"camera_fixed",
+	"watermark",
+}
+
+func normalizeSeedanceTaskRequest(req *relaycommon.TaskSubmitReq, raw map[string]any) {
+	if req.Metadata == nil {
+		req.Metadata = make(map[string]any)
+	}
+	for _, key := range seedanceRootPassthroughFields {
+		if value, ok := raw[key]; ok {
+			setMetadataDefault(req.Metadata, key, value)
+		}
+	}
+	if value, ok := raw["aspect_ratio"]; ok {
+		setMetadataDefault(req.Metadata, "ratio", value)
+	}
+	if size, ok := raw["size"].(string); ok {
+		normalizeSeedanceSize(req.Metadata, size)
+	}
+	if strings.TrimSpace(req.Prompt) == "" {
+		req.Prompt = firstTextFromMetadata(req.Metadata)
+	}
+}
+
+func setMetadataDefault(metadata map[string]any, key string, value any) {
+	if _, exists := metadata[key]; exists {
+		return
+	}
+	metadata[key] = value
+}
+
+func normalizeSeedanceSize(metadata map[string]any, size string) {
+	size = strings.TrimSpace(size)
+	if size == "" {
+		return
+	}
+	if looksLikeAspectRatio(size) {
+		setMetadataDefault(metadata, "ratio", size)
+		return
+	}
+	resolution, ratio, ok := seedanceResolutionRatioFromSize(size)
+	if !ok {
+		return
+	}
+	setMetadataDefault(metadata, "resolution", resolution)
+	setMetadataDefault(metadata, "ratio", ratio)
+}
+
+func seedanceResolutionRatioFromSize(size string) (string, string, bool) {
+	width, height, ok := parseResolutionPair(size)
+	if !ok {
+		return "", "", false
+	}
+	ratio := reducedAspectRatio(width, height)
+	if !isSeedanceRatio(ratio) {
+		return "", "", false
+	}
+	short := width
+	long := height
+	if width > height {
+		short = height
+		long = width
+	}
+	switch {
+	case long >= 1700 || short >= 1000:
+		return "1080p", ratio, true
+	case long >= 1000 || short >= 700:
+		return "720p", ratio, true
+	default:
+		return "480p", ratio, true
+	}
+}
+
+func reducedAspectRatio(width, height int) string {
+	divisor := gcd(width, height)
+	return fmt.Sprintf("%d:%d", width/divisor, height/divisor)
+}
+
+func gcd(a, b int) int {
+	for b != 0 {
+		a, b = b, a%b
+	}
+	if a < 0 {
+		return -a
+	}
+	return a
+}
+
+func isSeedanceRatio(ratio string) bool {
+	switch ratio {
+	case "16:9", "4:3", "1:1", "3:4", "9:16", "21:9":
+		return true
+	default:
+		return false
+	}
+}
+
+// looksLikeAspectRatio reports whether s is shaped like "X:Y" with positive
+// integer parts. Pixel pairs use "x" and are normalized separately.
+func looksLikeAspectRatio(s string) bool {
+	parts := strings.SplitN(strings.TrimSpace(s), ":", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	width, errWidth := strconv.Atoi(strings.TrimSpace(parts[0]))
+	height, errHeight := strconv.Atoi(strings.TrimSpace(parts[1]))
+	return errWidth == nil && errHeight == nil && width > 0 && height > 0
+}
+
+func firstTextFromMetadata(metadata map[string]any) string {
+	if metadata == nil {
+		return ""
+	}
+	if content, ok := metadata["content"].([]any); ok {
+		for _, item := range content {
+			itemMap, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if itemMap["type"] == "text" {
+				if text, ok := itemMap["text"].(string); ok && strings.TrimSpace(text) != "" {
+					return text
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func hasSeedanceMediaInput(req relaycommon.TaskSubmitReq) bool {
+	if req.HasImage() || strings.TrimSpace(req.Image) != "" {
+		return true
+	}
+	if contentHasMedia(req.Content) {
+		return true
+	}
+	if req.Metadata == nil {
+		return false
+	}
+	if content, ok := req.Metadata["content"].([]any); ok {
+		for _, item := range content {
+			itemMap, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if isMediaContentType(itemMap["type"]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func contentHasMedia(content []map[string]any) bool {
+	for _, item := range content {
+		if isMediaContentType(item["type"]) {
+			return true
+		}
+	}
+	return false
+}
+
+func isMediaContentType(value any) bool {
+	contentType, _ := value.(string)
+	switch contentType {
+	case "image_url", "video_url", "audio_url", "draft_task":
+		return true
+	default:
+		return false
+	}
 }
 
 func inferAction(c *gin.Context) string {
@@ -427,6 +637,15 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 	if err := taskcommon.UnmarshalMetadata(metadata, &r); err != nil {
 		return nil, errors.Wrap(err, "unmarshal metadata failed")
 	}
+	if len(r.Content) == 0 && len(req.Content) > 0 {
+		contentBytes, err := common.Marshal(req.Content)
+		if err != nil {
+			return nil, errors.Wrap(err, "marshal content failed")
+		}
+		if err := common.Unmarshal(contentBytes, &r.Content); err != nil {
+			return nil, errors.Wrap(err, "unmarshal content failed")
+		}
+	}
 
 	// Honour top-level passthrough fields when metadata didn't already set them.
 	// OpenAI Videos clients put `resolution` and numeric `duration` at the root
@@ -434,6 +653,18 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 	// receives nothing and silently substitutes its defaults (720p, 5s).
 	if r.Resolution == "" && req.Resolution != "" {
 		r.Resolution = req.Resolution
+	}
+	if size := strings.TrimSpace(req.Size); size != "" {
+		if r.Ratio == "" && looksLikeAspectRatio(size) {
+			r.Ratio = size
+		} else if resolution, ratio, ok := seedanceResolutionRatioFromSize(size); ok {
+			if r.Resolution == "" {
+				r.Resolution = resolution
+			}
+			if r.Ratio == "" {
+				r.Ratio = ratio
+			}
+		}
 	}
 	if r.Duration == nil {
 		if req.Duration > 0 {
@@ -443,13 +674,28 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 		}
 	}
 
+	prompt := req.Prompt
+	if strings.TrimSpace(prompt) == "" {
+		prompt = firstTextFromContentItems(r.Content)
+	}
 	r.Content = lo.Reject(r.Content, func(c ContentItem, _ int) bool { return c.Type == "text" })
-	r.Content = append(r.Content, ContentItem{
-		Type: "text",
-		Text: req.Prompt,
-	})
+	if strings.TrimSpace(prompt) != "" {
+		r.Content = append(r.Content, ContentItem{
+			Type: "text",
+			Text: prompt,
+		})
+	}
 
 	return &r, nil
+}
+
+func firstTextFromContentItems(content []ContentItem) string {
+	for _, item := range content {
+		if item.Type == "text" && strings.TrimSpace(item.Text) != "" {
+			return item.Text
+		}
+	}
+	return ""
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
