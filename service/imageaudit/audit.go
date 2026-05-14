@@ -86,11 +86,12 @@ func sourceKindOf(src string) model.ImageAuditSource {
 // synthesize a non-persisted record with status=active. Public callers
 // (POST /v1/image-audits) should reject asset:// at the controller —
 // the synthetic record's id is not GET-able.
-func Submit(ctx context.Context, src string, userID, tokenID int) (*model.ImageAuditRecord, error) {
+func Submit(ctx context.Context, src string, userID, tokenID int, region string) (*model.ImageAuditRecord, error) {
 	src = strings.TrimSpace(src)
 	if src == "" {
 		return nil, errors.New("imageaudit: empty source")
 	}
+	region = NormalizeRegion(region)
 
 	if strings.HasPrefix(src, "asset://") {
 		return submitAssetPassthrough(src, userID, tokenID)
@@ -98,19 +99,28 @@ func Submit(ctx context.Context, src string, userID, tokenID int) (*model.ImageA
 
 	sh := hashSource(src)
 
+	cfg := Load()
+	res, hasCreds := cfg.ResolveFor(region)
+
 	// Cache lookup over BOTH active and failed terminal rows. A failed
 	// hit returns the cached failure verbatim; the caller decides how
 	// to surface it. Skipping the cache for failed rows would mean
 	// every retry of a moderation-rejected image spends another ARK
 	// CreateAsset call for an identical (deterministic) outcome.
 	//
-	// IMPORTANT: cache check runs BEFORE the HasARK() guard so that
+	// IMPORTANT: cache check runs BEFORE the HasCreds() guard so that
 	// pre-audited rows remain queryable even if ARK credentials get
 	// unset (e.g. ops rotates keys). Otherwise a config gap would
 	// invalidate every cached audit, surprising callers with infra
 	// errors on hot-path lookups.
+	//
+	// Cache is scoped to (user_id, source_hash, project) so an image
+	// audited in the CN region (project=shemao) doesn't satisfy a global
+	// request (project=tianwenyue-6) and vice versa — the two regions
+	// keep independent asset stores, and a CN asset:// URI is invalid on
+	// BytePlus and vice versa.
 	if userID > 0 {
-		if cached, err := model.FindTerminalImageAuditByHash(userID, sh); err == nil {
+		if cached, err := model.FindTerminalImageAuditByHashAndProject(userID, sh, res.Project); err == nil {
 			return cached, nil
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			// Cache lookup is best-effort. Log and fall through to a
@@ -119,9 +129,8 @@ func Submit(ctx context.Context, src string, userID, tokenID int) (*model.ImageA
 		}
 	}
 
-	cfg := Load()
-	if !cfg.HasARK() {
-		return nil, errors.New("imageaudit: ARK_AK / ARK_SK not configured")
+	if !hasCreds {
+		return nil, fmt.Errorf("imageaudit: ARK credentials not configured for region=%s", region)
 	}
 
 	publicURL, err := materializeURL(ctx, cfg, src)
@@ -129,7 +138,7 @@ func Submit(ctx context.Context, src string, userID, tokenID int) (*model.ImageA
 		return nil, fmt.Errorf("imageaudit: prepare URL: %w", err)
 	}
 
-	client := newARKClient(cfg)
+	client := newARKClient(res)
 	groupID, err := client.ensureAssetGroup(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("imageaudit: ensureAssetGroup: %w", err)
@@ -145,7 +154,7 @@ func Submit(ctx context.Context, src string, userID, tokenID int) (*model.ImageA
 		SourceHash: sh,
 		SourceKind: sourceKindOf(src),
 		PublicURL:  publicURL,
-		Project:    cfg.ARKProject,
+		Project:    res.Project,
 		GroupID:    groupID,
 		AssetID:    assetID,
 		AssetURI:   "asset://" + assetID,
@@ -240,8 +249,12 @@ func Wait(ctx context.Context, recordID string) (*model.ImageAuditRecord, error)
 //
 // userID/tokenID are best-effort — pass 0 from callers that don't have
 // the context yet (they'll just miss the dedup cache).
-func EnsureAudited(ctx context.Context, src string, userID, tokenID int) (string, error) {
-	rec, err := Submit(ctx, src, userID, tokenID)
+//
+// region routes to the right ARK backend: pass RegionCN (or "") for
+// Volcano Ark, RegionGlobal for BytePlus overseas. Adaptors typically
+// derive this from info.ChannelType.
+func EnsureAudited(ctx context.Context, src string, userID, tokenID int, region string) (string, error) {
+	rec, err := Submit(ctx, src, userID, tokenID, region)
 	if err != nil {
 		return "", err
 	}

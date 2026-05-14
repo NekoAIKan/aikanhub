@@ -30,9 +30,9 @@ import (
 // Request bodies are JSON; responses are {ResponseMetadata:{}, Result:{}}.
 
 const (
-	arkHost           = "ark.cn-beijing.volcengineapi.com"
-	arkRegion         = "cn-beijing"
-	arkService        = "ark"
+	// arkVersion / arkContentType / arkSignedHeaders are protocol invariants —
+	// shared by both CN and overseas ARK Open APIs because BytePlus inherits
+	// Volcano's Open API v4 signature spec.
 	arkVersion        = "2024-01-01"
 	arkContentType    = "application/json"
 	arkSignedHeaders  = "content-type;host;x-content-sha256;x-date"
@@ -55,16 +55,18 @@ type arkResponse struct {
 	Result json.RawMessage `json:"Result"`
 }
 
-// arkClient wraps the AK/SK + ProjectName so call sites don't repeat them.
+// arkClient wraps a resolved region's creds + host + project so call sites
+// don't repeat them. One client targets exactly one region; mix-and-match
+// happens at the Submit/Refresh layer that picks a region per request.
 type arkClient struct {
-	cfg Config
-	hc  *http.Client
+	resolved Resolved
+	hc       *http.Client
 }
 
-func newARKClient(cfg Config) *arkClient {
+func newARKClient(resolved Resolved) *arkClient {
 	return &arkClient{
-		cfg: cfg,
-		hc:  &http.Client{Timeout: arkRequestTimeout},
+		resolved: resolved,
+		hc:       &http.Client{Timeout: arkRequestTimeout},
 	}
 }
 
@@ -72,16 +74,16 @@ func newARKClient(cfg Config) *arkClient {
 // `Result` field into out. Service-level errors (returned as a populated
 // ResponseMetadata.Error) come back as Go errors.
 func (c *arkClient) callAction(ctx context.Context, action string, body, out any) error {
-	if !c.cfg.HasARK() {
-		return fmt.Errorf("ARK credentials missing (ARK_AK / ARK_SK)")
+	if !c.resolved.HasCreds() {
+		return fmt.Errorf("ARK credentials missing for region=%s", c.resolved.Region)
 	}
 	// Inject ProjectName so callers don't have to remember.
 	bodyMap, err := toMap(body)
 	if err != nil {
 		return fmt.Errorf("ark.%s: marshal body: %w", action, err)
 	}
-	if _, ok := bodyMap["ProjectName"]; !ok && c.cfg.ARKProject != "" {
-		bodyMap["ProjectName"] = c.cfg.ARKProject
+	if _, ok := bodyMap["ProjectName"]; !ok && c.resolved.Project != "" {
+		bodyMap["ProjectName"] = c.resolved.Project
 	}
 	bodyBytes, err := json.Marshal(bodyMap)
 	if err != nil {
@@ -93,15 +95,15 @@ func (c *arkClient) callAction(ctx context.Context, action string, body, out any
 	q.Set("Action", action)
 	q.Set("Version", arkVersion)
 	headers := signV4(
-		"POST", arkHost, "/", q,
+		"POST", c.resolved.Host, "/", q,
 		bodySHA,
-		c.cfg.ARKAk, c.cfg.ARKSk,
-		arkService, arkRegion,
+		c.resolved.Ak, c.resolved.Sk,
+		c.resolved.Service, c.resolved.Region,
 		arkContentType,
 	)
 
 	req, err := http.NewRequestWithContext(ctx, "POST",
-		"https://"+arkHost+"/?"+q.Encode(), bytes.NewReader(bodyBytes))
+		"https://"+c.resolved.Host+"/?"+q.Encode(), bytes.NewReader(bodyBytes))
 	if err != nil {
 		return fmt.Errorf("ark.%s: new request: %w", action, err)
 	}
@@ -198,21 +200,21 @@ func (c *arkClient) findAssetGroupByName(ctx context.Context, name string) (stri
 // create by GROUP_NAME. The result is cached on the client for the process'
 // lifetime so we only do the lookup once.
 func (c *arkClient) ensureAssetGroup(ctx context.Context) (string, error) {
-	if c.cfg.ARKGroupID != "" {
-		return c.cfg.ARKGroupID, nil
+	if c.resolved.GroupID != "" {
+		return c.resolved.GroupID, nil
 	}
-	if c.cfg.ARKGroupName == "" {
-		return "", fmt.Errorf("either ARK_ASSETS_GROUP_ID or ARK_ASSETS_GROUP_NAME must be set")
+	if c.resolved.GroupName == "" {
+		return "", fmt.Errorf("either ARK_ASSETS_GROUP_ID(_GLOBAL) or ARK_ASSETS_GROUP_NAME(_GLOBAL) must be set")
 	}
-	if id, err := c.findAssetGroupByName(ctx, c.cfg.ARKGroupName); err != nil {
+	if id, err := c.findAssetGroupByName(ctx, c.resolved.GroupName); err != nil {
 		// Listing failed — surface the error rather than silently creating a duplicate.
 		return "", fmt.Errorf("findAssetGroupByName: %w", err)
 	} else if id != "" {
 		return id, nil
 	}
-	common.SysLog(fmt.Sprintf("imageaudit: creating new ARK asset group name=%s project=%s",
-		c.cfg.ARKGroupName, c.cfg.ARKProject))
-	return c.createAssetGroup(ctx, c.cfg.ARKGroupName)
+	common.SysLog(fmt.Sprintf("imageaudit: creating new ARK asset group region=%s name=%s project=%s",
+		c.resolved.Region, c.resolved.GroupName, c.resolved.Project))
+	return c.createAssetGroup(ctx, c.resolved.GroupName)
 }
 
 // ---------------------------------------------------------------------------

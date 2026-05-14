@@ -281,12 +281,21 @@ func shouldAuditImages(metadata map[string]any) bool {
 // composite index, so identical images across replicas share one audit.
 func (a *TaskAdaptor) auditImageContent(c *gin.Context, info *relaycommon.RelayInfo, body *requestPayload) error {
 	ctx := c.Request.Context()
+	// Route audit to the right region. BytePlus海外 channels use a separate
+	// BytePlus Asset library (project / AK / SK / host); China Doubao
+	// channels stay on Volcano Ark. Asset URIs from one region are
+	// invalid on the other, so cross-region cache hits must be avoided —
+	// handled inside imageaudit.Submit via project-scoped cache lookup.
+	region := imageaudit.RegionCN
+	if info.ChannelType == constant.ChannelTypeBytePlusVideo {
+		region = imageaudit.RegionGlobal
+	}
 	for i := range body.Content {
 		item := &body.Content[i]
 		if item.Type != "image_url" || item.ImageURL == nil || item.ImageURL.URL == "" {
 			continue
 		}
-		audited, err := imageaudit.EnsureAudited(ctx, item.ImageURL.URL, info.UserId, info.TokenId)
+		audited, err := imageaudit.EnsureAudited(ctx, item.ImageURL.URL, info.UserId, info.TokenId, region)
 		if err != nil {
 			perImg := &imageaudit.PerImageAuditError{
 				Index:  i,

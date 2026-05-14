@@ -720,15 +720,40 @@ function K({ children }: { children: React.ReactNode }) {
 // Capability matrix
 // ============================================================================
 
+// Capability matrix model list. Only Seedance 2.0 / 2.0 fast are documented;
+// the 1.x lineage is deprecated and not surfaced to users. The matrix
+// rendering injects per-region model IDs (国内 + 国外) under each column
+// header so we don't carry redundant `· global` columns with identical
+// capability values.
 const SEEDANCE_MODELS = [
   { id: 'doubao-seedance-2-0-260128', name: 'Seedance 2.0' },
   { id: 'doubao-seedance-2-0-fast-260128', name: 'Seedance 2.0 fast' },
-  { id: 'doubao-seedance-1-5-pro-251215', name: 'Seedance 1.5 pro' },
-  { id: 'doubao-seedance-1-0-pro-250528', name: 'Seedance 1.0 pro' },
-  { id: 'doubao-seedance-1-0-pro-fast-251015', name: 'Seedance 1.0 pro fast' },
-  { id: 'doubao-seedance-1-0-lite-i2v-250428', name: 'Seedance 1.0 lite i2v' },
-  { id: 'doubao-seedance-1-0-lite-t2v-250428', name: 'Seedance 1.0 lite t2v' },
 ] as const
+
+// MODEL_OVERSEAS maps each China-side model id to its BytePlus overseas
+// counterpart.
+const MODEL_OVERSEAS: Record<string, string | null> = {
+  'doubao-seedance-2-0-260128': 'seedance-2.0-global',
+  'doubao-seedance-2-0-fast-260128': 'seedance-2.0-fast-global',
+}
+
+// RegionKey selects which model id surfaces in the code examples + matrix
+// column headers. 'cn' is the China Doubao routing (default, all 7 model
+// families); 'global' is the BytePlus overseas routing (only 2.0 + 2.0 fast).
+type RegionKey = 'cn' | 'global'
+
+// applyRegion swaps China-side model ids in a code sample with their overseas
+// counterparts when region='global'. Models that have no overseas counterpart
+// (1.x family) stay as-is — the section just won't be reachable from a
+// BytePlus channel, but the snippet remains copy-pasteable for CN.
+function applyRegion(code: string, region: RegionKey): string {
+  if (region === 'cn') return code
+  let out = code
+  for (const [cn, overseas] of Object.entries(MODEL_OVERSEAS)) {
+    if (overseas) out = out.split(cn).join(overseas)
+  }
+  return out
+}
 
 type Cap = '✅' | '❌'
 const Y: Cap = '✅'
@@ -801,6 +826,13 @@ function useActiveSection(sectionIds: string[]): string | null {
 
 export function Docs() {
   const { t } = useTranslation()
+
+  // Region toggle for the Seedance section. Default to 'cn' (Doubao / Volcano
+  // Ark). Switching to 'global' rewrites model ids in every curl/python
+  // sample on this page to their BytePlus海外 counterparts via applyRegion().
+  // China + overseas asset stores are independent, so the audit / pricing
+  // call-outs also branch on this state.
+  const [region, setRegion] = useState<RegionKey>('cn')
 
   const NAV_GROUPS: Array<{
     label: string
@@ -944,12 +976,9 @@ export function Docs() {
 
   // ---- Capability matrix rows (built inside component so labels can use t()) ----
   const CAPABILITY_ROWS: Array<{ label: React.ReactNode; values: Cap[] }> = [
-    { label: t('Text to video'), values: [Y, Y, Y, Y, Y, N, Y] },
-    { label: t('Image to video · first frame'), values: [Y, Y, Y, Y, Y, Y, N] },
-    {
-      label: t('Image to video · first/last frame'),
-      values: [Y, Y, Y, Y, N, Y, N],
-    },
+    { label: t('Text to video'), values: [Y, Y] },
+    { label: t('Image to video · first frame'), values: [Y, Y] },
+    { label: t('Image to video · first/last frame'), values: [Y, Y] },
     {
       label: (
         <>
@@ -957,7 +986,7 @@ export function Docs() {
           <NewBadge />
         </>
       ),
-      values: [Y, Y, N, N, N, Y, N],
+      values: [Y, Y],
     },
     {
       label: (
@@ -966,7 +995,7 @@ export function Docs() {
           <NewBadge />
         </>
       ),
-      values: [Y, Y, N, N, N, N, N],
+      values: [Y, Y],
     },
     {
       label: (
@@ -975,7 +1004,7 @@ export function Docs() {
           <NewBadge />
         </>
       ),
-      values: [Y, Y, N, N, N, N, N],
+      values: [Y, Y],
     },
     {
       label: (
@@ -984,7 +1013,7 @@ export function Docs() {
           <NewBadge />
         </>
       ),
-      values: [Y, N, N, N, N, N, N],
+      values: [Y, N],
     },
     {
       label: (
@@ -993,9 +1022,9 @@ export function Docs() {
           <NewBadge />
         </>
       ),
-      values: [Y, N, N, N, N, N, N],
+      values: [Y, N],
     },
-    { label: t('Audio generation'), values: [Y, Y, N, N, N, N, N] },
+    { label: t('Audio generation'), values: [Y, Y] },
     {
       label: (
         <>
@@ -1003,47 +1032,31 @@ export function Docs() {
           <NewBadge />
         </>
       ),
-      values: [Y, N, N, N, N, N, N],
+      values: [Y, N],
     },
-    { label: t('Returns last frame'), values: [Y, Y, Y, Y, Y, Y, Y] },
+    { label: t('Returns last frame'), values: [Y, Y] },
   ]
 
   const SPEC_ROWS: Array<{ label: string; values: string[] }> = [
     {
       label: t('Output resolution'),
-      values: [
-        '480p / 720p',
-        '480p / 720p / 1080p',
-        '480p / 720p / 1080p',
-        '480p / 720p / 1080p',
-        '480p / 720p / 1080p',
-        '480p / 720p / 1080p',
-        '480p / 720p / 1080p',
-      ],
+      values: ['480p / 720p / 1080p', '480p / 720p'],
     },
     {
       label: t('Aspect ratio'),
-      values: Array(7).fill('21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16'),
+      values: Array(2).fill('21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16'),
     },
     {
       label: t('Output duration'),
-      values: [
-        t('4–15 s'),
-        t('4–12 s'),
-        t('2–12 s'),
-        t('2–12 s'),
-        t('2–12 s'),
-        t('2–12 s'),
-        t('2–12 s'),
-      ],
+      values: [t('4–15 s'), t('4–12 s')],
     },
     {
       label: t('RPM (online)'),
-      values: ['600', '600', '600', '600', '600', '300', '300'],
+      values: ['600', '600'],
     },
     {
       label: t('Concurrency (online)'),
-      values: ['10', '10', '10', '10', '10', '5', '5'],
+      values: ['10', '10'],
     },
   ]
 
@@ -1189,7 +1202,10 @@ export function Docs() {
                       <h3 className='font-medium'>
                         {t('3. Submit a text-to-video task')}
                       </h3>
-                      <CodeTabs shell={CURL_T2V} python={PY_T2V} />
+                      <CodeTabs
+                        shell={applyRegion(CURL_T2V, region)}
+                        python={applyRegion(PY_T2V, region)}
+                      />
                       <p className='text-muted-foreground text-xs'>
                         {t('A successful response includes a')} <K>task_id</K>.{' '}
                         {t('Use it to')}{' '}
@@ -1275,14 +1291,35 @@ export function Docs() {
                     'Seedance is a high-end video generation model series. KittyVibe supports every Seedance call mode: text-to-video, image-to-video (first / first+last frame), multi-modal reference, edit video, extend video — plus audio generation and web search augmentation.'
                   )}
                 >
+                  {/* Region toggle — controls the model id rendered in every */}
+                  {/* code sample, model picker callout, and audit endpoint   */}
+                  {/* note in the Seedance sections below.                    */}
+                  <div className='flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3'>
+                    <div className='text-sm font-medium'>{t('Region')}</div>
+                    <Tabs
+                      value={region}
+                      onValueChange={(v) => setRegion(v as RegionKey)}
+                    >
+                      <TabsList>
+                        <TabsTrigger value='cn'>{t('国内')}</TabsTrigger>
+                        <TabsTrigger value='global'>{t('国外')}</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                  </div>
                   <Callout type='tip'>
                     <strong>{t('Choosing a model:')}</strong> {t('use')}{' '}
-                    <K>doubao-seedance-2-0-260128</K>{' '}
+                    <K>
+                      {region === 'cn'
+                        ? 'doubao-seedance-2-0-260128'
+                        : 'seedance-2.0-global'}
+                    </K>{' '}
                     {t('for the highest quality;')}{' '}
-                    <K>doubao-seedance-2-0-fast-260128</K>{' '}
-                    {t(
-                      'when speed and cost matter most; the 1.x series for basic text/image-to-video only.'
-                    )}
+                    <K>
+                      {region === 'cn'
+                        ? 'doubao-seedance-2-0-fast-260128'
+                        : 'seedance-2.0-fast-global'}
+                    </K>{' '}
+                    {t('when speed and cost matter most.')}
                   </Callout>
                   <Callout type='info'>
                     <strong>
@@ -1321,17 +1358,28 @@ export function Docs() {
                           <th className='bg-muted sticky left-0 px-3 py-2 text-left font-medium'>
                             {t('Capability / spec')}
                           </th>
-                          {SEEDANCE_MODELS.map((m) => (
-                            <th
-                              key={m.id}
-                              className='px-3 py-2 text-left font-medium whitespace-nowrap'
-                            >
-                              <div className='font-semibold'>{m.name}</div>
-                              <div className='text-muted-foreground font-mono text-[10px]'>
-                                {m.id}
-                              </div>
-                            </th>
-                          ))}
+                          {SEEDANCE_MODELS.map((m) => {
+                            const overseas = MODEL_OVERSEAS[m.id]
+                            return (
+                              <th
+                                key={m.id}
+                                className='px-3 py-2 text-left font-medium whitespace-nowrap'
+                              >
+                                <div className='font-semibold'>{m.name}</div>
+                                <div className='text-muted-foreground font-mono text-[10px]'>
+                                  {m.id}
+                                </div>
+                                {overseas && (
+                                  <div className='text-muted-foreground font-mono text-[10px]'>
+                                    {overseas}{' '}
+                                    <span className='text-[9px] font-sans uppercase tracking-wide'>
+                                      ({t('海外')})
+                                    </span>
+                                  </div>
+                                )}
+                              </th>
+                            )
+                          })}
                         </tr>
                       </thead>
                       <tbody className='divide-y'>
@@ -1378,7 +1426,10 @@ export function Docs() {
                     'POST /v1/video/generations · text prompt only. Supported by every Seedance model.'
                   )}
                 >
-                  <CodeTabs shell={CURL_T2V} python={PY_T2V} />
+                  <CodeTabs
+                        shell={applyRegion(CURL_T2V, region)}
+                        python={applyRegion(PY_T2V, region)}
+                      />
                   <p className='text-muted-foreground text-sm'>
                     {t('Top-level fields:')} <K>prompt</K> {t('is required;')}{' '}
                     <K>size</K> {t('controls resolution (')}
@@ -1399,7 +1450,10 @@ export function Docs() {
                     'Pass one reference image as the first frame, with an optional text prompt.'
                   )}
                 >
-                  <CodeTabs shell={CURL_I2V_FIRST} python={PY_I2V_FIRST} />
+                  <CodeTabs
+                    shell={applyRegion(CURL_I2V_FIRST, region)}
+                    python={applyRegion(PY_I2V_FIRST, region)}
+                  />
                   <Callout type='info'>
                     {t('Top-level')} <K>images</K>{' '}
                     {t(
@@ -1423,8 +1477,8 @@ export function Docs() {
                   )}
                 >
                   <CodeTabs
-                    shell={CURL_I2V_FIRSTLAST}
-                    python={PY_I2V_FIRSTLAST}
+                    shell={applyRegion(CURL_I2V_FIRSTLAST, region)}
+                    python={applyRegion(PY_I2V_FIRSTLAST, region)}
                   />
                   <p className='text-muted-foreground text-sm'>
                     {t('Both images must declare a')} <K>role</K>{' '}
@@ -1453,7 +1507,10 @@ export function Docs() {
                     </>
                   }
                 >
-                  <CodeTabs shell={CURL_MULTIMODAL} python={PY_MULTIMODAL} />
+                  <CodeTabs
+                    shell={applyRegion(CURL_MULTIMODAL, region)}
+                    python={applyRegion(PY_MULTIMODAL, region)}
+                  />
                   <p className='text-muted-foreground text-sm'>
                     {t('Reference images use')} <K>role: reference_image</K>,{' '}
                     {t('videos use')} <K>role: reference_video</K>,{' '}
@@ -1492,7 +1549,10 @@ export function Docs() {
                     </>
                   }
                 >
-                  <CodeTabs shell={CURL_EDIT} python={PY_EDIT} />
+                  <CodeTabs
+                    shell={applyRegion(CURL_EDIT, region)}
+                    python={applyRegion(PY_EDIT, region)}
+                  />
                   <p className='text-muted-foreground text-sm'>
                     {t(
                       'Combine a reference video with reference image(s) and a prompt that describes the edit, e.g. "Replace the perfume in video1 with the cream from image1; keep camera motion intact".'
@@ -1519,7 +1579,10 @@ export function Docs() {
                     </>
                   }
                 >
-                  <CodeTabs shell={CURL_EXTEND} python={PY_EXTEND} />
+                  <CodeTabs
+                    shell={applyRegion(CURL_EXTEND, region)}
+                    python={applyRegion(PY_EXTEND, region)}
+                  />
                   <p className='text-muted-foreground text-sm'>
                     {t(
                       'Up to three reference videos, total duration ≤ 15 s. The prompt describes the transitions or camera moves between segments.'
@@ -1539,7 +1602,10 @@ export function Docs() {
                     </>
                   }
                 >
-                  <CodeTabs shell={CURL_WEB_SEARCH} python={PY_WEB_SEARCH} />
+                  <CodeTabs
+                    shell={applyRegion(CURL_WEB_SEARCH, region)}
+                    python={applyRegion(PY_WEB_SEARCH, region)}
+                  />
                   <p className='text-muted-foreground text-sm'>
                     {t('Configure via')}{' '}
                     <K>{`metadata.tools: [{"type":"web_search"}]`}</K>.{' '}
@@ -2646,6 +2712,16 @@ export function Docs() {
                       'Repeated submissions of the same source string (URL or base64) hit the cached audit result, including failed audits — moderation decisions are deterministic, so we never re-spend ARK quota on a known rejection.'
                     )}
                   </Callout>
+                  <Callout type='warn'>
+                    <strong>{t('国内 / 海外 audit stores are independent.')}</strong>{' '}
+                    {t(
+                      'An asset audited in the CN region cannot be referenced from a video task on the BytePlus overseas region (and vice versa). For audit_image=true the gateway routes to the correct ARK store automatically based on the channel of the model you call. For explicit POST /v1/image-audits, set'
+                    )}{' '}
+                    <K>"region": "global"</K>{' '}
+                    {t(
+                      'in the request body when you want to pre-audit for the BytePlus overseas channel. Defaults to "cn" when omitted.'
+                    )}
+                  </Callout>
                 </Section>
 
                 <Section
@@ -2662,12 +2738,22 @@ export function Docs() {
                   />
                   <CodeBlock
                     lang='bash'
-                    code={`curl -X POST ${ENDPOINT_BASE}/v1/image-audits \\
+                    code={
+                      region === 'global'
+                        ? `curl -X POST ${ENDPOINT_BASE}/v1/image-audits \\
+  -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "image": "https://example.com/avatar.jpg",
+    "region": "global"
+  }'`
+                        : `curl -X POST ${ENDPOINT_BASE}/v1/image-audits \\
   -H "Authorization: Bearer $AIKANHUB_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "image": "https://example.com/avatar.jpg"
-  }'`}
+  }'`
+                    }
                   />
                   <Callout type='tip'>
                     {t(

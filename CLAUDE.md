@@ -356,3 +356,45 @@ result, err := upstream.Call(...)
 ```
 
 Test by setting upstream creds to empty AFTER seeding a cached row, then calling the function — it must return the cached row, not the config error. See `service/imageaudit/audit.go::Submit` for the canonical implementation.
+
+### Rule 24: Adding a model is three layers, not one — channel + billing profile + `models` metadata
+
+A "model" in this codebase is identified in three independent stores. Configuring one or two of them leaves the model half-broken in ways that don't surface as errors:
+
+1. **Channel `models` field** (per-channel whitelist on `channels` table) — gates which channel a request routes to. Without this, the request 404s at routing.
+2. **`video_billing_setting.profiles`** (option) — drives quota/credits deduction. Without this, a request either rejects (no profile = no price) or bills at an unintended fallback.
+3. **`models` metadata table** (model_meta) — drives the `/pricing` page (vendor logo, i18n description, tags, sidebar filters, badges). Without a row here the model still routes and bills fine, but on `/pricing` it shows a one-letter fallback avatar and no description — easy to miss until a user asks "why does this model look broken?"
+
+A new model id therefore needs **all three** writes, plus `vendor_id` on the metadata row pointing to a matching `vendors` record. If you're cloning an existing model id (e.g. `-global` overseas variant), copy both the channel mapping AND the `models` row template; don't assume `/pricing` infers anything from billing profiles.
+
+Related: the `vendors.icon` field must be a real Lobe Icon name (e.g. `PixVerse.Color`, `Doubao.Color`, capital-letter-exact). A typo there silently falls back to a letter avatar — same visual symptom as a missing model row.
+
+### Rule 25: ARK Assets credentials are per-region — never share CN and overseas state
+
+The image audit pipeline (`service/imageaudit/`) routes to one of two independent ARK control planes based on the channel type of the request:
+
+- **CN / Volcano Ark** (`ark.cn-beijing.volcengineapi.com`, region `cn-beijing`) — env vars `ARK_AK` / `ARK_SK` / `ARK_ASSETS_PROJECT` / `ARK_ASSETS_GROUP_NAME` / `ARK_ASSETS_GROUP_ID`. Used by `doubao-seedance-*` channels (`ChannelTypeDoubaoVideo`, `ChannelTypeVolcEngine`).
+- **Overseas / BytePlus ModelArk** (`ark.ap-southeast-1.byteplusapi.com` by default, region `ap-southeast-1`) — env vars `ARK_AK_GLOBAL` / `ARK_SK_GLOBAL` / `ARK_ASSETS_PROJECT_GLOBAL` / `ARK_ASSETS_GROUP_NAME_GLOBAL` / `ARK_ASSETS_GROUP_ID_GLOBAL`, host overridable via `ARK_HOST_GLOBAL`. Used by `seedance-*-global` channels (`ChannelTypeBytePlusVideo`). The TOB OpenAPI control plane lives on `byteplusapi.com` (not `bytepluses.com` — that apex only serves Bearer-auth inference traffic at `ark.ap-southeast.bytepluses.com/api/v3`).
+
+Asset stores are mutually invisible — an `asset://...` URI minted by CN ARK is unusable in a BytePlus video task and vice versa. The cache lookup (`FindTerminalImageAuditByHashAndProject`) is scoped by `project`, which is the natural region discriminator (CN: e.g. `shemao`, overseas: e.g. `tianwenyue-6`). A cross-region cache hit would silently hand the wrong asset URI to the upstream call and fail at submission.
+
+When adding a new audit caller:
+- Thread `region string` through `Submit` / `EnsureAudited` so the dispatch can pick the right `Resolved` (`Config.ResolveFor`).
+- The adaptor maps `info.ChannelType` → region (`ChannelTypeBytePlusVideo` → `RegionGlobal`, default → `RegionCN`). Don't hardcode `RegionCN` — that would silently route overseas requests to CN ARK and burn quota on a useless audit.
+
+For the public `POST /v1/image-audits` controller, accept an optional `region` field in the request body (defaults to CN when omitted) so explicit pre-audit callers can pin which store the asset lives in.
+
+### Rule 26: New env vars must be wired through `docker-compose.local.yml` (or compose will silently drop them)
+
+Compose only forwards env vars that are **explicitly listed** under `services.app.environment:`. Adding a variable to `.env.local` alone is not enough — the container starts with the var unset, and the Go code falls back to its default. Symptom: code compiles, container is healthy, audit/feature silently uses the wrong region or creds because `os.Getenv("ARK_AK_GLOBAL")` returns empty.
+
+Verification step after introducing any new env var:
+
+```bash
+docker compose -f docker-compose.local.yml --env-file .env.local up -d --force-recreate app
+docker exec kittyvibe-app env | grep <NEW_VAR_NAME>
+```
+
+If the grep is empty, the compose `environment:` list is missing an entry. Add `- NEW_VAR_NAME=${NEW_VAR_NAME:-<sensible-default-or-empty>}` next to the related variables (e.g. all `ARK_*_GLOBAL` live together).
+
+Don't rely on `env_file:` as a shortcut — the project intentionally uses explicit `environment:` blocks so that ops can audit what the container can see without grepping `.env.local`.
