@@ -122,7 +122,7 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 //
 //   - first_frame + last_frame  → firstTailGenerate (首尾生视频)
 //   - any video_url             → referenceGenerate (参照生视频, covers
-//                                  multi-modal / edit / extend)
+//     multi-modal / edit / extend)
 //   - any image_url             → generate (图生视频)
 //   - text only                 → textGenerate (文生视频)
 //
@@ -410,16 +410,21 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 	}
 
 	// Honour top-level passthrough fields when metadata didn't already set them.
-	// OpenAI Videos clients put `resolution`, `ratio` and numeric `duration` at
-	// the root of the request body; without this fallback the upstream Volcano
-	// Ark API receives nothing and silently substitutes its defaults (720p, 5s,
-	// ratio=auto). Some clients also overload `size` with either a "WxH" pixel
-	// pair (resolution) or an "X:Y" aspect ratio — accept both forms.
+	// OpenAI Videos clients put `resolution`, `ratio`/`aspect_ratio` and numeric
+	// `duration` at the root of the request body; without this fallback the
+	// upstream Volcano Ark API receives nothing and silently substitutes its
+	// defaults (720p, 5s, ratio=auto). Some clients also overload `size` with
+	// either a "WxH" pixel pair (resolution) or an "X:Y" aspect ratio — accept
+	// both forms.
 	if r.Resolution == "" && req.Resolution != "" {
 		r.Resolution = req.Resolution
 	}
-	if r.Ratio == "" && req.Ratio != "" {
-		r.Ratio = req.Ratio
+	if r.Ratio == "" {
+		if req.Ratio != "" {
+			r.Ratio = req.Ratio
+		} else if req.AspectRatio != "" {
+			r.Ratio = req.AspectRatio
+		}
 	}
 	if size := strings.TrimSpace(req.Size); size != "" {
 		if looksLikeAspectRatio(size) {

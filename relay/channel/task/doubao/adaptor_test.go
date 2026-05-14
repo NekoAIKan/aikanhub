@@ -3,6 +3,7 @@ package doubao
 import (
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/stretchr/testify/require"
 )
@@ -93,6 +94,30 @@ func TestConvertToRequestPayloadHonoursTopLevelRatio(t *testing.T) {
 			Prompt:   "p",
 			Ratio:    "9:16",
 			Metadata: map[string]any{"ratio": "16:9"},
+		}
+		body, err := a.convertToRequestPayload(req)
+		require.NoError(t, err)
+		require.Equal(t, "16:9", body.Ratio)
+	})
+
+	t.Run("top-level aspect_ratio alias flows through", func(t *testing.T) {
+		var req relaycommon.TaskSubmitReq
+		require.NoError(t, common.Unmarshal([]byte(`{
+			"model": "doubao-seedance-2-0-260128",
+			"prompt": "p",
+			"aspect_ratio": "9:16"
+		}`), &req))
+		body, err := a.convertToRequestPayload(&req)
+		require.NoError(t, err)
+		require.Equal(t, "9:16", body.Ratio)
+	})
+
+	t.Run("ratio wins over aspect_ratio alias", func(t *testing.T) {
+		req := &relaycommon.TaskSubmitReq{
+			Model:       "doubao-seedance-2-0-260128",
+			Prompt:      "p",
+			Ratio:       "16:9",
+			AspectRatio: "9:16",
 		}
 		body, err := a.convertToRequestPayload(req)
 		require.NoError(t, err)

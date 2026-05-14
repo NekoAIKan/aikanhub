@@ -674,22 +674,24 @@ type TaskRelayInfo struct {
 }
 
 type TaskSubmitReq struct {
-	Prompt         string                   `json:"prompt"`
-	Model          string                   `json:"model,omitempty"`
-	Mode           string                   `json:"mode,omitempty"`
-	Image          string                   `json:"image,omitempty"`
-	Images         []string                 `json:"images,omitempty"`
-	Content        []map[string]interface{} `json:"content,omitempty"`
-	Size           string                   `json:"size,omitempty"`
-	Resolution     string                   `json:"resolution,omitempty"`
-	// Ratio is the aspect ratio (e.g. "16:9", "9:16", "1:1"). Doubao/BytePlus
-	// video accepts this as a top-level field; without it the upstream
-	// silently substitutes "auto" and ignores the user's choice.
-	Ratio          string                   `json:"ratio,omitempty"`
-	Duration       int                      `json:"duration,omitempty"`
-	Seconds        string                   `json:"seconds,omitempty"`
-	InputReference string                   `json:"input_reference,omitempty"`
-	Metadata       map[string]interface{}   `json:"metadata,omitempty"`
+	Prompt     string                   `json:"prompt"`
+	Model      string                   `json:"model,omitempty"`
+	Mode       string                   `json:"mode,omitempty"`
+	Image      string                   `json:"image,omitempty"`
+	Images     []string                 `json:"images,omitempty"`
+	Content    []map[string]interface{} `json:"content,omitempty"`
+	Size       string                   `json:"size,omitempty"`
+	Resolution string                   `json:"resolution,omitempty"`
+	// Ratio is the aspect ratio (e.g. "16:9", "9:16", "1:1"). AspectRatio is
+	// accepted as a compatibility alias for clients that use `aspect_ratio`.
+	// Doubao/BytePlus video accepts this as a top-level field; without it the
+	// upstream silently substitutes "auto" and ignores the user's choice.
+	Ratio          string                 `json:"ratio,omitempty"`
+	AspectRatio    string                 `json:"aspect_ratio,omitempty"`
+	Duration       int                    `json:"duration,omitempty"`
+	Seconds        string                 `json:"seconds,omitempty"`
+	InputReference string                 `json:"input_reference,omitempty"`
+	Metadata       map[string]interface{} `json:"metadata,omitempty"`
 }
 
 func (t *TaskSubmitReq) GetPrompt() string {
