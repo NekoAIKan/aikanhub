@@ -172,3 +172,43 @@ func TestConvertToRequestPayloadHonoursTopLevelRatio(t *testing.T) {
 		require.Equal(t, "16:9", body.Ratio)
 	})
 }
+
+func TestConvertToRequestPayloadKeepsSizeHandlingLimitedToCurrentBug(t *testing.T) {
+	tests := []struct {
+		name           string
+		body           string
+		wantResolution string
+		wantRatio      string
+	}{
+		{
+			name:           "pixel size remains resolution fallback",
+			body:           `{"model":"doubao-seedance-2-0-260128","prompt":"p","size":"1280x720"}`,
+			wantResolution: "1280x720",
+			wantRatio:      "",
+		},
+		{
+			name:           "aspect ratio size alias",
+			body:           `{"model":"doubao-seedance-2-0-260128","prompt":"p","size":"9:16"}`,
+			wantResolution: "",
+			wantRatio:      "9:16",
+		},
+		{
+			name:           "aspect_ratio alias",
+			body:           `{"model":"doubao-seedance-2-0-260128","prompt":"p","aspect_ratio":"3:4"}`,
+			wantResolution: "",
+			wantRatio:      "3:4",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var req relaycommon.TaskSubmitReq
+			require.NoError(t, common.Unmarshal([]byte(tt.body), &req))
+
+			body, err := (&TaskAdaptor{}).convertToRequestPayload(&req)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantResolution, body.Resolution)
+			require.Equal(t, tt.wantRatio, body.Ratio)
+		})
+	}
+}
