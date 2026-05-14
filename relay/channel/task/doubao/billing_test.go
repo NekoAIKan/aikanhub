@@ -175,8 +175,15 @@ func TestExtractRequestBillingInputAlignsResolutionRatioAndSize(t *testing.T) {
 			req: relaycommon.TaskSubmitReq{
 				Duration: 5,
 				Size:     "9:16",
+			},
+			want: service.VideoBillingInput{OutputSeconds: 5, Width: 720, Height: 1280, FPS: 24, GroupRatio: 1},
+		},
+		{
+			name: "metadata aspect ratio size is captured",
+			req: relaycommon.TaskSubmitReq{
+				Duration: 5,
 				Metadata: map[string]any{
-					"ratio": "9:16",
+					"size": "9:16",
 				},
 			},
 			want: service.VideoBillingInput{OutputSeconds: 5, Width: 720, Height: 1280, FPS: 24, GroupRatio: 1},
@@ -189,6 +196,25 @@ func TestExtractRequestBillingInputAlignsResolutionRatioAndSize(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestExtractRequestBillingInputUsesConfiguredFallbackForSizeRatio(t *testing.T) {
+	profile := testProfile()
+	profile.FallbackWidth = 640
+	profile.FallbackHeight = 360
+
+	got := ExtractRequestBillingInput(relaycommon.TaskSubmitReq{
+		Duration: 5,
+		Size:     "9:16",
+	}, profile, 1)
+
+	require.Equal(t, service.VideoBillingInput{
+		OutputSeconds: 5,
+		Width:         360,
+		Height:        640,
+		FPS:           24,
+		GroupRatio:    1,
+	}, got)
 }
 
 func TestExtractRequestBillingInputMarksReferenceMedia(t *testing.T) {
