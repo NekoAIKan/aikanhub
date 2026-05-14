@@ -30,6 +30,9 @@ web/default/.cache
 web/classic/.cache
 web/dist
 
+# Local test harness (not built into image). The .venv alone is ~450 MB.
+web/default/tests
+
 # Runtime / dev
 data
 logs
