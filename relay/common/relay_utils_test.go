@@ -88,3 +88,8 @@ func TestImagesFromMetadataContent(t *testing.T) {
 		})
 	}
 }
+
+func TestKnownTaskFieldsIncludesAspectRatioAlias(t *testing.T) {
+	require.True(t, isKnownTaskField("ratio"))
+	require.True(t, isKnownTaskField("aspect_ratio"))
+}
