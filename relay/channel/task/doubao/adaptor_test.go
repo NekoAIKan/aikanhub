@@ -66,5 +66,84 @@ func TestConvertToRequestPayloadHonoursTopLevelDurationAndResolution(t *testing.
 		require.NoError(t, err)
 		require.Nil(t, body.Duration)
 		require.Equal(t, "", body.Resolution)
+		require.Equal(t, "", body.Ratio)
+	})
+}
+
+// Top-level `ratio` must reach upstream Volcano Ark; otherwise the API
+// silently picks "auto" and the caller's aspect ratio is discarded. See
+// https://github.com/NekoAIKan/aikanhub/issues/60.
+func TestConvertToRequestPayloadHonoursTopLevelRatio(t *testing.T) {
+	a := &TaskAdaptor{}
+
+	t.Run("top-level ratio flows through", func(t *testing.T) {
+		req := &relaycommon.TaskSubmitReq{
+			Model:  "doubao-seedance-2-0-260128",
+			Prompt: "p",
+			Ratio:  "9:16",
+		}
+		body, err := a.convertToRequestPayload(req)
+		require.NoError(t, err)
+		require.Equal(t, "9:16", body.Ratio)
+	})
+
+	t.Run("metadata ratio overrides top-level", func(t *testing.T) {
+		req := &relaycommon.TaskSubmitReq{
+			Model:    "doubao-seedance-2-0-260128",
+			Prompt:   "p",
+			Ratio:    "9:16",
+			Metadata: map[string]any{"ratio": "16:9"},
+		}
+		body, err := a.convertToRequestPayload(req)
+		require.NoError(t, err)
+		require.Equal(t, "16:9", body.Ratio)
+	})
+
+	t.Run("size carries pixel pair into resolution", func(t *testing.T) {
+		req := &relaycommon.TaskSubmitReq{
+			Model:  "doubao-seedance-2-0-260128",
+			Prompt: "p",
+			Size:   "1280x720",
+		}
+		body, err := a.convertToRequestPayload(req)
+		require.NoError(t, err)
+		require.Equal(t, "1280x720", body.Resolution)
+		require.Equal(t, "", body.Ratio)
+	})
+
+	t.Run("size carries aspect ratio into ratio", func(t *testing.T) {
+		req := &relaycommon.TaskSubmitReq{
+			Model:  "doubao-seedance-2-0-260128",
+			Prompt: "p",
+			Size:   "9:16",
+		}
+		body, err := a.convertToRequestPayload(req)
+		require.NoError(t, err)
+		require.Equal(t, "9:16", body.Ratio)
+		require.Equal(t, "", body.Resolution)
+	})
+
+	t.Run("explicit resolution wins over size", func(t *testing.T) {
+		req := &relaycommon.TaskSubmitReq{
+			Model:      "doubao-seedance-2-0-260128",
+			Prompt:     "p",
+			Resolution: "480p",
+			Size:       "1920x1080",
+		}
+		body, err := a.convertToRequestPayload(req)
+		require.NoError(t, err)
+		require.Equal(t, "480p", body.Resolution)
+	})
+
+	t.Run("explicit ratio wins over size ratio", func(t *testing.T) {
+		req := &relaycommon.TaskSubmitReq{
+			Model:  "doubao-seedance-2-0-260128",
+			Prompt: "p",
+			Ratio:  "16:9",
+			Size:   "9:16",
+		}
+		body, err := a.convertToRequestPayload(req)
+		require.NoError(t, err)
+		require.Equal(t, "16:9", body.Ratio)
 	})
 }
