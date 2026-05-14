@@ -174,6 +174,8 @@ func resolveRequestVideoDimensions(profile videobilling.VideoBillingProfile, req
 		stringFromMap(req.Metadata, "aspect_ratio"),
 		req.Ratio,
 		req.AspectRatio,
+		aspectRatioFromSize(req.Size),
+		aspectRatioFromSize(stringFromMap(req.Metadata, "size")),
 	)
 	if resolution != "" || ratio != "" {
 		return resolveVideoDimensionsWithRatio(profile, firstString(resolution, req.Size, stringFromMap(req.Metadata, "size")), ratio)
@@ -184,6 +186,14 @@ func resolveRequestVideoDimensions(profile videobilling.VideoBillingProfile, req
 		}
 	}
 	return resolveVideoDimensionsWithRatio(profile, firstString(req.Size, stringFromMap(req.Metadata, "size")), ratio)
+}
+
+func aspectRatioFromSize(size string) string {
+	size = strings.TrimSpace(size)
+	if looksLikeAspectRatio(size) {
+		return size
+	}
+	return ""
 }
 
 func resolveVideoDimensionsWithRatio(profile videobilling.VideoBillingProfile, raw string, ratio string) (int, int) {
