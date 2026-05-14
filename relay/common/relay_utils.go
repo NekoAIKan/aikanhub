@@ -145,6 +145,7 @@ func validateMultipartTaskRequest(c *gin.Context, info *RelayInfo, action string
 		Image:      formData.Get("image"),
 		Size:       formData.Get("size"),
 		Resolution: formData.Get("resolution"),
+		Ratio:      formData.Get("ratio"),
 		Metadata:   make(map[string]interface{}),
 	}
 
@@ -253,6 +254,7 @@ func isKnownTaskField(field string) bool {
 		"images":          true,
 		"size":            true,
 		"resolution":      true,
+		"ratio":           true,
 		"duration":        true,
 		"input_reference": true, // Sora 特有字段
 	}

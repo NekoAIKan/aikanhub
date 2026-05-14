@@ -373,6 +373,19 @@ func (a *TaskAdaptor) GetChannelName() string {
 	return ChannelName
 }
 
+// looksLikeAspectRatio reports whether s is shaped like "X:Y" with positive
+// integer parts (e.g. "16:9", "9:16", "1:1"). Volc Ark's `ratio` accepts this
+// form; "WxH" pixel sizes go to `resolution` instead.
+func looksLikeAspectRatio(s string) bool {
+	parts := strings.SplitN(s, ":", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	a, errA := strconv.Atoi(strings.TrimSpace(parts[0]))
+	b, errB := strconv.Atoi(strings.TrimSpace(parts[1]))
+	return errA == nil && errB == nil && a > 0 && b > 0
+}
+
 func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*requestPayload, error) {
 	r := requestPayload{
 		Model:   req.Model,
@@ -397,11 +410,25 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 	}
 
 	// Honour top-level passthrough fields when metadata didn't already set them.
-	// OpenAI Videos clients put `resolution` and numeric `duration` at the root
-	// of the request body; without this fallback the upstream Volcano Ark API
-	// receives nothing and silently substitutes its defaults (720p, 5s).
+	// OpenAI Videos clients put `resolution`, `ratio` and numeric `duration` at
+	// the root of the request body; without this fallback the upstream Volcano
+	// Ark API receives nothing and silently substitutes its defaults (720p, 5s,
+	// ratio=auto). Some clients also overload `size` with either a "WxH" pixel
+	// pair (resolution) or an "X:Y" aspect ratio — accept both forms.
 	if r.Resolution == "" && req.Resolution != "" {
 		r.Resolution = req.Resolution
+	}
+	if r.Ratio == "" && req.Ratio != "" {
+		r.Ratio = req.Ratio
+	}
+	if size := strings.TrimSpace(req.Size); size != "" {
+		if looksLikeAspectRatio(size) {
+			if r.Ratio == "" {
+				r.Ratio = size
+			}
+		} else if r.Resolution == "" {
+			r.Resolution = size
+		}
 	}
 	if r.Duration == nil {
 		if req.Duration > 0 {

@@ -682,6 +682,10 @@ type TaskSubmitReq struct {
 	Content        []map[string]interface{} `json:"content,omitempty"`
 	Size           string                   `json:"size,omitempty"`
 	Resolution     string                   `json:"resolution,omitempty"`
+	// Ratio is the aspect ratio (e.g. "16:9", "9:16", "1:1"). Doubao/BytePlus
+	// video accepts this as a top-level field; without it the upstream
+	// silently substitutes "auto" and ignores the user's choice.
+	Ratio          string                   `json:"ratio,omitempty"`
 	Duration       int                      `json:"duration,omitempty"`
 	Seconds        string                   `json:"seconds,omitempty"`
 	InputReference string                   `json:"input_reference,omitempty"`
