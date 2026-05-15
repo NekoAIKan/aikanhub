@@ -398,3 +398,23 @@ docker exec kittyvibe-app env | grep <NEW_VAR_NAME>
 If the grep is empty, the compose `environment:` list is missing an entry. Add `- NEW_VAR_NAME=${NEW_VAR_NAME:-<sensible-default-or-empty>}` next to the related variables (e.g. all `ARK_*_GLOBAL` live together).
 
 Don't rely on `env_file:` as a shortcut — the project intentionally uses explicit `environment:` blocks so that ops can audit what the container can see without grepping `.env.local`.
+
+### Rule 27: Protocol-specific root fields not in `TaskSubmitReq` must be folded into `req.Metadata`
+
+`relay/common.TaskSubmitReq` is the shared parse target for every task channel — only generic fields live there (`prompt`, `model`, `image`, `images`, `size`, `resolution`, `ratio`, `aspect_ratio`, `duration`, `seconds`, `metadata`, ...). Vendor-specific top-level fields that the protocol accepts but the shared struct doesn't declare get silently dropped during JSON parse. Symptom: client believes they pinned `seed`, every generation draws a fresh random seed; client disabled `watermark`, upstream keeps defaulting it on. Issues #60 (ratio drop), #63 (Volc Ark root fields).
+
+The standing pattern is `foldVolcRootFieldsIntoMetadata` in the Doubao adaptor:
+
+1. Run `ValidateBasicTaskRequest` first — never bypass, or you'll silently drop the `model`/`prompt` non-empty check.
+2. Re-read the raw body via `common.UnmarshalBodyReusable` (buffered, safe to read multiple times).
+3. For each whitelisted vendor-specific root field, copy into `req.Metadata` only if the metadata-set value isn't already there (caller-set `metadata.seed` wins over root `seed`).
+4. Store the mutated `req` back via `c.Set("task_request", req)`.
+5. The downstream `convertToRequestPayload` already has a struct-tag-driven `UnmarshalMetadata(metadata, &requestPayload)` step that picks the folded values back out — no extra glue needed.
+
+**Whitelist, not blanket pass-through.** Listing each field explicitly means a new vendor field is a deliberate one-line change rather than implicit pass-through of arbitrary client input. The `requestPayload` struct tag is the canonical "this is supported" signal.
+
+**Don't fold protocol-enum translations here.** This pattern is for pure passthrough only. Mapping `size: "480p"` to upstream's `resolution: "480"` (or a ratio whitelist that rejects unrecognized values) belongs in operator-configured profiles (Rule 19), not adapter source.
+
+**Tests.** Every folded field needs a unit case (raw body → after-fold metadata value matches), plus one end-to-end that drives the full `fold → UnmarshalMetadata → requestPayload` chain so the struct-tag wiring stays in sync. See `relay/channel/task/doubao/adaptor_test.go::TestFoldVolcRootFieldsIntoMetadata` for the canonical template.
+
+Sibling adaptors (Kling, Jimeng, Pixverse, Hailuo, Vidu) likely have the same root-drop bug for their respective vendor fields — see #64 for the audit plan.
