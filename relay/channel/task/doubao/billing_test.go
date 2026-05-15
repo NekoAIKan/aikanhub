@@ -133,6 +133,90 @@ func TestExtractRequestBillingInputMetadataOverridesTopLevel(t *testing.T) {
 	}, got)
 }
 
+func TestExtractRequestBillingInputAlignsResolutionRatioAndSize(t *testing.T) {
+	tests := []struct {
+		name string
+		req  relaycommon.TaskSubmitReq
+		want service.VideoBillingInput
+	}{
+		{
+			name: "metadata resolution and portrait ratio",
+			req: relaycommon.TaskSubmitReq{
+				Duration: 5,
+				Metadata: map[string]any{
+					"resolution": "720p",
+					"ratio":      "9:16",
+				},
+			},
+			want: service.VideoBillingInput{OutputSeconds: 5, Width: 720, Height: 1280, FPS: 24, Resolution: "720p", GroupRatio: 1},
+		},
+		{
+			name: "top-level landscape pixel size",
+			req: relaycommon.TaskSubmitReq{
+				Duration: 5,
+				Size:     "1280x720",
+			},
+			want: service.VideoBillingInput{OutputSeconds: 5, Width: 1280, Height: 720, FPS: 24, Resolution: "1280x720", GroupRatio: 1},
+		},
+		{
+			name: "normalized portrait size metadata",
+			req: relaycommon.TaskSubmitReq{
+				Duration: 5,
+				Size:     "720x1280",
+				Metadata: map[string]any{
+					"resolution": "720p",
+					"ratio":      "9:16",
+				},
+			},
+			want: service.VideoBillingInput{OutputSeconds: 5, Width: 720, Height: 1280, FPS: 24, Resolution: "720p", GroupRatio: 1},
+		},
+		{
+			name: "aspect ratio size is not treated as resolution",
+			req: relaycommon.TaskSubmitReq{
+				Duration: 5,
+				Size:     "9:16",
+			},
+			want: service.VideoBillingInput{OutputSeconds: 5, Width: 720, Height: 1280, FPS: 24, GroupRatio: 1},
+		},
+		{
+			name: "metadata aspect ratio size is captured",
+			req: relaycommon.TaskSubmitReq{
+				Duration: 5,
+				Metadata: map[string]any{
+					"size": "9:16",
+				},
+			},
+			want: service.VideoBillingInput{OutputSeconds: 5, Width: 720, Height: 1280, FPS: 24, GroupRatio: 1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ExtractRequestBillingInput(tt.req, testProfile(), 1)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestExtractRequestBillingInputUsesConfiguredFallbackForSizeRatio(t *testing.T) {
+	profile := testProfile()
+	profile.FallbackWidth = 640
+	profile.FallbackHeight = 360
+
+	got := ExtractRequestBillingInput(relaycommon.TaskSubmitReq{
+		Duration: 5,
+		Size:     "9:16",
+	}, profile, 1)
+
+	require.Equal(t, service.VideoBillingInput{
+		OutputSeconds: 5,
+		Width:         360,
+		Height:        640,
+		FPS:           24,
+		GroupRatio:    1,
+	}, got)
+}
+
 func TestExtractRequestBillingInputMarksReferenceMedia(t *testing.T) {
 	got := ExtractRequestBillingInput(relaycommon.TaskSubmitReq{
 		Duration: 5,
@@ -192,6 +276,25 @@ func TestExtractResponseBillingInput(t *testing.T) {
 		GroupRatio:          1,
 		UpstreamTotalTokens: 12345,
 	}, got)
+}
+
+func TestExtractResponseBillingInputUsesReturnedRatio(t *testing.T) {
+	body := []byte(`{
+		"id": "task-upstream",
+		"status": "succeeded",
+		"resolution": "720p",
+		"ratio": "9:16",
+		"duration": 5,
+		"framespersecond": 24,
+		"usage": {"total_tokens": 1000}
+	}`)
+
+	got, err := ExtractResponseBillingInput(body, testProfile(), 1)
+	require.NoError(t, err)
+	require.Equal(t, 720, got.Width)
+	require.Equal(t, 1280, got.Height)
+	require.Equal(t, 5, got.OutputSeconds)
+	require.Equal(t, "720p", got.Resolution)
 }
 
 func TestAdjustBillingOnCompleteUsesProfileContextAndResponse(t *testing.T) {

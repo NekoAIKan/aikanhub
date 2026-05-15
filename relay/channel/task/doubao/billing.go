@@ -1,6 +1,7 @@
 package doubao
 
 import (
+	"math"
 	"strconv"
 	"strings"
 
@@ -13,8 +14,8 @@ import (
 
 func ExtractRequestBillingInput(req relaycommon.TaskSubmitReq, profile videobilling.VideoBillingProfile, groupRatio float64) service.VideoBillingInput {
 	outputSeconds := firstPositiveInt(intFromMap(req.Metadata, "duration"), req.Duration, atoi(req.Seconds), intFromMap(req.Metadata, "seconds"))
-	resolution := firstString(stringFromMap(req.Metadata, "resolution"), req.Resolution, req.Size, stringFromMap(req.Metadata, "size"))
-	width, height := resolveVideoDimensions(profile, resolution)
+	resolution := requestBillingResolution(req)
+	width, height := resolveRequestVideoDimensions(profile, req)
 	fps := firstPositiveInt(intFromMap(req.Metadata, "fps"), intFromMap(req.Metadata, "framespersecond"), profile.FallbackFPS)
 	draft := boolFromMap(req.Metadata, "draft")
 
@@ -39,7 +40,7 @@ func ExtractRequestBillingInput(req relaycommon.TaskSubmitReq, profile videobill
 		Width:             width,
 		Height:            height,
 		FPS:               fps,
-		Resolution:        normalizeResolutionAlias(resolution),
+		Resolution:        resolution,
 		GroupRatio:        groupRatio,
 		Draft:             draft,
 		HasReferenceMedia: hasReferenceMedia,
@@ -51,7 +52,7 @@ func ExtractResponseBillingInput(body []byte, profile videobilling.VideoBillingP
 	if err := common.Unmarshal(body, &resTask); err != nil {
 		return service.VideoBillingInput{}, err
 	}
-	width, height := resolveVideoDimensions(profile, resTask.Resolution)
+	width, height := resolveVideoDimensionsWithRatio(profile, resTask.Resolution, resTask.Ratio)
 	fps := firstPositiveInt(resTask.FramesPerSecond, profile.FallbackFPS)
 	return service.VideoBillingInput{
 		OutputSeconds:       firstPositiveInt(resTask.Duration, profile.FallbackDurationSeconds),
@@ -62,6 +63,20 @@ func ExtractResponseBillingInput(body []byte, profile videobilling.VideoBillingP
 		GroupRatio:          groupRatio,
 		UpstreamTotalTokens: resTask.Usage.TotalTokens,
 	}, nil
+}
+
+func requestBillingResolution(req relaycommon.TaskSubmitReq) string {
+	if resolution := firstString(stringFromMap(req.Metadata, "resolution"), req.Resolution); resolution != "" {
+		return normalizeResolutionAlias(resolution)
+	}
+	for _, size := range []string{req.Size, stringFromMap(req.Metadata, "size")} {
+		size = strings.TrimSpace(size)
+		if size == "" || looksLikeAspectRatio(size) {
+			continue
+		}
+		return normalizeResolutionAlias(size)
+	}
+	return ""
 }
 
 func normalizeResolutionAlias(raw string) string {
@@ -149,6 +164,60 @@ func mergeVideoBillingInput(base, override service.VideoBillingInput) service.Vi
 }
 
 func resolveVideoDimensions(profile videobilling.VideoBillingProfile, raw string) (int, int) {
+	return resolveVideoDimensionsWithRatio(profile, raw, "")
+}
+
+func resolveRequestVideoDimensions(profile videobilling.VideoBillingProfile, req relaycommon.TaskSubmitReq) (int, int) {
+	resolution := firstString(stringFromMap(req.Metadata, "resolution"), req.Resolution)
+	ratio := firstString(
+		stringFromMap(req.Metadata, "ratio"),
+		stringFromMap(req.Metadata, "aspect_ratio"),
+		req.Ratio,
+		req.AspectRatio,
+		aspectRatioFromSize(req.Size),
+		aspectRatioFromSize(stringFromMap(req.Metadata, "size")),
+	)
+	if resolution != "" || ratio != "" {
+		return resolveVideoDimensionsWithRatio(profile, firstString(resolution, req.Size, stringFromMap(req.Metadata, "size")), ratio)
+	}
+	for _, size := range []string{req.Size, stringFromMap(req.Metadata, "size")} {
+		if width, height, ok := parseResolutionPair(size); ok {
+			return width, height
+		}
+	}
+	return resolveVideoDimensionsWithRatio(profile, firstString(req.Size, stringFromMap(req.Metadata, "size")), ratio)
+}
+
+func aspectRatioFromSize(size string) string {
+	size = strings.TrimSpace(size)
+	if looksLikeAspectRatio(size) {
+		return size
+	}
+	return ""
+}
+
+func resolveVideoDimensionsWithRatio(profile videobilling.VideoBillingProfile, raw string, ratio string) (int, int) {
+	width, height := resolveVideoDimensionsBase(profile, raw)
+	if ratio == "" || ratio == "adaptive" {
+		return width, height
+	}
+	ratioWidth, ratioHeight, ok := parseAspectRatio(ratio)
+	if !ok {
+		return width, height
+	}
+	area := float64(width * height)
+	if area <= 0 {
+		return width, height
+	}
+	adjustedWidth := int(math.Round(math.Sqrt(area * float64(ratioWidth) / float64(ratioHeight))))
+	adjustedHeight := int(math.Round(math.Sqrt(area * float64(ratioHeight) / float64(ratioWidth))))
+	if adjustedWidth <= 0 || adjustedHeight <= 0 {
+		return width, height
+	}
+	return adjustedWidth, adjustedHeight
+}
+
+func resolveVideoDimensionsBase(profile videobilling.VideoBillingProfile, raw string) (int, int) {
 	if raw != "" {
 		key := strings.ToLower(strings.TrimSpace(raw))
 		for alias, resolution := range profile.ResolutionAliases {
@@ -161,6 +230,19 @@ func resolveVideoDimensions(profile videobilling.VideoBillingProfile, raw string
 		}
 	}
 	return profile.FallbackWidth, profile.FallbackHeight
+}
+
+func parseAspectRatio(raw string) (int, int, bool) {
+	parts := strings.SplitN(strings.TrimSpace(raw), ":", 2)
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+	width, errWidth := strconv.Atoi(strings.TrimSpace(parts[0]))
+	height, errHeight := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if errWidth != nil || errHeight != nil || width <= 0 || height <= 0 {
+		return 0, 0, false
+	}
+	return width, height, true
 }
 
 func parseResolutionPair(raw string) (int, int, bool) {
