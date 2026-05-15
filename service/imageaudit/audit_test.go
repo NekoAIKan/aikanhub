@@ -72,6 +72,7 @@ func TestSubmit_AssetPassthrough_ScopedByUser(t *testing.T) {
 	// User 1 audited an image and got asset-foo. Persist that.
 	owned := &model.ImageAuditRecord{
 		UserID:   1,
+		Region:   RegionCN,
 		AssetID:  "asset-foo",
 		AssetURI: "asset://asset-foo",
 		Status:   model.ImageAuditStatusActive,
@@ -84,13 +85,63 @@ func TestSubmit_AssetPassthrough_ScopedByUser(t *testing.T) {
 	assert.Equal(t, owned.RecordID, got.RecordID, "user 1 must see their own record")
 
 	// User 2 submits the same asset id — must NOT see user 1's record.
-	got, err = Submit(context.Background(), "asset://asset-foo", 2, 99, "")
+	_, err = Submit(context.Background(), "asset://asset-foo", 2, 99, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not audited for region=cn")
+}
+
+func TestSubmit_AssetPassthrough_RejectsWrongRegion(t *testing.T) {
+	resetTable(t)
+	owned := &model.ImageAuditRecord{
+		UserID:   1,
+		Region:   RegionCN,
+		Project:  "cn-project",
+		AssetID:  "asset-cn",
+		AssetURI: "asset://asset-cn",
+		Status:   model.ImageAuditStatusActive,
+	}
+	require.NoError(t, model.CreateImageAuditRecord(owned))
+
+	_, err := Submit(context.Background(), "asset://asset-cn", 1, 99, RegionGlobal)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not audited for region=global")
+}
+
+func TestSubmit_AssetPassthrough_AllowsMatchingGlobalRegion(t *testing.T) {
+	resetTable(t)
+	owned := &model.ImageAuditRecord{
+		UserID:   1,
+		Region:   RegionGlobal,
+		Project:  "global-project",
+		AssetID:  "asset-global",
+		AssetURI: "asset://asset-global",
+		Status:   model.ImageAuditStatusActive,
+	}
+	require.NoError(t, model.CreateImageAuditRecord(owned))
+
+	got, err := Submit(context.Background(), "asset://asset-global", 1, 99, "byteplus")
 	require.NoError(t, err)
-	assert.NotEqual(t, owned.RecordID, got.RecordID, "user 2 must not get user 1's record")
-	assert.True(t, len(got.RecordID) > 9 && got.RecordID[:9] == "external_",
-		"unknown asset for user 2 should be a synthetic external_ record, got %q", got.RecordID)
-	assert.Equal(t, model.ImageAuditStatusActive, got.Status)
-	assert.Equal(t, "asset://asset-foo", got.AssetURI)
+	assert.Equal(t, owned.RecordID, got.RecordID)
+}
+
+func TestSubmit_AssetPassthrough_AllowsLegacyCNProject(t *testing.T) {
+	resetTable(t)
+	owned := &model.ImageAuditRecord{
+		UserID:   1,
+		Project:  "default",
+		AssetID:  "asset-legacy-cn",
+		AssetURI: "asset://asset-legacy-cn",
+		Status:   model.ImageAuditStatusActive,
+	}
+	require.NoError(t, model.CreateImageAuditRecord(owned))
+
+	got, err := Submit(context.Background(), "asset://asset-legacy-cn", 1, 99, RegionCN)
+	require.NoError(t, err)
+	assert.Equal(t, owned.RecordID, got.RecordID)
+
+	_, err = Submit(context.Background(), "asset://asset-legacy-cn", 1, 99, RegionGlobal)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not audited for region=global")
 }
 
 func TestSubmit_AssetPassthrough_RejectsEmptyID(t *testing.T) {
@@ -172,13 +223,32 @@ func TestSubmit_NoARK_ReturnsConfigError_OnFreshAudit(t *testing.T) {
 
 func TestEnsureAudited_AssetPassthrough_ReturnsURIDirectly(t *testing.T) {
 	resetTable(t)
-	// EnsureAudited on asset://... should not need ARK creds.
+	owned := &model.ImageAuditRecord{
+		UserID:   1,
+		Region:   RegionCN,
+		AssetID:  "asset-x",
+		AssetURI: "asset://asset-x",
+		Status:   model.ImageAuditStatusActive,
+	}
+	require.NoError(t, model.CreateImageAuditRecord(owned))
+
+	// EnsureAudited on a known region-bound asset:// should not need ARK creds.
 	t.Setenv("ARK_AK", "")
 	t.Setenv("ARK_SK", "")
 
 	uri, err := EnsureAudited(context.Background(), "asset://asset-x", 1, 0, "")
 	require.NoError(t, err)
 	assert.Equal(t, "asset://asset-x", uri)
+}
+
+func TestEnsureAudited_AssetPassthrough_RejectsUnknownAsset(t *testing.T) {
+	resetTable(t)
+	t.Setenv("ARK_AK", "")
+	t.Setenv("ARK_SK", "")
+
+	_, err := EnsureAudited(context.Background(), "asset://asset-unknown", 1, 0, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not audited for region=cn")
 }
 
 func TestEnsureAudited_FailedCacheHit_ReturnsAuditError(t *testing.T) {

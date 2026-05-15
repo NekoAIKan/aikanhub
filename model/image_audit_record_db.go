@@ -165,6 +165,40 @@ func FindImageAuditByAssetID(assetID string) (*ImageAuditRecord, error) {
 	return &r, nil
 }
 
+// FindImageAuditByAssetIDAndRegion resolves a previously-audited asset for
+// the target ARK region. userID > 0 scopes the lookup to the caller.
+func FindImageAuditByAssetIDAndRegion(userID int, assetID, region string) (*ImageAuditRecord, error) {
+	if assetID == "" || region == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var r ImageAuditRecord
+	q := DB.Where("asset_id = ? AND region = ?", assetID, region)
+	if userID > 0 {
+		q = q.Where("user_id = ?", userID)
+	}
+	if err := q.Order("id DESC").First(&r).Error; err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// FindLegacyImageAuditByAssetIDAndProject resolves legacy rows that predate
+// the explicit Region column. userID > 0 scopes the lookup to the caller.
+func FindLegacyImageAuditByAssetIDAndProject(userID int, assetID, project string) (*ImageAuditRecord, error) {
+	if assetID == "" || project == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var r ImageAuditRecord
+	q := DB.Where("asset_id = ? AND project = ? AND (region = ? OR region IS NULL)", assetID, project, "")
+	if userID > 0 {
+		q = q.Where("user_id = ?", userID)
+	}
+	if err := q.Order("id DESC").First(&r).Error; err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
 // ListImageAuditRecords returns the user's records newest-first, paged.
 // page is 1-based; pageSize is clamped to [1, 100] to keep responses
 // bounded. Returns (rows, total, error).
