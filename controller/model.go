@@ -14,6 +14,8 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/lingyiwanwu"
 	"github.com/QuantumNous/new-api/relay/channel/minimax"
 	"github.com/QuantumNous/new-api/relay/channel/moonshot"
+	taskbyteplus "github.com/QuantumNous/new-api/relay/channel/task/byteplus"
+	taskdoubao "github.com/QuantumNous/new-api/relay/channel/task/doubao"
 	taskpixverse "github.com/QuantumNous/new-api/relay/channel/task/pixverse"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -88,6 +90,27 @@ func init() {
 			OwnedBy: taskpixverse.ChannelName,
 		})
 	}
+	// Doubao (CN) + BytePlus (overseas) Seedance are task-only channels
+	// reached via GetTaskAdaptor, so the APIType loop above never picks
+	// up their model lists. Register them explicitly — same gap Pixverse
+	// had — otherwise the channel form's "Fill Related Models" button and
+	// the custom-model autocomplete never suggest seedance-* ids.
+	for _, modelName := range taskdoubao.ModelList {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: taskdoubao.ChannelName,
+		})
+	}
+	for _, modelName := range taskbyteplus.ModelList {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: taskbyteplus.ChannelName,
+		})
+	}
 	for modelName, _ := range constant.MidjourneyModel2Action {
 		openAIModels = append(openAIModels, dto.OpenAIModels{
 			Id:      modelName,
@@ -117,6 +140,8 @@ func init() {
 	// their models surface in /api/channel/models and the channel form's
 	// "Fill Related Models" suggestion list.
 	channelId2Models[constant.ChannelTypePixverse] = taskpixverse.ModelList
+	channelId2Models[constant.ChannelTypeDoubaoVideo] = taskdoubao.ModelList
+	channelId2Models[constant.ChannelTypeBytePlusVideo] = taskbyteplus.ModelList
 	openAIModels = lo.UniqBy(openAIModels, func(m dto.OpenAIModels) string {
 		return m.Id
 	})
