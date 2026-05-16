@@ -60,10 +60,10 @@ func TestSourceKindOf(t *testing.T) {
 
 func TestSubmit_RejectsEmpty(t *testing.T) {
 	resetTable(t)
-	_, err := Submit(context.Background(), "", 1, 0)
+	_, err := Submit(context.Background(), "", 1, 0, "")
 	assert.Error(t, err)
 
-	_, err = Submit(context.Background(), "   ", 1, 0)
+	_, err = Submit(context.Background(), "   ", 1, 0, "")
 	assert.Error(t, err)
 }
 
@@ -72,6 +72,7 @@ func TestSubmit_AssetPassthrough_ScopedByUser(t *testing.T) {
 	// User 1 audited an image and got asset-foo. Persist that.
 	owned := &model.ImageAuditRecord{
 		UserID:   1,
+		Region:   RegionCN,
 		AssetID:  "asset-foo",
 		AssetURI: "asset://asset-foo",
 		Status:   model.ImageAuditStatusActive,
@@ -79,23 +80,73 @@ func TestSubmit_AssetPassthrough_ScopedByUser(t *testing.T) {
 	require.NoError(t, model.CreateImageAuditRecord(owned))
 
 	// User 1 resubmits asset://asset-foo → returns the existing record.
-	got, err := Submit(context.Background(), "asset://asset-foo", 1, 99)
+	got, err := Submit(context.Background(), "asset://asset-foo", 1, 99, "")
 	require.NoError(t, err)
 	assert.Equal(t, owned.RecordID, got.RecordID, "user 1 must see their own record")
 
 	// User 2 submits the same asset id — must NOT see user 1's record.
-	got, err = Submit(context.Background(), "asset://asset-foo", 2, 99)
+	_, err = Submit(context.Background(), "asset://asset-foo", 2, 99, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not audited for region=cn")
+}
+
+func TestSubmit_AssetPassthrough_RejectsWrongRegion(t *testing.T) {
+	resetTable(t)
+	owned := &model.ImageAuditRecord{
+		UserID:   1,
+		Region:   RegionCN,
+		Project:  "cn-project",
+		AssetID:  "asset-cn",
+		AssetURI: "asset://asset-cn",
+		Status:   model.ImageAuditStatusActive,
+	}
+	require.NoError(t, model.CreateImageAuditRecord(owned))
+
+	_, err := Submit(context.Background(), "asset://asset-cn", 1, 99, RegionGlobal)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not audited for region=global")
+}
+
+func TestSubmit_AssetPassthrough_AllowsMatchingGlobalRegion(t *testing.T) {
+	resetTable(t)
+	owned := &model.ImageAuditRecord{
+		UserID:   1,
+		Region:   RegionGlobal,
+		Project:  "global-project",
+		AssetID:  "asset-global",
+		AssetURI: "asset://asset-global",
+		Status:   model.ImageAuditStatusActive,
+	}
+	require.NoError(t, model.CreateImageAuditRecord(owned))
+
+	got, err := Submit(context.Background(), "asset://asset-global", 1, 99, "byteplus")
 	require.NoError(t, err)
-	assert.NotEqual(t, owned.RecordID, got.RecordID, "user 2 must not get user 1's record")
-	assert.True(t, len(got.RecordID) > 9 && got.RecordID[:9] == "external_",
-		"unknown asset for user 2 should be a synthetic external_ record, got %q", got.RecordID)
-	assert.Equal(t, model.ImageAuditStatusActive, got.Status)
-	assert.Equal(t, "asset://asset-foo", got.AssetURI)
+	assert.Equal(t, owned.RecordID, got.RecordID)
+}
+
+func TestSubmit_AssetPassthrough_AllowsLegacyCNProject(t *testing.T) {
+	resetTable(t)
+	owned := &model.ImageAuditRecord{
+		UserID:   1,
+		Project:  "default",
+		AssetID:  "asset-legacy-cn",
+		AssetURI: "asset://asset-legacy-cn",
+		Status:   model.ImageAuditStatusActive,
+	}
+	require.NoError(t, model.CreateImageAuditRecord(owned))
+
+	got, err := Submit(context.Background(), "asset://asset-legacy-cn", 1, 99, RegionCN)
+	require.NoError(t, err)
+	assert.Equal(t, owned.RecordID, got.RecordID)
+
+	_, err = Submit(context.Background(), "asset://asset-legacy-cn", 1, 99, RegionGlobal)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not audited for region=global")
 }
 
 func TestSubmit_AssetPassthrough_RejectsEmptyID(t *testing.T) {
 	resetTable(t)
-	_, err := Submit(context.Background(), "asset://", 1, 0)
+	_, err := Submit(context.Background(), "asset://", 1, 0, "")
 	assert.Error(t, err)
 }
 
@@ -113,9 +164,13 @@ func TestSubmit_CacheHitOnFailed_DoesNotReAudit(t *testing.T) {
 		UserID:     42,
 		SourceHash: sh,
 		SourceKind: model.ImageAuditSourceURL,
-		Status:     model.ImageAuditStatusFailed,
-		Reason:     "moderation: contains restricted content",
-		AssetID:    "asset-deadbeef",
+		// Project must match the config default ("default") so the
+		// region-aware cache lookup hits. Production rows are written
+		// with the same value via cfg.ARKProject.
+		Project: "default",
+		Status:  model.ImageAuditStatusFailed,
+		Reason:  "moderation: contains restricted content",
+		AssetID: "asset-deadbeef",
 	}
 	require.NoError(t, model.CreateImageAuditRecord(prior))
 
@@ -123,7 +178,7 @@ func TestSubmit_CacheHitOnFailed_DoesNotReAudit(t *testing.T) {
 	t.Setenv("ARK_AK", "")
 	t.Setenv("ARK_SK", "")
 
-	got, err := Submit(context.Background(), src, 42, 0)
+	got, err := Submit(context.Background(), src, 42, 0, "")
 	require.NoError(t, err, "cached failed should be returned without re-audit")
 	assert.Equal(t, model.ImageAuditStatusFailed, got.Status)
 	assert.Equal(t, prior.RecordID, got.RecordID)
@@ -137,6 +192,7 @@ func TestSubmit_CacheHitOnActive_DoesNotReAudit(t *testing.T) {
 		UserID:     5,
 		SourceHash: hashSource(src),
 		SourceKind: model.ImageAuditSourceURL,
+		Project:    "default",
 		Status:     model.ImageAuditStatusActive,
 		AssetURI:   "asset://asset-good",
 		AssetID:    "asset-good",
@@ -146,7 +202,7 @@ func TestSubmit_CacheHitOnActive_DoesNotReAudit(t *testing.T) {
 	t.Setenv("ARK_AK", "")
 	t.Setenv("ARK_SK", "")
 
-	got, err := Submit(context.Background(), src, 5, 0)
+	got, err := Submit(context.Background(), src, 5, 0, "")
 	require.NoError(t, err)
 	assert.Equal(t, prior.RecordID, got.RecordID)
 	assert.Equal(t, model.ImageAuditStatusActive, got.Status)
@@ -159,20 +215,40 @@ func TestSubmit_NoARK_ReturnsConfigError_OnFreshAudit(t *testing.T) {
 	t.Setenv("ARK_AK", "")
 	t.Setenv("ARK_SK", "")
 
-	_, err := Submit(context.Background(), "https://example.com/new.jpg", 7, 0)
+	_, err := Submit(context.Background(), "https://example.com/new.jpg", 7, 0, "")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "ARK_AK")
+	// Error message identifies the region whose creds are missing.
+	assert.Contains(t, err.Error(), "region=cn")
 }
 
 func TestEnsureAudited_AssetPassthrough_ReturnsURIDirectly(t *testing.T) {
 	resetTable(t)
-	// EnsureAudited on asset://... should not need ARK creds.
+	owned := &model.ImageAuditRecord{
+		UserID:   1,
+		Region:   RegionCN,
+		AssetID:  "asset-x",
+		AssetURI: "asset://asset-x",
+		Status:   model.ImageAuditStatusActive,
+	}
+	require.NoError(t, model.CreateImageAuditRecord(owned))
+
+	// EnsureAudited on a known region-bound asset:// should not need ARK creds.
 	t.Setenv("ARK_AK", "")
 	t.Setenv("ARK_SK", "")
 
-	uri, err := EnsureAudited(context.Background(), "asset://asset-x", 1, 0)
+	uri, err := EnsureAudited(context.Background(), "asset://asset-x", 1, 0, "")
 	require.NoError(t, err)
 	assert.Equal(t, "asset://asset-x", uri)
+}
+
+func TestEnsureAudited_AssetPassthrough_RejectsUnknownAsset(t *testing.T) {
+	resetTable(t)
+	t.Setenv("ARK_AK", "")
+	t.Setenv("ARK_SK", "")
+
+	_, err := EnsureAudited(context.Background(), "asset://asset-unknown", 1, 0, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not audited for region=cn")
 }
 
 func TestEnsureAudited_FailedCacheHit_ReturnsAuditError(t *testing.T) {
@@ -182,13 +258,14 @@ func TestEnsureAudited_FailedCacheHit_ReturnsAuditError(t *testing.T) {
 		UserID:     8,
 		SourceHash: hashSource(src),
 		SourceKind: model.ImageAuditSourceURL,
+		Project:    "default",
 		Status:     model.ImageAuditStatusFailed,
 		Reason:     "moderation rejected",
 		AssetID:    "asset-bad",
 	}
 	require.NoError(t, model.CreateImageAuditRecord(rec))
 
-	_, err := EnsureAudited(context.Background(), src, 8, 0)
+	_, err := EnsureAudited(context.Background(), src, 8, 0, "")
 	require.Error(t, err)
 	assert.True(t, IsAuditFailure(err), "failed cache hit must surface as AuditError")
 

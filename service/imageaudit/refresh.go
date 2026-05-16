@@ -41,10 +41,15 @@ func RefreshFromUpstream(ctx context.Context, rec *model.ImageAuditRecord) (*mod
 		return rec, nil
 	}
 	cfg := Load()
-	if !cfg.HasARK() {
+	// Infer region from the persisted project — every record was written
+	// with the project of the region that audited it, so the project tag
+	// is sufficient to route the refresh back to the right ARK backend.
+	region := cfg.RegionFromProject(rec.Project)
+	resolved, hasCreds := cfg.ResolveFor(region)
+	if !hasCreds {
 		return rec, nil
 	}
-	client := newARKClient(cfg)
+	client := newARKClient(resolved)
 	res, err := client.getAsset(ctx, rec.AssetID)
 	if err != nil {
 		// Network / upstream error — best-effort, return what we have.

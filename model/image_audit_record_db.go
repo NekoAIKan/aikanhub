@@ -95,6 +95,10 @@ func FindActiveImageAuditByHash(userID int, sourceHash string) (*ImageAuditRecor
 // Active rows take priority over failed when both exist for the same
 // (user, hash): we ORDER BY id DESC then prefer the active one in
 // memory, since GORM gives us a single result.
+//
+// Kept as a tested helper; the per-region cache path uses
+// FindTerminalImageAuditByHashAndProject which additionally scopes by the
+// audit project (so CN and overseas don't share cache entries).
 func FindTerminalImageAuditByHash(userID int, sourceHash string) (*ImageAuditRecord, error) {
 	if userID == 0 || sourceHash == "" {
 		return nil, gorm.ErrRecordNotFound
@@ -113,6 +117,38 @@ func FindTerminalImageAuditByHash(userID int, sourceHash string) (*ImageAuditRec
 	return &r, nil
 }
 
+// FindTerminalImageAuditByHashAndProject is the region-aware cache lookup.
+// Filters by project so a CN record (project=shemao) is never returned for
+// a global lookup (project=tianwenyue-6) — China and overseas ARK Asset
+// stores are entirely independent; an asset audited in one is invalid in
+// the other. Empty project is treated as "any project" for backward
+// compatibility with rows written before region-aware caching landed.
+//
+// Active rows preferred over failed, same as FindTerminalImageAuditByHash.
+func FindTerminalImageAuditByHashAndProject(userID int, sourceHash, project string) (*ImageAuditRecord, error) {
+	if userID == 0 || sourceHash == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	if project == "" {
+		return FindTerminalImageAuditByHash(userID, sourceHash)
+	}
+	// Prefer active. If none, fall back to the latest failed.
+	var r ImageAuditRecord
+	activeErr := DB.Where("user_id = ? AND source_hash = ? AND project = ? AND status = ?",
+		userID, sourceHash, project, ImageAuditStatusActive).
+		Order("id DESC").First(&r).Error
+	if activeErr == nil {
+		return &r, nil
+	}
+	err := DB.Where("user_id = ? AND source_hash = ? AND project = ? AND status = ?",
+		userID, sourceHash, project, ImageAuditStatusFailed).
+		Order("id DESC").First(&r).Error
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
 // FindImageAuditByAssetID resolves an ARK "asset-..." id back to its
 // gateway record. Used when the doubao adaptor receives a raw asset
 // reference and wants to confirm we've audited it (so re-runs don't
@@ -124,6 +160,40 @@ func FindImageAuditByAssetID(assetID string) (*ImageAuditRecord, error) {
 	var r ImageAuditRecord
 	err := DB.Where("asset_id = ?", assetID).Order("id DESC").First(&r).Error
 	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// FindImageAuditByAssetIDAndRegion resolves a previously-audited asset for
+// the target ARK region. userID > 0 scopes the lookup to the caller.
+func FindImageAuditByAssetIDAndRegion(userID int, assetID, region string) (*ImageAuditRecord, error) {
+	if assetID == "" || region == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var r ImageAuditRecord
+	q := DB.Where("asset_id = ? AND region = ?", assetID, region)
+	if userID > 0 {
+		q = q.Where("user_id = ?", userID)
+	}
+	if err := q.Order("id DESC").First(&r).Error; err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// FindLegacyImageAuditByAssetIDAndProject resolves legacy rows that predate
+// the explicit Region column. userID > 0 scopes the lookup to the caller.
+func FindLegacyImageAuditByAssetIDAndProject(userID int, assetID, project string) (*ImageAuditRecord, error) {
+	if assetID == "" || project == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var r ImageAuditRecord
+	q := DB.Where("asset_id = ? AND project = ? AND (region = ? OR region IS NULL)", assetID, project, "")
+	if userID > 0 {
+		q = q.Where("user_id = ?", userID)
+	}
+	if err := q.Order("id DESC").First(&r).Error; err != nil {
 		return nil, err
 	}
 	return &r, nil

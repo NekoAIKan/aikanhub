@@ -66,6 +66,7 @@ type ImageAuditRecord struct {
 	// the post-COS-upload public URL — internal infra detail, never
 	// surfaced to clients (json:"-").
 	PublicURL string           `json:"-" gorm:"type:varchar(2048)"`
+	Region    string           `json:"region,omitempty" gorm:"type:varchar(16);index"`
 	Project   string           `json:"project,omitempty" gorm:"type:varchar(64)"`
 	GroupID   string           `json:"group_id,omitempty" gorm:"type:varchar(64)"`
 	AssetID   string           `json:"asset_id,omitempty" gorm:"type:varchar(64);index"`

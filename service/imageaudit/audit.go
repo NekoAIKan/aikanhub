@@ -69,31 +69,32 @@ func sourceKindOf(src string) model.ImageAuditSource {
 //
 //   - active     — cache hit on a previously-passed audit. Reusable.
 //   - failed     — cache hit on a previously-failed audit. Caller
-//                  should NOT auto-retry; moderation decisions are
-//                  deterministic per content, retrying just spends
-//                  ARK quota.
+//     should NOT auto-retry; moderation decisions are
+//     deterministic per content, retrying just spends
+//     ARK quota.
 //   - processing — fresh audit; ARK is working on it. The first GET
-//                  (or Wait) will refresh from upstream.
+//     (or Wait) will refresh from upstream.
 //
 // userID > 0 scopes the dedup cache to that user. userID=0 disables
 // caching — internal calls without a user context fall straight to
 // fresh audit.
 //
-// asset://<id> input is a degenerate case used by the legacy
-// audit_image=true flow: a passthrough request for an asset the caller
-// claims is already audited. We try to find OUR record for it (scoped
-// to userID so we don't leak cross-tenant); if we don't have one, we
-// synthesize a non-persisted record with status=active. Public callers
-// (POST /v1/image-audits) should reject asset:// at the controller —
-// the synthetic record's id is not GET-able.
-func Submit(ctx context.Context, src string, userID, tokenID int) (*model.ImageAuditRecord, error) {
+// asset://<id> input is a degenerate case used by the audit_image=true
+// flow: a passthrough request for an asset the caller claims is already
+// audited. We require a matching same-user, same-region record so a CN
+// ARK asset is never silently forwarded into a BytePlus request.
+func Submit(ctx context.Context, src string, userID, tokenID int, region string) (*model.ImageAuditRecord, error) {
 	src = strings.TrimSpace(src)
 	if src == "" {
 		return nil, errors.New("imageaudit: empty source")
 	}
+	region = NormalizeRegion(region)
+
+	cfg := Load()
+	res, hasCreds := cfg.ResolveFor(region)
 
 	if strings.HasPrefix(src, "asset://") {
-		return submitAssetPassthrough(src, userID, tokenID)
+		return submitAssetPassthrough(src, userID, region, res.Project)
 	}
 
 	sh := hashSource(src)
@@ -104,13 +105,19 @@ func Submit(ctx context.Context, src string, userID, tokenID int) (*model.ImageA
 	// every retry of a moderation-rejected image spends another ARK
 	// CreateAsset call for an identical (deterministic) outcome.
 	//
-	// IMPORTANT: cache check runs BEFORE the HasARK() guard so that
+	// IMPORTANT: cache check runs BEFORE the HasCreds() guard so that
 	// pre-audited rows remain queryable even if ARK credentials get
 	// unset (e.g. ops rotates keys). Otherwise a config gap would
 	// invalidate every cached audit, surprising callers with infra
 	// errors on hot-path lookups.
+	//
+	// Cache is scoped to (user_id, source_hash, project) so an image
+	// audited in the CN region (project=shemao) doesn't satisfy a global
+	// request (project=tianwenyue-6) and vice versa — the two regions
+	// keep independent asset stores, and a CN asset:// URI is invalid on
+	// BytePlus and vice versa.
 	if userID > 0 {
-		if cached, err := model.FindTerminalImageAuditByHash(userID, sh); err == nil {
+		if cached, err := model.FindTerminalImageAuditByHashAndProject(userID, sh, res.Project); err == nil {
 			return cached, nil
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			// Cache lookup is best-effort. Log and fall through to a
@@ -119,9 +126,8 @@ func Submit(ctx context.Context, src string, userID, tokenID int) (*model.ImageA
 		}
 	}
 
-	cfg := Load()
-	if !cfg.HasARK() {
-		return nil, errors.New("imageaudit: ARK_AK / ARK_SK not configured")
+	if !hasCreds {
+		return nil, fmt.Errorf("imageaudit: ARK credentials not configured for region=%s", region)
 	}
 
 	publicURL, err := materializeURL(ctx, cfg, src)
@@ -129,7 +135,7 @@ func Submit(ctx context.Context, src string, userID, tokenID int) (*model.ImageA
 		return nil, fmt.Errorf("imageaudit: prepare URL: %w", err)
 	}
 
-	client := newARKClient(cfg)
+	client := newARKClient(res)
 	groupID, err := client.ensureAssetGroup(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("imageaudit: ensureAssetGroup: %w", err)
@@ -145,7 +151,8 @@ func Submit(ctx context.Context, src string, userID, tokenID int) (*model.ImageA
 		SourceHash: sh,
 		SourceKind: sourceKindOf(src),
 		PublicURL:  publicURL,
-		Project:    cfg.ARKProject,
+		Region:     region,
+		Project:    res.Project,
 		GroupID:    groupID,
 		AssetID:    assetID,
 		AssetURI:   "asset://" + assetID,
@@ -164,39 +171,29 @@ func Submit(ctx context.Context, src string, userID, tokenID int) (*model.ImageA
 }
 
 // submitAssetPassthrough handles src="asset://<id>" inputs. Used by
-// EnsureAudited (legacy audit_image=true) for callers who already have
-// an audited asset id and want passthrough. The public POST endpoint
-// rejects this case at the controller layer.
-//
-// We look up our own audit record for this asset, scoped to userID
-// when provided, so user A can't probe whether user B has audited a
-// given asset. If we don't have a record, we synthesize an in-memory
-// active record — the caller asserts the asset is good; if it isn't,
-// ARK will reject the downstream video task.
-func submitAssetPassthrough(src string, userID, tokenID int) (*model.ImageAuditRecord, error) {
+// EnsureAudited for callers who already have an audited asset id and want
+// passthrough. The public POST endpoint rejects this case at the controller
+// layer. We only accept assets with a persisted record for the same user and
+// target region; otherwise the gateway cannot prove the asset belongs to the
+// ARK store that will receive the downstream video task.
+func submitAssetPassthrough(src string, userID int, region, project string) (*model.ImageAuditRecord, error) {
 	assetID := strings.TrimPrefix(src, "asset://")
 	if assetID == "" {
 		return nil, errors.New("imageaudit: empty asset id")
 	}
-	if r, err := model.FindImageAuditByAssetID(assetID); err == nil {
-		// Only return the existing record when it belongs to this
-		// caller. Otherwise treat as unknown and synthesize, so we
-		// don't leak userIDs / timestamps across tenants.
-		if userID == 0 || r.UserID == userID {
+	if r, err := model.FindImageAuditByAssetIDAndRegion(userID, assetID, region); err == nil {
+		return r, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if region == RegionCN {
+		if r, err := model.FindLegacyImageAuditByAssetIDAndProject(userID, assetID, project); err == nil {
 			return r, nil
+		} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
 		}
 	}
-	now := time.Now().Unix()
-	return &model.ImageAuditRecord{
-		RecordID:  "external_" + assetID,
-		UserID:    userID,
-		TokenID:   tokenID,
-		AssetID:   assetID,
-		AssetURI:  src,
-		Status:    model.ImageAuditStatusActive,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}, nil
+	return nil, fmt.Errorf("imageaudit: asset %s is not audited for region=%s", assetID, region)
 }
 
 // Wait blocks until the record reaches a terminal state, ctx expires,
@@ -240,8 +237,12 @@ func Wait(ctx context.Context, recordID string) (*model.ImageAuditRecord, error)
 //
 // userID/tokenID are best-effort — pass 0 from callers that don't have
 // the context yet (they'll just miss the dedup cache).
-func EnsureAudited(ctx context.Context, src string, userID, tokenID int) (string, error) {
-	rec, err := Submit(ctx, src, userID, tokenID)
+//
+// region routes to the right ARK backend: pass RegionCN (or "") for
+// Volcano Ark, RegionGlobal for BytePlus overseas. Adaptors typically
+// derive this from info.ChannelType.
+func EnsureAudited(ctx context.Context, src string, userID, tokenID int, region string) (string, error) {
+	rec, err := Submit(ctx, src, userID, tokenID, region)
 	if err != nil {
 		return "", err
 	}

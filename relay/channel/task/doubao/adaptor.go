@@ -129,7 +129,89 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 // Falling back to plain "generate" mislabels every text-only and
 // multi-modal task as "图生视频" in the dashboard.
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
-	return relaycommon.ValidateBasicTaskRequest(c, info, inferAction(c))
+	if taskErr := relaycommon.ValidateBasicTaskRequest(c, info, inferAction(c)); taskErr != nil {
+		return taskErr
+	}
+	// After the common validator parses the body (model/prompt checks
+	// intact, req stored in context), capture Volc Ark native top-level
+	// fields that TaskSubmitReq doesn't declare. We fold them into
+	// req.Metadata so convertToRequestPayload's UnmarshalMetadata picks
+	// them up via the JSON tags on requestPayload. Without this, an
+	// OpenAI-shape `/v1/videos` client that flat-lists `seed`,
+	// `watermark`, `camera_fixed`, etc. gets them silently dropped
+	// during JSON parse — see
+	// https://github.com/NekoAIKan/aikanhub/issues/63. Volc-native callers
+	// hitting `/api/v3/contents/generations/tasks` are already covered by
+	// the volcArkSubmitConvert middleware (which folds the entire raw
+	// body into metadata), so this only matters for OpenAI-shape entry.
+	if err := foldVolcRootFieldsIntoMetadata(c); err != nil {
+		return service.TaskErrorWrapper(err, "fold_root_fields_failed", http.StatusBadRequest)
+	}
+	return nil
+}
+
+// volcNativeRootFields enumerates Volc Ark video-task root fields that
+// `requestPayload` accepts but `relaycommon.TaskSubmitReq` doesn't declare.
+// Kept as an explicit whitelist (not "everything not in TaskSubmitReq") so
+// future Volc additions don't get implicitly forwarded — adding a new field
+// is a deliberate one-line change here, ratcheted by the corresponding
+// requestPayload struct tag.
+//
+// Excluded on purpose:
+//   - safety_identifier: OpenAI privacy concept, stripped at the channel-
+//     settings layer (`relay/common.applyHeaderOverrides`); not a Volc
+//     field.
+//   - resolution / ratio / duration / model / prompt / images / content:
+//     already declared on TaskSubmitReq, parsed natively.
+var volcNativeRootFields = []string{
+	"callback_url",
+	"return_last_frame",
+	"service_tier",
+	"execution_expires_after",
+	"generate_audio",
+	"draft",
+	"tools",
+	"frames",
+	"seed",
+	"camera_fixed",
+	"watermark",
+}
+
+// foldVolcRootFieldsIntoMetadata copies the Volc Ark root fields listed
+// in volcNativeRootFields from the raw request body into req.Metadata,
+// preserving caller-set metadata values (metadata wins over root). Stores
+// the mutated req back into the gin context so the downstream
+// convertToRequestPayload path observes the merge.
+func foldVolcRootFieldsIntoMetadata(c *gin.Context) error {
+	var raw map[string]interface{}
+	if err := common.UnmarshalBodyReusable(c, &raw); err != nil {
+		return fmt.Errorf("re-parse body for root-field fold: %w", err)
+	}
+	req, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return fmt.Errorf("retrieve stored task request: %w", err)
+	}
+	if req.Metadata == nil {
+		req.Metadata = map[string]interface{}{}
+	}
+	mutated := false
+	for _, key := range volcNativeRootFields {
+		v, present := raw[key]
+		if !present {
+			continue
+		}
+		if _, already := req.Metadata[key]; already {
+			// Metadata-set value wins so explicit `metadata.seed=2`
+			// overrides root `seed=1`.
+			continue
+		}
+		req.Metadata[key] = v
+		mutated = true
+	}
+	if mutated {
+		c.Set("task_request", req)
+	}
+	return nil
 }
 
 func inferAction(c *gin.Context) string {
@@ -281,12 +363,21 @@ func shouldAuditImages(metadata map[string]any) bool {
 // composite index, so identical images across replicas share one audit.
 func (a *TaskAdaptor) auditImageContent(c *gin.Context, info *relaycommon.RelayInfo, body *requestPayload) error {
 	ctx := c.Request.Context()
+	// Route audit to the right region. BytePlus海外 channels use a separate
+	// BytePlus Asset library (project / AK / SK / host); China Doubao
+	// channels stay on Volcano Ark. Asset URIs from one region are
+	// invalid on the other, so cross-region cache hits must be avoided —
+	// handled inside imageaudit.Submit via project-scoped cache lookup.
+	region := imageaudit.RegionCN
+	if info.ChannelType == constant.ChannelTypeBytePlusVideo {
+		region = imageaudit.RegionGlobal
+	}
 	for i := range body.Content {
 		item := &body.Content[i]
 		if item.Type != "image_url" || item.ImageURL == nil || item.ImageURL.URL == "" {
 			continue
 		}
-		audited, err := imageaudit.EnsureAudited(ctx, item.ImageURL.URL, info.UserId, info.TokenId)
+		audited, err := imageaudit.EnsureAudited(ctx, item.ImageURL.URL, info.UserId, info.TokenId, region)
 		if err != nil {
 			perImg := &imageaudit.PerImageAuditError{
 				Index:  i,

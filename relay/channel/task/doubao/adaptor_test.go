@@ -1,12 +1,31 @@
 package doubao
 
 import (
+	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+// newJSONContext builds a gin.Context with the given JSON body, suitable
+// for driving relay-layer parsers (UnmarshalBodyReusable, etc.) in tests.
+// Each test gets its own context — body is read multiple times by both
+// ValidateBasicTaskRequest and the fold helper, and gin handles the
+// buffering internally via UnmarshalBodyReusable.
+func newJSONContext(body string) *gin.Context {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request, _ = http.NewRequest(http.MethodPost, "/v1/video/generations",
+		bytes.NewBufferString(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	return c
+}
 
 // Top-level `duration` (int) and `resolution` (string) on the OpenAI Videos
 // request shape must reach the upstream Volcano Ark payload — otherwise the
@@ -211,4 +230,177 @@ func TestConvertToRequestPayloadKeepsSizeHandlingLimitedToCurrentBug(t *testing.
 			require.Equal(t, tt.wantRatio, body.Ratio)
 		})
 	}
+}
+
+// Volc Ark native root fields (seed, watermark, camera_fixed,
+// return_last_frame, ...) on an OpenAI-shape `/v1/videos` request body
+// must reach upstream. TaskSubmitReq doesn't declare them, so without
+// foldVolcRootFieldsIntoMetadata they're silently dropped during JSON
+// parse and the upstream substitutes its defaults — see
+// https://github.com/NekoAIKan/aikanhub/issues/63.
+func TestFoldVolcRootFieldsIntoMetadata(t *testing.T) {
+	cases := []struct {
+		name      string
+		body      string
+		wantKey   string
+		wantValue interface{} // matched with require.EqualValues
+	}{
+		{
+			name:      "seed",
+			body:      `{"model":"m","prompt":"p","seed":12345}`,
+			wantKey:   "seed",
+			wantValue: 12345,
+		},
+		{
+			name:      "watermark",
+			body:      `{"model":"m","prompt":"p","watermark":false}`,
+			wantKey:   "watermark",
+			wantValue: false,
+		},
+		{
+			name:      "camera_fixed",
+			body:      `{"model":"m","prompt":"p","camera_fixed":true}`,
+			wantKey:   "camera_fixed",
+			wantValue: true,
+		},
+		{
+			name:      "return_last_frame",
+			body:      `{"model":"m","prompt":"p","return_last_frame":true}`,
+			wantKey:   "return_last_frame",
+			wantValue: true,
+		},
+		{
+			name:      "callback_url",
+			body:      `{"model":"m","prompt":"p","callback_url":"https://example.com/cb"}`,
+			wantKey:   "callback_url",
+			wantValue: "https://example.com/cb",
+		},
+		{
+			name:      "service_tier",
+			body:      `{"model":"m","prompt":"p","service_tier":"priority"}`,
+			wantKey:   "service_tier",
+			wantValue: "priority",
+		},
+		{
+			name:      "execution_expires_after",
+			body:      `{"model":"m","prompt":"p","execution_expires_after":172800}`,
+			wantKey:   "execution_expires_after",
+			wantValue: 172800,
+		},
+		{
+			name:      "generate_audio",
+			body:      `{"model":"m","prompt":"p","generate_audio":true}`,
+			wantKey:   "generate_audio",
+			wantValue: true,
+		},
+		{
+			name:      "draft",
+			body:      `{"model":"m","prompt":"p","draft":true}`,
+			wantKey:   "draft",
+			wantValue: true,
+		},
+		{
+			name:      "frames",
+			body:      `{"model":"m","prompt":"p","frames":24}`,
+			wantKey:   "frames",
+			wantValue: 24,
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newJSONContext(tt.body)
+			// First seed the context with a parsed task request, the way
+			// ValidateBasicTaskRequest does in production. We can't call
+			// ValidateBasicTaskRequest directly here because it depends
+			// on info.Action and other RelayInfo state not relevant to
+			// the fold logic; mimicking its store call is sufficient.
+			var req relaycommon.TaskSubmitReq
+			require.NoError(t, common.UnmarshalBodyReusable(c, &req))
+			c.Set("task_request", req)
+
+			require.NoError(t, foldVolcRootFieldsIntoMetadata(c))
+
+			out, err := relaycommon.GetTaskRequest(c)
+			require.NoError(t, err)
+			require.NotNil(t, out.Metadata, "fold must allocate metadata when nil")
+			got, present := out.Metadata[tt.wantKey]
+			require.True(t, present, "key %q must be folded into metadata", tt.wantKey)
+			require.EqualValues(t, tt.wantValue, got)
+		})
+	}
+}
+
+// Metadata-set values take precedence over root-level for the same key.
+// Without this, a caller who explicitly placed `metadata.seed=2` would
+// see it silently overwritten by an inherited / cached `seed=1` at root.
+func TestFoldVolcRootFieldsIntoMetadata_MetadataWins(t *testing.T) {
+	body := `{
+		"model": "m",
+		"prompt": "p",
+		"seed": 1,
+		"watermark": false,
+		"metadata": { "seed": 2, "watermark": true }
+	}`
+	c := newJSONContext(body)
+	var req relaycommon.TaskSubmitReq
+	require.NoError(t, common.UnmarshalBodyReusable(c, &req))
+	c.Set("task_request", req)
+
+	require.NoError(t, foldVolcRootFieldsIntoMetadata(c))
+
+	out, err := relaycommon.GetTaskRequest(c)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, out.Metadata["seed"])
+	require.EqualValues(t, true, out.Metadata["watermark"])
+}
+
+// End-to-end: after fold, convertToRequestPayload must populate the
+// matching requestPayload field via UnmarshalMetadata. Drives every
+// supported field through the full pipeline so the fold + UnmarshalMetadata
+// + struct-tag wiring stay in sync.
+func TestConvertToRequestPayloadHonoursFoldedVolcRootFields(t *testing.T) {
+	body := `{
+		"model": "doubao-seedance-2-0-260128",
+		"prompt": "p",
+		"seed": 12345,
+		"watermark": false,
+		"camera_fixed": true,
+		"return_last_frame": true,
+		"service_tier": "priority",
+		"execution_expires_after": 172800,
+		"generate_audio": false,
+		"draft": true,
+		"frames": 24,
+		"tools": [{"type":"web_search"}]
+	}`
+	c := newJSONContext(body)
+	var req relaycommon.TaskSubmitReq
+	require.NoError(t, common.UnmarshalBodyReusable(c, &req))
+	c.Set("task_request", req)
+	require.NoError(t, foldVolcRootFieldsIntoMetadata(c))
+
+	out, err := relaycommon.GetTaskRequest(c)
+	require.NoError(t, err)
+	payload, err := (&TaskAdaptor{}).convertToRequestPayload(&out)
+	require.NoError(t, err)
+
+	require.NotNil(t, payload.Seed)
+	require.Equal(t, 12345, int(*payload.Seed))
+	require.NotNil(t, payload.Watermark)
+	require.Equal(t, false, bool(*payload.Watermark))
+	require.NotNil(t, payload.CameraFixed)
+	require.Equal(t, true, bool(*payload.CameraFixed))
+	require.NotNil(t, payload.ReturnLastFrame)
+	require.Equal(t, true, bool(*payload.ReturnLastFrame))
+	require.Equal(t, "priority", payload.ServiceTier)
+	require.NotNil(t, payload.ExecutionExpiresAfter)
+	require.Equal(t, 172800, int(*payload.ExecutionExpiresAfter))
+	require.NotNil(t, payload.GenerateAudio)
+	require.Equal(t, false, bool(*payload.GenerateAudio))
+	require.NotNil(t, payload.Draft)
+	require.Equal(t, true, bool(*payload.Draft))
+	require.NotNil(t, payload.Frames)
+	require.Equal(t, 24, int(*payload.Frames))
+	require.Len(t, payload.Tools, 1)
+	require.Equal(t, "web_search", payload.Tools[0].Type)
 }

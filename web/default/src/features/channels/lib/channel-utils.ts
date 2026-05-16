@@ -83,6 +83,7 @@ export function getChannelTypeIcon(type: number): string {
     36: 'Suno', // SunoAPI
     55: 'OpenAI', // Sora
     54: 'Doubao', // DoubaoVideo
+    59: 'Doubao', // BytePlusVideo (BytePlus is the overseas brand for Volcano Ark Seedance)
     56: 'Replicate', // Replicate
 
     // Tools & Platforms

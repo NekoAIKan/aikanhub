@@ -36,6 +36,11 @@ type imageAuditCreateRequest struct {
 	Image  string   `json:"image"`
 	Images []string `json:"images,omitempty"`
 	Wait   bool     `json:"wait,omitempty"`
+	// Region routes to the right ARK backend. Accepts "cn" (Volcano Ark,
+	// default) or "global"/"byteplus" (BytePlus ModelArk overseas). The
+	// CN and overseas asset stores are independent — an asset audited in
+	// one region cannot be referenced from a video task on the other.
+	Region string `json:"region,omitempty"`
 }
 
 func (r *imageAuditCreateRequest) imageSource() string {
@@ -104,7 +109,7 @@ func CreateImageAudit(c *gin.Context) {
 		return
 	}
 
-	rec, err := imageaudit.Submit(c.Request.Context(), src, userID, tokenID)
+	rec, err := imageaudit.Submit(c.Request.Context(), src, userID, tokenID, req.Region)
 	if err != nil {
 		imageAuditError(c, http.StatusBadGateway, "image_audit_error", err.Error(), nil)
 		return

@@ -45,6 +45,14 @@ services:
       - ARK_ASSETS_GROUP_ID=${ARK_ASSETS_GROUP_ID:-}
       - ARK_ASSETS_POLL_INTERVAL=${ARK_ASSETS_POLL_INTERVAL:-3}
       - ARK_ASSETS_POLL_TIMEOUT=${ARK_ASSETS_POLL_TIMEOUT:-300}
+      # BytePlus 海外 ARK Assets（seedance-2.0-global / -fast-global 渠道 audit_image 用）
+      - ARK_AK_GLOBAL=${ARK_AK_GLOBAL:-}
+      - ARK_SK_GLOBAL=${ARK_SK_GLOBAL:-}
+      - ARK_ASSETS_PROJECT_GLOBAL=${ARK_ASSETS_PROJECT_GLOBAL:-default}
+      - ARK_ASSETS_GROUP_NAME_GLOBAL=${ARK_ASSETS_GROUP_NAME_GLOBAL:-aikanhub-audit}
+      - ARK_ASSETS_GROUP_ID_GLOBAL=${ARK_ASSETS_GROUP_ID_GLOBAL:-}
+      - ARK_HOST_GLOBAL=${ARK_HOST_GLOBAL:-ark.ap-southeast-1.byteplusapi.com}
+      - ARK_REGION_GLOBAL=${ARK_REGION_GLOBAL:-ap-southeast-1}
       - COS_BUCKET=${COS_BUCKET:-}
       - COS_REGION=${COS_REGION:-ap-shanghai}
       - COS_SECRET_ID=${COS_SECRET_ID:-}
