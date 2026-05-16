@@ -323,8 +323,9 @@ When adding a new channel `constant.ChannelTypeXxx`:
 1. Add it to the appropriate `case` in `GetEndpointTypesByChannelType` (e.g. video task channels join the same case clause as `ChannelTypeSora` / `ChannelTypeDoubaoVideo`).
 2. If it's a video task channel, also confirm `pkg/billingexpr` / `setting/video_billing_setting` etc. handle the model id naturally (no per-vendor enum to extend).
 3. Manually verify on `/pricing`: the model's badge shows `Video` (not `Chat`), the endpoint type column shows `openai-video`, the sidebar `视频 N` count includes it.
+4. **Register the channel's `ModelList` in `controller/model.go::init()`.** Task-only channels are reached via `GetTaskAdaptor`, not `GetAdaptor`, so the `APIType` loop in `init()` never picks up their model lists. You must add two explicit lines next to the `taskpixverse` block: one appending to `openAIModels` (with `OwnedBy: taskXxx.ChannelName`), one setting `channelId2Models[constant.ChannelTypeXxx] = taskXxx.ModelList`. Skipping this means `/api/channel/models` omits the models, so the channel-create form's "Fill Related Models" button and custom-model autocomplete never suggest them — the operator has to know the exact model id and paste it blind. (Routing still works if pasted manually; this is purely the suggestion/discovery surface. Pixverse, Doubao, and BytePlus all hit this — only Pixverse was registered until BytePlus exposed the gap.)
 
-Skipping step 1 caught us once; the symptoms surface in the user-facing pricing page rather than the API path so it's easy to miss until a customer asks.
+Skipping step 1 caught us once; the symptoms surface in the user-facing pricing page rather than the API path so it's easy to miss until a customer asks. Step 4 caught us again with BytePlus — the symptom is "model missing from the channel-form dropdown" reported by an operator configuring production.
 
 ### Rule 22: One USD-to-local rate — `USDExchangeRate` is the single source of truth
 
