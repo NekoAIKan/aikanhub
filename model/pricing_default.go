@@ -63,7 +63,11 @@ var defaultVendorIcons = map[string]string{
 	"快手":         "Kling.Color",
 	"即梦":         "Jimeng.Color",
 	"Vidu":       "Vidu",
-	"Pixverse":   "Pixverse",
+	// Lobe icon id is PixVerse (capital V) + the .Color colored variant —
+	// the bare "Pixverse" string doesn't resolve and silently falls back
+	// to a one-letter avatar on /pricing. Mirrors the "字节跳动" →
+	// "Doubao.Color" convention above. See CLAUDE.md Rule 24.
+	"Pixverse":   "PixVerse.Color",
 	"微软":         "AzureAI",
 	"Microsoft":  "AzureAI",
 	"Azure":      "AzureAI",
