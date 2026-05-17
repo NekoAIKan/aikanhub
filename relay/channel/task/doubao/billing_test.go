@@ -255,6 +255,20 @@ func TestExtractRequestBillingInputKeepsPlainPrechargeLegacyValues(t *testing.T)
 	require.Equal(t, 151875, service.CalculateVideoBilling(testProfile(), plain1080, true).Quota)
 }
 
+// Adaptive duration (-1) must NOT poison billing as a negative number:
+// the pre-charge estimate should treat it as "unknown" (OutputSeconds 0,
+// upstream-default falls back at CalculateVideoBilling), and settlement
+// later uses the real duration from the response. See #68.
+func TestExtractRequestBillingInputAdaptiveDurationNotNegative(t *testing.T) {
+	got := ExtractRequestBillingInput(relaycommon.TaskSubmitReq{
+		Duration: -1,
+		Metadata: map[string]any{"resolution": "720p"},
+	}, testProfile(), 1)
+	require.Equal(t, 0, got.OutputSeconds, "adaptive -1 must not flow through as a negative duration")
+	require.GreaterOrEqual(t, service.CalculateVideoBilling(testProfile(), got, true).Quota, 0,
+		"pre-charge quota must never be negative for adaptive duration")
+}
+
 func TestExtractResponseBillingInput(t *testing.T) {
 	body := []byte(`{
 		"id": "task-upstream",
