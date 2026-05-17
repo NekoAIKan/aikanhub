@@ -527,9 +527,18 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 		}
 	}
 	if r.Duration == nil {
-		if req.Duration > 0 {
+		// Forward any non-zero duration as-is, INCLUDING the documented
+		// `-1` "智能时长 / let the model decide the total duration"
+		// sentinel. The old `> 0` guard silently swallowed `-1`, so the
+		// top-level (OpenAI-shape) entry never sent it upstream and Volc
+		// fell back to its fixed default duration — adaptive duration
+		// appeared to "not be attached". 0 still means "unset" (omit,
+		// upstream default). Numeric or string ("-1"/"5") both work
+		// because TaskSubmitReq.UnmarshalJSON already normalised them.
+		// See https://github.com/NekoAIKan/aikanhub/issues/68.
+		if req.Duration != 0 {
 			r.Duration = lo.ToPtr(dto.IntValue(req.Duration))
-		} else if sec, _ := strconv.Atoi(req.Seconds); sec > 0 {
+		} else if sec, err := strconv.Atoi(strings.TrimSpace(req.Seconds)); err == nil && sec != 0 {
 			r.Duration = lo.ToPtr(dto.IntValue(sec))
 		}
 	}

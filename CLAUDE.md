@@ -419,3 +419,19 @@ The standing pattern is `foldVolcRootFieldsIntoMetadata` in the Doubao adaptor:
 **Tests.** Every folded field needs a unit case (raw body → after-fold metadata value matches), plus one end-to-end that drives the full `fold → UnmarshalMetadata → requestPayload` chain so the struct-tag wiring stays in sync. See `relay/channel/task/doubao/adaptor_test.go::TestFoldVolcRootFieldsIntoMetadata` for the canonical template.
 
 Sibling adaptors (Kling, Jimeng, Pixverse, Hailuo, Vidu) likely have the same root-drop bug for their respective vendor fields — see #64 for the audit plan.
+
+<!-- Rule 28 is reserved for PR #67 (request-audit invariants); numbered 29 here to avoid a duplicate-number collision while both PRs are in flight. -->
+
+### Rule 29: Audit for guard/type-narrowing of *documented sentinel values*, not just missing fields
+
+#60/#63/#27 were "field absent from `TaskSubmitReq` → dropped." There is a second, distinct drop class that a missing-field sweep will not catch and #68 proved costs real customer money: **a declared field whose Go type or a passthrough guard cannot represent a value the docs explicitly tell customers to send.** #68: docs say `duration:-1` = 智能时长 (let the model decide); `convertToRequestPayload`'s `req.Duration > 0` guard silently discarded `-1`, so the top-level entry never sent it and Volc used a fixed default. The field existed, the type (`int`) could hold `-1` — a `> 0` guard threw it away.
+
+When touching any request param, audit the **whole expressible range against the docs**, not just presence:
+
+1. Open the user-facing doc row for the param (`web/default/src/features/docs/index.tsx`) and list every documented value, including sentinels (`-1`, `"adaptive"`, `0`, `"auto"`, empty-string-means-X).
+2. For each, trace it through *every* entry path: top-level OpenAI-shape, `metadata.*`, and the Volc-native `/api/v3/...` fold. The bug is usually in only one path (#68 was top-level-only; metadata + native were fine).
+3. Check both the Go type (`int` can't hold `"adaptive"`; `*dto.IntValue` errors on non-numeric strings) AND every `> 0` / `!= ""` / `> 0 && ...` guard between parse and upstream marshal. A positivity guard on a field whose docs define a negative sentinel is the canonical trap.
+4. Don't "fix" by overhauling the type when the doc contract is already the simpler form — verify what the docs/vendor actually accept first (#68 looked like it needed a string-or-int type; the real contract was plain int `-1` and the fix was one guard char `>`→`!=`).
+5. Billing safety: a negative/sentinel duration must never flow into a `w*h*fps*duration` formula as a negative — confirm `firstPositiveInt`-style guards neutralise it for the pre-charge and that settlement uses the upstream's returned real value.
+
+Tests must cover the sentinel on each entry path plus the numeric/normal regression and the billing-not-negative property. See `relay/channel/task/doubao/adaptor_test.go::TestConvertToRequestPayloadForwardsAdaptiveDurationSentinel`.

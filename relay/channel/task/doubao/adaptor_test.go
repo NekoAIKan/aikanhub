@@ -90,6 +90,67 @@ func TestConvertToRequestPayloadHonoursTopLevelDurationAndResolution(t *testing.
 	})
 }
 
+// 智能时长: the documented `duration:-1` "let the model decide" sentinel
+// must reach upstream. The old `> 0` guard in convertToRequestPayload
+// swallowed it on the top-level (OpenAI-shape) entry, so Volc fell back
+// to its fixed default and adaptive duration silently didn't work.
+// See https://github.com/NekoAIKan/aikanhub/issues/68.
+func TestConvertToRequestPayloadForwardsAdaptiveDurationSentinel(t *testing.T) {
+	a := &TaskAdaptor{}
+
+	t.Run("top-level duration -1 (int) reaches upstream", func(t *testing.T) {
+		req := &relaycommon.TaskSubmitReq{Model: "m", Prompt: "p", Duration: -1}
+		body, err := a.convertToRequestPayload(req)
+		require.NoError(t, err)
+		require.NotNil(t, body.Duration, "adaptive -1 must not be dropped")
+		require.Equal(t, -1, int(*body.Duration))
+	})
+
+	t.Run("top-level duration \"-1\" (string) reaches upstream", func(t *testing.T) {
+		var req relaycommon.TaskSubmitReq
+		require.NoError(t, common.Unmarshal(
+			[]byte(`{"model":"m","prompt":"p","duration":"-1"}`), &req))
+		body, err := a.convertToRequestPayload(&req)
+		require.NoError(t, err)
+		require.NotNil(t, body.Duration)
+		require.Equal(t, -1, int(*body.Duration))
+	})
+
+	t.Run("positive duration still works (no regression)", func(t *testing.T) {
+		req := &relaycommon.TaskSubmitReq{Model: "m", Prompt: "p", Duration: 8}
+		body, err := a.convertToRequestPayload(req)
+		require.NoError(t, err)
+		require.NotNil(t, body.Duration)
+		require.Equal(t, 8, int(*body.Duration))
+	})
+
+	t.Run("duration 0 / unset is still omitted (upstream default)", func(t *testing.T) {
+		req := &relaycommon.TaskSubmitReq{Model: "m", Prompt: "p", Duration: 0}
+		body, err := a.convertToRequestPayload(req)
+		require.NoError(t, err)
+		require.Nil(t, body.Duration)
+	})
+
+	t.Run("seconds=\"-1\" fallback also forwards the sentinel", func(t *testing.T) {
+		req := &relaycommon.TaskSubmitReq{Model: "m", Prompt: "p", Seconds: "-1"}
+		body, err := a.convertToRequestPayload(req)
+		require.NoError(t, err)
+		require.NotNil(t, body.Duration)
+		require.Equal(t, -1, int(*body.Duration))
+	})
+
+	t.Run("metadata duration -1 path keeps working", func(t *testing.T) {
+		req := &relaycommon.TaskSubmitReq{
+			Model: "m", Prompt: "p",
+			Metadata: map[string]any{"duration": -1},
+		}
+		body, err := a.convertToRequestPayload(req)
+		require.NoError(t, err)
+		require.NotNil(t, body.Duration)
+		require.Equal(t, -1, int(*body.Duration))
+	})
+}
+
 // Top-level `ratio` must reach upstream Volcano Ark; otherwise the API
 // silently picks "auto" and the caller's aspect ratio is discarded. See
 // https://github.com/NekoAIKan/aikanhub/issues/60.
