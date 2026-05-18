@@ -33,6 +33,23 @@ import (
 
 const cosUploadTimeout = 120 * time.Second
 
+// COSConfigured reports whether Tencent COS credentials are present in the
+// process env. Exported so other subsystems (e.g. service/auditlog) can
+// decide whether to attempt an upload before falling back to inline/disk.
+func COSConfigured() bool {
+	return Load().HasCOS()
+}
+
+// PutObject uploads body under objectKey to the same COS bucket the image
+// audit pipeline uses, returning the object's public URL. This is a thin
+// exported wrapper over the package-internal uploadToCOS so other
+// subsystems can reuse the (manually-signed, SDK-free) COS client without
+// duplicating the V5 signing logic or destabilising the audit upload path.
+// Credentials come from the shared COS_* env via Load().
+func PutObject(ctx context.Context, objectKey string, body []byte, contentType string) (string, error) {
+	return uploadToCOS(ctx, Load(), objectKey, body, contentType)
+}
+
 // uploadToCOS PUTs a single object and returns its public URL.
 //
 // objectKey must NOT start with a leading slash; the implementation adds one.

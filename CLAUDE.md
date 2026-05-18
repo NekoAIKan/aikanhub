@@ -435,3 +435,19 @@ When touching any request param, audit the **whole expressible range against the
 5. Billing safety: a negative/sentinel duration must never flow into a `w*h*fps*duration` formula as a negative — confirm `firstPositiveInt`-style guards neutralise it for the pre-charge and that settlement uses the upstream's returned real value.
 
 Tests must cover the sentinel on each entry path plus the numeric/normal regression and the billing-not-negative property. See `relay/channel/task/doubao/adaptor_test.go::TestConvertToRequestPayloadForwardsAdaptiveDurationSentinel`.
+
+### Rule 30: Request-audit subsystem invariants — file-based, don't re-break these
+
+`middleware/audit_log.go` + `service/auditlog` (PR #67) persist every request's body/response/lifecycle. **Storage is local files, NOT the DB** (deliberate: keeps the hot path off Neon, off per-request object storage, off migration). Architecture: capture → non-blocking `Submit` → single writer goroutine appends one redacted JSON line to the active file under `<log-dir>/request-audit/` → on size (`RotateMaxBytes`) or age (`RotateIntervalMinutes`) the file is sealed (`*.jsonl.sealed`) and a fresh active file opened → an archive goroutine uploads each sealed file to COS as **one object** (never one per request) and deletes the local copy only after the upload is confirmed → retention GCs sealed files per policy.
+
+Invariants a future change can silently break:
+
+1. **Never reintroduce a DB table or a per-request COS PUT.** The whole point of the rework was to remove both. One COS object = one rotated file. If you find yourself adding `model.RequestAuditLog` or calling `imageaudit.PutObject` from the request/Submit path, stop.
+2. **Streaming passthrough first, tee second.** The response writer must write each chunk to the embedded `gin.ResponseWriter` before copying any of it, and cap what it buffers (`MaxBodyBytes`; first-chunk only for SSE). A buffer-whole-then-forward wrapper applied globally breaks every SSE/chat stream.
+3. **Never block the request path.** `Submit` is non-blocking; queue-full drops with a counter (the file is the durable store, the queue is just handoff). Don't add a synchronous file/COS call into the request goroutine.
+4. **Single writer owns `cur*`.** Only the writer goroutine touches the active file handle / `curBytes` / rotation. Don't add a second writer or a lock-free concurrent appender.
+5. **Durability beats disk.** A sealed file is deleted locally only after a confirmed COS upload. When `ArchiveToCOS` is true, retention must not GC a still-present (= un-archived) sealed file. COS-down keeps files local and retries — never silently discards.
+6. **Redact before the line is written, keep redacted JSON parseable.** Secrets masked pre-render; redactor returns valid JSON for JSON input.
+7. **A param dropped before it is logged is unrecoverable.** This subsystem is the standing forensic/refund answer; don't add drop-before-observe parse paths that bypass it (ties to Rule 29).
+
+Tests: `service/auditlog` (capBody bound, prepareBodies redact+clear, pre-init no-op), `middleware` (streaming passthrough + bounded tee, disabled no-op, skip-prefix). No DB fixtures — there is no DB.

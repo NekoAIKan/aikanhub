@@ -515,7 +515,12 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		}
 	}
 
+	// Lifecycle marks for the request-audit timeline. No-ops unless audit
+	// logging is enabled and a trace is attached (common.TraceMark guards
+	// internally), so this stays free on the hot path.
+	common2.TraceMark(c, "upstream_sent")
 	resp, err := client.Do(req)
+	common2.TraceMark(c, "upstream_done")
 	if err != nil {
 		logger.LogError(c, "do request failed: "+err.Error())
 		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithHideErrMsg("upstream error: do request failed"))

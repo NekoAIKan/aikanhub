@@ -22,6 +22,7 @@ import (
 	"github.com/QuantumNous/new-api/relay"
 	"github.com/QuantumNous/new-api/router"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/auditlog"
 	_ "github.com/QuantumNous/new-api/setting/performance_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
@@ -165,6 +166,11 @@ func main() {
 	// This will cause SSE not to work!!!
 	//server.Use(gzip.Gzip(gzip.DefaultCompression))
 	server.Use(middleware.RequestId())
+	// AuditLog must sit right after RequestId so it sees every route and can
+	// read the request id. It is a hard no-op when audit_setting.Enabled is
+	// false (returns before wrapping the writer), so the cost is one map
+	// lookup per request when disabled.
+	server.Use(middleware.AuditLog())
 	server.Use(middleware.PoweredBy())
 	server.Use(middleware.I18n())
 	middleware.SetUpLogger(server)
@@ -289,6 +295,12 @@ func InitResources() error {
 	if err != nil {
 		return err
 	}
+
+	// Start the async request-audit writer. Safe to start unconditionally:
+	// it idles until audit_setting.Enabled and persists to LOG_DB (ready
+	// above). Workers read settings live, so an operator toggle takes
+	// effect without a restart.
+	auditlog.Init()
 
 	// Initialize Redis
 	err = common.InitRedisClient()
