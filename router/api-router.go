@@ -61,6 +61,20 @@ func SetApiRouter(router *gin.Engine) {
 		// Universal secure verification routes
 		apiRouter.POST("/verify", middleware.UserAuth(), middleware.CriticalRateLimit(), controller.UniversalVerify)
 
+		studioRoute := apiRouter.Group("/studio")
+		{
+			studioRoute.GET("/session", middleware.SessionOnlyAuth(), controller.StudioSession)
+			studioVideoRoute := studioRoute.Group("/video")
+			studioVideoRoute.Use(middleware.UserAuth(), middleware.StudioTokenAuth())
+			{
+				studioVideoRoute.GET("/models", controller.StudioVideoModels)
+				studioSubmitRoute := studioVideoRoute.Group("")
+				studioSubmitRoute.Use(controller.SetStudioVideoSubmitRelayMode, middleware.Distribute())
+				studioSubmitRoute.POST("/generations", controller.RelayTask)
+				studioVideoRoute.GET("/generations/:task_id", controller.SetStudioVideoFetchRelayMode, controller.StudioVideoGenerationFetch)
+			}
+		}
+
 		userRoute := apiRouter.Group("/user")
 		{
 			userRoute.POST("/register", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.Register)

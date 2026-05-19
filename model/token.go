@@ -11,6 +11,10 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	TokenSourceStudio = "studio"
+)
+
 type Token struct {
 	Id                 int            `json:"id"`
 	UserId             int            `json:"user_id" gorm:"index"`
@@ -28,6 +32,9 @@ type Token struct {
 	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
 	Group              string         `json:"group" gorm:"default:''"`
 	CrossGroupRetry    bool           `json:"cross_group_retry"` // 跨分组重试，仅auto分组有效
+	Source             string         `json:"source" gorm:"type:varchar(32);default:''"`
+	PublicApiEnabled   bool           `json:"public_api_enabled" gorm:"default:true"`
+	ManagedBySystem    bool           `json:"managed_by_system" gorm:"default:false"`
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
 }
 
@@ -56,6 +63,10 @@ func (token *Token) GetMaskedKey() string {
 	return MaskTokenKey(token.Key)
 }
 
+func (token *Token) IsStudioManaged() bool {
+	return token != nil && token.Source == TokenSourceStudio && token.ManagedBySystem
+}
+
 func (token *Token) GetIpLimits() []string {
 	// delete empty spaces
 	//split with \n
@@ -81,7 +92,7 @@ func (token *Token) GetIpLimits() []string {
 func GetAllUserTokens(userId int, startIdx int, num int) ([]*Token, error) {
 	var tokens []*Token
 	var err error
-	err = DB.Where("user_id = ?", userId).Order("id desc").Limit(num).Offset(startIdx).Find(&tokens).Error
+	err = DB.Where("user_id = ? AND managed_by_system = ?", userId, false).Order("id desc").Limit(num).Offset(startIdx).Find(&tokens).Error
 	return tokens, err
 }
 
@@ -151,7 +162,7 @@ func SearchUserTokens(userId int, keyword string, token string, offset int, limi
 		}
 	}
 
-	baseQuery := DB.Model(&Token{}).Where("user_id = ?", userId)
+	baseQuery := DB.Model(&Token{}).Where("user_id = ? AND managed_by_system = ?", userId, false)
 
 	// 非空才加 LIKE 条件，空则跳过（不过滤该字段）
 	if keyword != "" {
@@ -295,7 +306,8 @@ func (token *Token) Update() (err error) {
 		}
 	}()
 	err = DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
-		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry").Updates(token).Error
+		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry",
+		"source", "public_api_enabled", "managed_by_system").Updates(token).Error
 	return err
 }
 
@@ -435,7 +447,7 @@ func decreaseTokenQuota(id int, quota int) (err error) {
 // CountUserTokens returns total number of tokens for the given user, used for pagination
 func CountUserTokens(userId int) (int64, error) {
 	var total int64
-	err := DB.Model(&Token{}).Where("user_id = ?", userId).Count(&total).Error
+	err := DB.Model(&Token{}).Where("user_id = ? AND managed_by_system = ?", userId, false).Count(&total).Error
 	return total, err
 }
 

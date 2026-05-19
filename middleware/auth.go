@@ -167,6 +167,48 @@ func TryUserAuth() func(c *gin.Context) {
 	}
 }
 
+func SessionOnlyAuth() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		session := sessions.Default(c)
+		id, ok := session.Get("id").(int)
+		if !ok || id <= 0 {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgAuthNotLoggedIn),
+			})
+			c.Abort()
+			return
+		}
+		status, ok := session.Get("status").(int)
+		if !ok || status == common.UserStatusDisabled {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgAuthUserBanned),
+			})
+			c.Abort()
+			return
+		}
+		userCache, err := model.GetUserCache(id)
+		if err != nil {
+			common.SysLog(fmt.Sprintf("SessionOnlyAuth GetUserCache error for user %d: %v", id, err))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
+			})
+			c.Abort()
+			return
+		}
+		userCache.WriteContext(c)
+		c.Set("id", id)
+		c.Set("username", session.Get("username"))
+		c.Set("role", session.Get("role"))
+		c.Set("status", status)
+		c.Set("group", userCache.Group)
+		c.Set("user_group", userCache.Group)
+		c.Next()
+	}
+}
+
 func UserAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		authHelper(c, common.RoleCommonUser)
@@ -182,6 +224,43 @@ func AdminAuth() func(c *gin.Context) {
 func RootAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		authHelper(c, common.RoleRootUser)
+	}
+}
+
+func StudioTokenAuth() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		userID := c.GetInt("id")
+		userCache, err := model.GetUserCache(userID)
+		if err != nil {
+			common.SysLog(fmt.Sprintf("StudioTokenAuth GetUserCache error for user %d: %v", userID, err))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
+			})
+			c.Abort()
+			return
+		}
+		userCache.WriteContext(c)
+		token, err := service.GetOrCreateStudioToken(userID, userCache.Group)
+		if err != nil {
+			common.SysLog(fmt.Sprintf("StudioTokenAuth GetOrCreateStudioToken error for user %d: %v", userID, err))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
+			})
+			c.Abort()
+			return
+		}
+		if err := SetupContextForToken(c, token); err != nil {
+			abortWithOpenAiMessage(c, http.StatusInternalServerError, common.TranslateMessage(c, i18n.MsgDatabaseError))
+			return
+		}
+		usingGroup := token.Group
+		if usingGroup == "" {
+			usingGroup = userCache.Group
+		}
+		common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
+		c.Next()
 	}
 }
 
@@ -243,6 +322,14 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 					"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
 				})
 			}
+			c.Abort()
+			return
+		}
+		if token.IsStudioManaged() && !token.PublicApiEnabled {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgTokenInvalid),
+			})
 			c.Abort()
 			return
 		}
@@ -345,6 +432,10 @@ func TokenAuth() func(c *gin.Context) {
 				abortWithOpenAiMessage(c, http.StatusUnauthorized,
 					common.TranslateMessage(c, i18n.MsgTokenInvalid))
 			}
+			return
+		}
+		if token.IsStudioManaged() && !token.PublicApiEnabled {
+			abortWithOpenAiMessage(c, http.StatusUnauthorized, common.TranslateMessage(c, i18n.MsgTokenInvalid))
 			return
 		}
 

@@ -89,6 +89,10 @@ func GetTokenKey(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	if token.IsStudioManaged() {
+		common.ApiError(c, fmt.Errorf("studio managed token secret is not available"))
+		return
+	}
 	common.ApiSuccess(c, gin.H{
 		"key": token.GetFullKey(),
 	})
@@ -236,7 +240,16 @@ func AddToken(c *gin.Context) {
 func DeleteToken(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	userId := c.GetInt("id")
-	err := model.DeleteTokenById(id, userId)
+	token, err := model.GetTokenByIds(id, userId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if token.IsStudioManaged() {
+		common.ApiError(c, fmt.Errorf("studio managed token cannot be deleted"))
+		return
+	}
+	err = model.DeleteTokenById(id, userId)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -274,6 +287,10 @@ func UpdateToken(c *gin.Context) {
 	cleanToken, err := model.GetTokenByIds(token.Id, userId)
 	if err != nil {
 		common.ApiError(c, err)
+		return
+	}
+	if cleanToken.IsStudioManaged() {
+		common.ApiError(c, fmt.Errorf("studio managed token cannot be edited"))
 		return
 	}
 	if token.Status == common.TokenStatusEnabled {
