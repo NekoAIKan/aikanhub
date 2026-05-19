@@ -33,7 +33,64 @@ func validUserInfo(username string, role int) bool {
 	return true
 }
 
+func studioAuthBypassEnabled() bool {
+	return common.DebugEnabled && common.GetEnvOrDefaultBool("STUDIO_AUTH_BYPASS", false)
+}
+
+func isStudioAuthBypassPath(c *gin.Context) bool {
+	path := c.Request.URL.Path
+	return strings.HasPrefix(path, "/api/studio/") || strings.HasPrefix(path, "/v1/videos/")
+}
+
+func applyStudioAuthBypass(c *gin.Context, minRole int) bool {
+	if !studioAuthBypassEnabled() || !isStudioAuthBypassPath(c) {
+		return false
+	}
+	userID := common.GetEnvOrDefault("STUDIO_AUTH_BYPASS_USER_ID", 1)
+	userCache, err := model.GetUserCache(userID)
+	if err != nil {
+		common.SysLog(fmt.Sprintf("Studio auth bypass GetUserCache error for user %d: %v", userID, err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Studio auth bypass user not found",
+		})
+		c.Abort()
+		return true
+	}
+	if userCache.Status == common.UserStatusDisabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgAuthUserBanned),
+		})
+		c.Abort()
+		return true
+	}
+	role := common.RoleCommonUser
+	if role < minRole {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgAuthInsufficientPrivilege),
+		})
+		c.Abort()
+		return true
+	}
+	userCache.WriteContext(c)
+	c.Header("Auth-Version", "864b7076dbcd0a3c01b5520316720ebf")
+	c.Set("username", userCache.Username)
+	c.Set("role", role)
+	c.Set("id", userID)
+	c.Set("group", userCache.Group)
+	c.Set("user_group", userCache.Group)
+	c.Set("status", userCache.Status)
+	c.Set("use_access_token", false)
+	c.Next()
+	return true
+}
+
 func authHelper(c *gin.Context, minRole int) {
+	if applyStudioAuthBypass(c, minRole) {
+		return
+	}
 	session := sessions.Default(c)
 	username := session.Get("username")
 	role := session.Get("role")
@@ -169,6 +226,9 @@ func TryUserAuth() func(c *gin.Context) {
 
 func SessionOnlyAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
+		if applyStudioAuthBypass(c, common.RoleCommonUser) {
+			return
+		}
 		session := sessions.Default(c)
 		id, ok := session.Get("id").(int)
 		if !ok || id <= 0 {
@@ -272,6 +332,9 @@ func WssAuth(c *gin.Context) {
 // Used for endpoints that need to be accessible from both the dashboard and API clients.
 func TokenOrUserAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
+		if applyStudioAuthBypass(c, common.RoleCommonUser) {
+			return
+		}
 		// Try session auth first (dashboard users)
 		session := sessions.Default(c)
 		if id := session.Get("id"); id != nil {
