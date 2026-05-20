@@ -32,14 +32,14 @@ export function PublicNavigation({
   return (
     <nav className={cn('hidden items-center gap-1 md:flex', className)}>
       {links.map((link, index) => {
-        // Handle external links
-        if (link.external) {
+        // Handle external links and route-owned apps that need a document load.
+        if (link.external || link.reloadDocument) {
           return (
             <a
               key={index}
               href={link.href}
-              target='_blank'
-              rel='noopener noreferrer'
+              target={link.external ? '_blank' : undefined}
+              rel={link.external ? 'noopener noreferrer' : undefined}
               className={cn(
                 'text-muted-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground inline-flex h-9 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors focus:outline-none',
                 link.disabled && 'pointer-events-none opacity-50'

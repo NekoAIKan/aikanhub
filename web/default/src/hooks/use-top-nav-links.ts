@@ -8,12 +8,14 @@ export type TopNavLink = {
   href: string
   disabled?: boolean
   external?: boolean
+  reloadDocument?: boolean
 }
 
 // Default navigation configuration
 const DEFAULT_HEADER_NAV_MODULES = {
   home: true,
   services: true,
+  studio: { enabled: true, requireAuth: true },
   console: true,
   pricing: { enabled: true, requireAuth: false },
   docs: true,
@@ -26,6 +28,7 @@ const DEFAULT_HEADER_NAV_MODULES = {
  * {
  *   home: true,
  *   services: true,
+ *   studio: { enabled: true, requireAuth: true },
  *   console: true,
  *   pricing: { enabled: true, requireAuth: false },
  *   docs: true,
@@ -74,6 +77,21 @@ export function useTopNavLinks(): TopNavLink[] {
       title: t('Services'),
       href: '/services/video-generation',
     })
+  }
+
+  // Studio is a separate app served by the edge/router, so force a document load.
+  const studio = modules?.studio
+  const studioHref =
+    studio && typeof studio === 'object' && typeof studio.href === 'string'
+      ? studio.href
+      : '/studio/'
+  if (
+    isAuthed &&
+    (studio === undefined ||
+      studio === true ||
+      (studio && typeof studio === 'object' && studio.enabled))
+  ) {
+    links.push({ title: t('Studio'), href: studioHref, reloadDocument: true })
   }
 
   // Console -> /dashboard (new console path)

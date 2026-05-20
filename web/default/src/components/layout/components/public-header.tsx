@@ -125,13 +125,13 @@ export function PublicHeader(props: PublicHeaderProps) {
             <div className='hidden items-center gap-0.5 sm:flex'>
               {links.map((link, i) => {
                 const isActive = pathname === link.href
-                if (link.external) {
+                if (link.external || link.reloadDocument) {
                   return (
                     <a
                       key={i}
                       href={link.href}
-                      target='_blank'
-                      rel='noopener noreferrer'
+                      target={link.external ? '_blank' : undefined}
+                      rel={link.external ? 'noopener noreferrer' : undefined}
                       className='text-muted-foreground hover:text-foreground rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-200'
                     >
                       {t(link.title)}
@@ -239,6 +239,29 @@ export function PublicHeader(props: PublicHeaderProps) {
           <nav className='flex flex-col gap-1'>
             {links.map((link, i) => {
               const isActive = pathname === link.href
+              if (link.external || link.reloadDocument) {
+                return (
+                  <a
+                    key={i}
+                    href={link.href}
+                    target={link.external ? '_blank' : undefined}
+                    rel={link.external ? 'noopener noreferrer' : undefined}
+                    onClick={() => setMobileOpen(false)}
+                    className={cn(
+                      'flex items-center gap-3 py-3 text-base font-medium tracking-tight transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]',
+                      mobileOpen
+                        ? 'translate-y-0 opacity-100'
+                        : 'translate-y-4 opacity-0',
+                      isActive ? 'text-foreground' : 'text-muted-foreground'
+                    )}
+                    style={{
+                      transitionDelay: mobileOpen ? `${100 + i * 50}ms` : '0ms',
+                    }}
+                  >
+                    {t(link.title)}
+                  </a>
+                )
+              }
               return (
                 <Link
                   key={i}

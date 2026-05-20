@@ -57,3 +57,5 @@ web/default/tests/fixtures/**/final.raw.json
 # Keep PR-local frontend helpers visible even when a global ignore has lib/.
 !web/default/src/lib/
 !web/default/src/lib/billing-visibility.ts
+
+.worktree

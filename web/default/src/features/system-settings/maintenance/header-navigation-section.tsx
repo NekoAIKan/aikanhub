@@ -24,6 +24,7 @@ import {
 
 const headerNavSchema = z.object({
   home: z.boolean(),
+  studio: z.boolean(),
   console: z.boolean(),
   pricingEnabled: z.boolean(),
   pricingRequireAuth: z.boolean(),
@@ -41,6 +42,10 @@ type HeaderNavigationSectionProps = {
 const toFormValues = (config: HeaderNavModulesConfig): HeaderNavFormValues => ({
   home:
     config.home === undefined ? HEADER_NAV_DEFAULT.home : Boolean(config.home),
+  studio:
+    config.studio?.enabled === undefined
+      ? HEADER_NAV_DEFAULT.studio.enabled
+      : Boolean(config.studio.enabled),
   console:
     config.console === undefined
       ? HEADER_NAV_DEFAULT.console
@@ -82,6 +87,12 @@ export function HeaderNavigationSection({
     const payload: HeaderNavModulesConfig = {
       ...config,
       home: values.home,
+      studio: {
+        ...(config.studio ?? HEADER_NAV_DEFAULT.studio),
+        enabled: values.studio,
+        requireAuth: true,
+        href: config.studio?.href ?? HEADER_NAV_DEFAULT.studio.href,
+      },
       console: values.console,
       docs: values.docs,
       about: values.about,
@@ -116,6 +127,11 @@ export function HeaderNavigationSection({
       key: 'home',
       title: t('Home'),
       description: t('Landing page with system overview.'),
+    },
+    {
+      key: 'studio',
+      title: t('Studio'),
+      description: t('Creator workspace served as a separate app.'),
     },
     {
       key: 'console',

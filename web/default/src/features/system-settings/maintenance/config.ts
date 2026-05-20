@@ -5,13 +5,20 @@ export type HeaderNavPricingConfig = {
   requireAuth: boolean
 }
 
+export type HeaderNavRouteConfig = {
+  enabled: boolean
+  requireAuth?: boolean
+  href?: string
+}
+
 export type HeaderNavModulesConfig = {
   home: boolean
+  studio: HeaderNavRouteConfig
   console: boolean
   pricing: HeaderNavPricingConfig
   docs: boolean
   about: boolean
-  [key: string]: boolean | HeaderNavPricingConfig
+  [key: string]: boolean | HeaderNavPricingConfig | HeaderNavRouteConfig
 }
 
 export type SidebarSectionConfig = {
@@ -23,6 +30,11 @@ export type SidebarModulesAdminConfig = Record<string, SidebarSectionConfig>
 
 export const HEADER_NAV_DEFAULT: HeaderNavModulesConfig = {
   home: true,
+  studio: {
+    enabled: true,
+    requireAuth: true,
+    href: '/studio/',
+  },
   console: true,
   pricing: {
     enabled: true,
@@ -90,6 +102,7 @@ const toBoolean = (value: unknown, fallback: boolean): boolean => {
 
 const cloneHeaderNavDefault = (): HeaderNavModulesConfig => ({
   ...HEADER_NAV_DEFAULT,
+  studio: { ...HEADER_NAV_DEFAULT.studio },
   pricing: { ...HEADER_NAV_DEFAULT.pricing },
 })
 
@@ -113,6 +126,7 @@ export function parseHeaderNavModules(
     const parsed = JSON.parse(value) as Record<string, unknown>
     const result: HeaderNavModulesConfig = {
       ...base,
+      studio: { ...base.studio },
       pricing: { ...base.pricing },
     }
 
@@ -129,6 +143,29 @@ export function parseHeaderNavModules(
               rawPricing.requireAuth,
               base.pricing?.requireAuth ?? false
             ),
+          }
+        }
+        return
+      }
+
+      if (key === 'studio') {
+        if (raw && typeof raw === 'object') {
+          const rawStudio = raw as Record<string, unknown>
+          result.studio = {
+            enabled: toBoolean(rawStudio.enabled, base.studio.enabled),
+            requireAuth: toBoolean(
+              rawStudio.requireAuth,
+              base.studio.requireAuth ?? true
+            ),
+            href:
+              typeof rawStudio.href === 'string' && rawStudio.href.trim()
+                ? rawStudio.href.trim()
+                : base.studio.href,
+          }
+        } else {
+          result.studio = {
+            ...base.studio,
+            enabled: toBoolean(raw, base.studio.enabled),
           }
         }
         return

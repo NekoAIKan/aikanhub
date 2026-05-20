@@ -1,0 +1,4 @@
+[submodule "web/studio"]
+	path = web/studio
+	url = git@github.com:NekoAIKan/studio.git
+	branch = dev

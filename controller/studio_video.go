@@ -13,16 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type studioVideoModel struct {
-	ID        string                 `json:"id"`
-	Label     string                 `json:"label"`
-	Provider  string                 `json:"provider"`
-	Versions  []string               `json:"versions"`
-	TaskTypes []string               `json:"taskTypes"`
-	Inputs    []string               `json:"inputs"`
-	Settings  map[string]interface{} `json:"settings"`
-}
-
 type studioVideoGeneration struct {
 	TaskID        string  `json:"taskId"`
 	ID            string  `json:"id"`
@@ -55,22 +45,12 @@ func StudioSession(c *gin.Context) {
 }
 
 func StudioVideoModels(c *gin.Context) {
-	user, err := model.GetUserCache(c.GetInt("id"))
+	tokenModelLimitValue, _ := c.Get("token_model_limit")
+	tokenModelLimit, _ := tokenModelLimitValue.(map[string]bool)
+	models, err := service.ListStudioVideoModels(c.GetInt("id"), tokenModelLimit)
 	if err != nil {
 		common.ApiError(c, err)
 		return
-	}
-	groups := service.GetUserUsableGroups(user.Group)
-	seen := map[string]bool{}
-	models := make([]studioVideoModel, 0)
-	for group := range groups {
-		for _, modelName := range model.GetGroupEnabledModels(group) {
-			if seen[modelName] || !isStudioVideoModel(modelName) {
-				continue
-			}
-			seen[modelName] = true
-			models = append(models, describeStudioVideoModel(modelName))
-		}
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -160,48 +140,4 @@ func parseTaskProgress(progress string) float64 {
 		return value
 	}
 	return value * 100
-}
-
-func isStudioVideoModel(modelName string) bool {
-	lower := strings.ToLower(modelName)
-	return strings.Contains(lower, "seedance") ||
-		strings.Contains(lower, "pixverse") ||
-		strings.Contains(lower, "kling") ||
-		strings.Contains(lower, "sora") ||
-		strings.Contains(lower, "vidu") ||
-		strings.Contains(lower, "hailuo") ||
-		strings.Contains(lower, "wan")
-}
-
-func describeStudioVideoModel(modelName string) studioVideoModel {
-	provider := "video"
-	lower := strings.ToLower(modelName)
-	switch {
-	case strings.Contains(lower, "pixverse"):
-		provider = "pixverse"
-	case strings.Contains(lower, "seedance") || strings.Contains(lower, "doubao"):
-		provider = "doubao"
-	case strings.Contains(lower, "kling"):
-		provider = "kling"
-	case strings.Contains(lower, "sora"):
-		provider = "sora"
-	case strings.Contains(lower, "vidu"):
-		provider = "vidu"
-	case strings.Contains(lower, "hailuo"):
-		provider = "hailuo"
-	}
-
-	return studioVideoModel{
-		ID:        modelName,
-		Label:     modelName,
-		Provider:  provider,
-		Versions:  []string{"default"},
-		TaskTypes: []string{"text_to_video", "image_to_video", "video_to_video"},
-		Inputs:    []string{"prompt", "first_frame", "last_frame", "reference_image", "reference_video", "reference_audio"},
-		Settings: map[string]interface{}{
-			"durations":   []int{5, 8, 10},
-			"ratios":      []string{"16:9", "9:16", "1:1", "4:3", "3:4", "21:9"},
-			"resolutions": []string{"480p", "720p", "1080p"},
-		},
-	}
 }
