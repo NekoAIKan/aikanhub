@@ -123,8 +123,8 @@ func TestPreviewVideoBilling_SeedanceMatrix(t *testing.T) {
 	var resp struct {
 		Success bool `json:"success"`
 		Data    struct {
-			Model        string `json:"model"`
-			ProfileFound bool   `json:"profile_found"`
+			Model        string  `json:"model"`
+			ProfileFound bool    `json:"profile_found"`
 			QuotaPerUnit float64 `json:"quota_per_unit"`
 			Cases        []struct {
 				Label               string  `json:"label"`
@@ -240,6 +240,132 @@ func TestCalculateVideoBillingPrice_TextRequest(t *testing.T) {
 	require.Equal(t, 7.89, resp.Data.UnitPricePerMillion)
 	require.InDelta(t, 0.85212, resp.Data.PriceUSD, 1e-6)
 	require.Equal(t, 426060, resp.Data.Quota)
+}
+
+func TestStudioVideoPricingPreview_BatchRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"profit_setting.upstream_cost_per_million_tokens": "0",
+		"profit_setting.default_markup_percent":           "0",
+		"profit_setting.apply_to_default_video_profiles":  "false",
+		"video_billing_setting.profiles": `{
+			"doubao-seedance-2-0-260128": {
+				"mode": "formula",
+				"unit_price": 7.89,
+				"unit_price_with_video": 4.80,
+				"unit_price_by_resolution": {"720p": 7.89, "1080p": 8.74},
+				"unit_price_with_video_by_resolution": {"720p": 4.80, "1080p": 5.31},
+				"min_tokens_with_video": 108000,
+				"fallback_fps": 24,
+				"fallback_width": 1280,
+				"fallback_height": 720,
+				"fallback_duration_seconds": 5,
+				"use_upstream_usage": true,
+				"resolution_aliases": {
+					"720p":  {"width": 1280, "height": 720},
+					"1080p": {"width": 1920, "height": 1080}
+				}
+			}
+		}`,
+	}))
+
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	ctx.Set("group", "default")
+	ctx.Set("user_group", "default")
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/studio/video/pricing/preview",
+		bytes.NewBufferString(`{"model":"doubao-seedance-2-0-260128","resolution":"720p","duration":5,"batch_count":4}`))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+
+	StudioVideoPricingPreview(ctx)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Model           string   `json:"model"`
+			ProfileFound    bool     `json:"profileFound"`
+			Credits         int      `json:"credits"`
+			Currency        string   `json:"currency"`
+			UsageKeyLabel   string   `json:"usageKeyLabel"`
+			Basis           []string `json:"basis"`
+			Quota           int      `json:"quota"`
+			DurationSeconds int      `json:"durationSeconds"`
+			BatchCount      int      `json:"batchCount"`
+			LineItems       []struct {
+				Label   string `json:"label"`
+				Credits int    `json:"credits"`
+			} `json:"lineItems"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &resp))
+	require.True(t, resp.Success)
+	require.True(t, resp.Data.ProfileFound)
+	require.Equal(t, "doubao-seedance-2-0-260128", resp.Data.Model)
+	require.Equal(t, "credits", resp.Data.Currency)
+	require.Equal(t, "Studio", resp.Data.UsageKeyLabel)
+	require.Equal(t, []string{"duration_seconds", "resolution", "has_video_input", "has_audio_input", "batch_count"}, resp.Data.Basis)
+	require.Equal(t, 4, resp.Data.Credits)
+	require.Equal(t, 4, resp.Data.BatchCount)
+	require.Equal(t, 5, resp.Data.DurationSeconds)
+	require.Equal(t, 426060*4, resp.Data.Quota)
+	require.Len(t, resp.Data.LineItems, 2)
+	require.Equal(t, "5s 720p", resp.Data.LineItems[0].Label)
+	require.Equal(t, 1, resp.Data.LineItems[0].Credits)
+	require.Equal(t, "Batch x4", resp.Data.LineItems[1].Label)
+	require.Equal(t, 4, resp.Data.LineItems[1].Credits)
+}
+
+func TestStudioVideoPricingPreview_DetectsReferenceVideo(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"profit_setting.upstream_cost_per_million_tokens": "0",
+		"profit_setting.default_markup_percent":           "0",
+		"profit_setting.apply_to_default_video_profiles":  "false",
+		"video_billing_setting.profiles": `{
+			"doubao-seedance-2-0-260128": {
+				"mode": "formula",
+				"unit_price": 7.89,
+				"unit_price_with_video": 4.80,
+				"unit_price_by_resolution": {"720p": 7.89},
+				"unit_price_with_video_by_resolution": {"720p": 4.80},
+				"min_tokens_with_video": 108000,
+				"fallback_fps": 24,
+				"fallback_width": 1280,
+				"fallback_height": 720,
+				"fallback_duration_seconds": 5,
+				"use_upstream_usage": true,
+				"resolution_aliases": {
+					"720p": {"width": 1280, "height": 720}
+				}
+			}
+		}`,
+	}))
+
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	ctx.Set("group", "default")
+	ctx.Set("user_group", "default")
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/studio/video/pricing/preview",
+		bytes.NewBufferString(`{"model":"doubao-seedance-2-0-260128","resolution":"720p","duration":5,"content":[{"type":"text"},{"type":"video_url"}]}`))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+
+	StudioVideoPricingPreview(ctx)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Credits       int  `json:"credits"`
+			Quota         int  `json:"quota"`
+			HasVideoInput bool `json:"hasVideoInput"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &resp))
+	require.True(t, resp.Success)
+	require.True(t, resp.Data.HasVideoInput)
+	require.Equal(t, 2, resp.Data.Credits)
+	require.Equal(t, 518400, resp.Data.Quota)
 }
 
 func TestCalculateVideoBillingPrice_WithVideoHitsFloor(t *testing.T) {

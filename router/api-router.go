@@ -68,6 +68,7 @@ func SetApiRouter(router *gin.Engine) {
 			studioVideoRoute.Use(middleware.UserAuth(), middleware.StudioTokenAuth())
 			{
 				studioVideoRoute.GET("/models", controller.StudioVideoModels)
+				studioVideoRoute.POST("/pricing/preview", controller.StudioVideoPricingPreview)
 				studioSubmitRoute := studioVideoRoute.Group("")
 				studioSubmitRoute.Use(controller.SetStudioVideoSubmitRelayMode, middleware.Distribute())
 				studioSubmitRoute.POST("/generations", controller.RelayTask)
