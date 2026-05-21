@@ -32,15 +32,34 @@ type studioVideoGeneration struct {
 	} `json:"error,omitempty"`
 }
 
+type studioSession struct {
+	ID       int    `json:"id"`
+	Username string `json:"username"`
+	Group    string `json:"group,omitempty"`
+	Role     int    `json:"role,omitempty"`
+}
+
 func StudioSession(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data": gin.H{
-			"id":       c.GetInt("id"),
-			"username": c.GetString("username"),
-			"group":    c.GetString("group"),
-			"role":     c.GetInt("role"),
-		},
+		"data":    currentStudioSession(c),
+	})
+}
+
+func StudioBootstrap(c *gin.Context) {
+	data, err := service.BuildStudioBootstrap(
+		c.GetInt("id"),
+		c.GetString("username"),
+		c.GetString("group"),
+		c.GetInt("role"),
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    data,
 	})
 }
 
@@ -56,6 +75,15 @@ func StudioVideoModels(c *gin.Context) {
 		"success": true,
 		"data":    models,
 	})
+}
+
+func currentStudioSession(c *gin.Context) studioSession {
+	return studioSession{
+		ID:       c.GetInt("id"),
+		Username: c.GetString("username"),
+		Group:    c.GetString("group"),
+		Role:     c.GetInt("role"),
+	}
 }
 
 func StudioVideoGenerationFetch(c *gin.Context) {

@@ -63,6 +63,7 @@ func SetApiRouter(router *gin.Engine) {
 
 		studioRoute := apiRouter.Group("/studio")
 		{
+			studioRoute.GET("/bootstrap", middleware.SessionOnlyAuth(), controller.StudioBootstrap)
 			studioRoute.GET("/session", middleware.SessionOnlyAuth(), controller.StudioSession)
 			studioVideoRoute := studioRoute.Group("/video")
 			studioVideoRoute.Use(middleware.UserAuth(), middleware.StudioTokenAuth())
