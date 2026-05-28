@@ -17,10 +17,18 @@ import (
 // taskErrorFromImageAuditError walks err's chain looking for a
 // *PerImageAuditError. When found, returns a TaskError with:
 //
-//   - Code: image_audit_failed (moderation rejection) or
-//     image_audit_error (infra failure)
-//   - StatusCode: 400 for moderation, 502 for infra
-//   - Data: { failed_image: {index, role, source, asset_id, reason} }
+//   - Code:
+//     image_audit_failed   — moderation verdict, 400
+//     image_audit_rejected — upstream 4xx (e.g. width > 6000px), 400
+//     image_audit_error    — true infra failure, 502
+//   - StatusCode: 4xx for caller-fixable cases, 502 only when we genuinely
+//     failed as a gateway. Status MUST be 4xx for upstream user-input
+//     rejections because Cloudflare substitutes its own HTML page for any
+//     source 5xx, hiding our JSON body (and the upstream's actionable hint).
+//   - Message: when the upstream returned a structured Code/Message, we use
+//     its Message verbatim so callers see "Width must be between 300px and
+//     6000px." rather than our wrapper chain.
+//   - Data: { failed_image: {...}, upstream: {code, http} }
 //
 // Source is truncated to a sane length (URL or short data URI tag) so
 // a multi-MB base64 input doesn't bloat the error response.
@@ -49,16 +57,40 @@ func taskErrorFromImageAuditError(err error) *dto.TaskError {
 
 	code := "image_audit_error"
 	status := http.StatusBadGateway
-	if imageaudit.IsAuditFailure(err) {
+	message := err.Error()
+
+	var ark *imageaudit.ArkUpstreamError
+	switch {
+	case imageaudit.IsAuditFailure(err):
 		code = "image_audit_failed"
 		status = http.StatusBadRequest
+	case errors.As(err, &ark) && ark.IsClientFault():
+		code = "image_audit_rejected"
+		status = http.StatusBadRequest
+		// Surface the upstream's own message verbatim; falling back to the
+		// truncated raw body keeps the caller informed even when Volcano
+		// returns an unparseable envelope.
+		if ark.MetaMsg != "" {
+			message = ark.MetaMsg
+		} else if ark.RawBody != "" {
+			message = ark.RawBody
+		}
+	}
+
+	data := map[string]any{"failed_image": failedImage}
+	if ark != nil {
+		upstream := map[string]any{"http": ark.HTTPStatus}
+		if ark.MetaCode != "" {
+			upstream["code"] = ark.MetaCode
+		}
+		data["upstream"] = upstream
 	}
 
 	return &dto.TaskError{
 		Code:       code,
-		Message:    err.Error(),
+		Message:    message,
 		StatusCode: status,
-		Data:       map[string]any{"failed_image": failedImage},
+		Data:       data,
 		Error:      err,
 		LocalError: true,
 	}

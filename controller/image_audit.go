@@ -55,6 +55,40 @@ func (r *imageAuditCreateRequest) imageSource() string {
 	return ""
 }
 
+// classifyImageAuditError maps an imageaudit/ARK error to the public HTTP
+// response shape. Default is 502 image_audit_error (gateway infra failure),
+// but two cases get more specific treatment:
+//
+//   - *imageaudit.ArkUpstreamError with IsClientFault()==true: forward as
+//     400 image_audit_rejected with the upstream's own Message verbatim, so
+//     the caller learns *why* (e.g. "Width must be between 300px and 6000px.")
+//     and so Cloudflare doesn't substitute its own HTML for our 5xx body.
+//   - Wait() poll-timeout: 504 image_audit_wait_timeout, matching the
+//     pre-rework behavior.
+func classifyImageAuditError(err error, base map[string]any) (int, string, string, map[string]any) {
+	extras := base
+	if extras == nil {
+		extras = map[string]any{}
+	}
+	var ark *imageaudit.ArkUpstreamError
+	if errors.As(err, &ark) && ark.IsClientFault() {
+		message := ark.MetaMsg
+		if message == "" {
+			message = ark.RawBody
+		}
+		upstream := map[string]any{"http": ark.HTTPStatus}
+		if ark.MetaCode != "" {
+			upstream["code"] = ark.MetaCode
+		}
+		extras["upstream"] = upstream
+		return http.StatusBadRequest, "image_audit_rejected", message, extras
+	}
+	if strings.Contains(err.Error(), "timed out") {
+		return http.StatusGatewayTimeout, "image_audit_wait_timeout", err.Error(), extras
+	}
+	return http.StatusBadGateway, "image_audit_error", err.Error(), extras
+}
+
 // imageAuditError is the OpenAI-flavored error envelope. We use the
 // raw map (not types.OpenAIError) because we want the `failed_image`
 // metadata to be a structured object, not a JSON-encoded string.
@@ -111,7 +145,8 @@ func CreateImageAudit(c *gin.Context) {
 
 	rec, err := imageaudit.Submit(c.Request.Context(), src, userID, tokenID, req.Region)
 	if err != nil {
-		imageAuditError(c, http.StatusBadGateway, "image_audit_error", err.Error(), nil)
+		status, code, message, extras := classifyImageAuditError(err, nil)
+		imageAuditError(c, status, code, message, extras)
 		return
 	}
 
@@ -119,19 +154,11 @@ func CreateImageAudit(c *gin.Context) {
 		// Wait blocks until terminal or ARK_ASSETS_POLL_TIMEOUT.
 		updated, werr := imageaudit.Wait(c.Request.Context(), rec.RecordID)
 		if werr != nil && !errors.Is(werr, gorm.ErrRecordNotFound) {
-			// Wait returned the latest record we have; surface as a
-			// 504 if we hit timeout, otherwise 502.
-			status := http.StatusBadGateway
-			code := "image_audit_error"
-			if strings.Contains(werr.Error(), "timed out") {
-				status = http.StatusGatewayTimeout
-				code = "image_audit_wait_timeout"
-			}
 			if updated != nil {
 				rec = updated
 			}
-			imageAuditError(c, status, code, werr.Error(),
-				map[string]any{"record": rec})
+			status, code, message, extras := classifyImageAuditError(werr, map[string]any{"record": rec})
+			imageAuditError(c, status, code, message, extras)
 			return
 		}
 		if updated != nil {
