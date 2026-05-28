@@ -39,6 +39,42 @@ const (
 	arkRequestTimeout = 30 * time.Second
 )
 
+// ArkUpstreamError carries the structured error returned by an Ark / BytePlus
+// ModelArk control-plane call. Distinct from a generic Go error so the relay
+// and controller layers can route upstream 4xx responses back to the caller
+// as 4xx — i.e. with the upstream's own message visible — instead of folding
+// them into a generic 502 envelope (whose body Cloudflare then replaces with
+// its own HTML page, hiding the actionable upstream hint).
+//
+// HTTPStatus is 0 for transport-level failures (DNS, dial). MetaCode/MetaMsg
+// come from the standard ResponseMetadata.Error envelope; they are empty when
+// the response body is unparseable, in which case RawBody is the fallback.
+type ArkUpstreamError struct {
+	Action     string
+	HTTPStatus int
+	MetaCode   string
+	MetaMsg    string
+	RawBody    string
+}
+
+func (e *ArkUpstreamError) Error() string {
+	if e.MetaMsg != "" {
+		if e.MetaCode != "" {
+			return fmt.Sprintf("ark.%s: HTTP %d %s: %s", e.Action, e.HTTPStatus, e.MetaCode, e.MetaMsg)
+		}
+		return fmt.Sprintf("ark.%s: HTTP %d: %s", e.Action, e.HTTPStatus, e.MetaMsg)
+	}
+	return fmt.Sprintf("ark.%s: HTTP %d: %s", e.Action, e.HTTPStatus, e.RawBody)
+}
+
+// IsClientFault reports whether the upstream rejected our request because of
+// caller-supplied input (e.g. invalid image dimensions, malformed URL). A 4xx
+// here must surface to the gateway client as 4xx so the message survives the
+// CF 5xx HTML substitution and so the client sees something actionable.
+func (e *ArkUpstreamError) IsClientFault() bool {
+	return e.HTTPStatus >= 400 && e.HTTPStatus < 500
+}
+
 // arkResponse is the common envelope for every Assets call.
 type arkResponse struct {
 	ResponseMetadata struct {
@@ -120,20 +156,36 @@ func (c *arkClient) callAction(ctx context.Context, action string, body, out any
 	if err != nil {
 		return fmt.Errorf("ark.%s: read body: %w", action, err)
 	}
+	// Volcano returns the standard envelope (with ResponseMetadata.Error
+	// populated) even for HTTP 4xx, so parse first and let the typed error
+	// carry whatever structure is available.
+	var env arkResponse
+	envOK := json.Unmarshal(respBody, &env) == nil
+
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("ark.%s: HTTP %d: %s", action, resp.StatusCode, truncate(string(respBody), 500))
+		e := &ArkUpstreamError{
+			Action:     action,
+			HTTPStatus: resp.StatusCode,
+			RawBody:    truncate(string(respBody), 2000),
+		}
+		if envOK && env.ResponseMetadata.Error != nil {
+			e.MetaCode = env.ResponseMetadata.Error.Code
+			e.MetaMsg = env.ResponseMetadata.Error.Message
+		}
+		return e
 	}
 
-	var env arkResponse
-	if err := json.Unmarshal(respBody, &env); err != nil {
-		return fmt.Errorf("ark.%s: unmarshal envelope: %w; body=%s", action, err, truncate(string(respBody), 500))
+	if !envOK {
+		return fmt.Errorf("ark.%s: unmarshal envelope; body=%s", action, truncate(string(respBody), 500))
 	}
 	if env.ResponseMetadata.Error != nil {
-		return fmt.Errorf("ark.%s: %s — %s",
-			action,
-			env.ResponseMetadata.Error.Code,
-			env.ResponseMetadata.Error.Message,
-		)
+		return &ArkUpstreamError{
+			Action:     action,
+			HTTPStatus: resp.StatusCode,
+			MetaCode:   env.ResponseMetadata.Error.Code,
+			MetaMsg:    env.ResponseMetadata.Error.Message,
+			RawBody:    truncate(string(respBody), 2000),
+		}
 	}
 	if out == nil || len(env.Result) == 0 {
 		return nil

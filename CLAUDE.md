@@ -451,3 +451,21 @@ Invariants a future change can silently break:
 7. **A param dropped before it is logged is unrecoverable.** This subsystem is the standing forensic/refund answer; don't add drop-before-observe parse paths that bypass it (ties to Rule 29).
 
 Tests: `service/auditlog` (capBody bound, prepareBodies redact+clear, pre-init no-op), `middleware` (streaming passthrough + bounded tee, disabled no-op, skip-prefix). No DB fixtures — there is no DB.
+
+### Rule 31: Don't wrap upstream errors — propagate status and message
+
+Upstream provider errors (Ark, BytePlus, OpenAI, Claude, vendor adaptors, etc.) must surface to the gateway client with:
+
+- **Status code matched to fault location.** A 4xx from upstream is a 4xx to our client. A 5xx from upstream OR a transport-level failure is 502. Only synthesize 500 for true internal panics. Never default a `switch`/`default` branch to 502 — that's how every unhandled case becomes "gateway broken" in the client UI.
+- **Upstream's own message verbatim in the response body.** Truncate only for size (≤ 2KB raw body), mask only what `common.MaskSensitiveInfo` masks (URL hosts/paths). Never replace with a synthetic Chinese/English string like `"请求上游地址失败"` — the original wording (`"Width must be between 300px and 6000px."`) is what makes the error actionable.
+- **Use typed errors for upstream calls.** When adding a new vendor adaptor that issues HTTP calls, return a `*VendorUpstreamError{Action, HTTPStatus, Code, Message, RawBody}` from the call layer instead of `fmt.Errorf("vendor: HTTP %d: %s", ...)`. See `service/imageaudit/ark.go::ArkUpstreamError` for the canonical shape; downstream code uses `errors.As` + `IsClientFault()` to route correctly.
+
+**Why this matters operationally:** Cloudflare substitutes its own HTML "Bad gateway" page for any source 5xx, destroying the JSON body. So a 502 for a user-input error means the actionable message never reaches the customer; they see a generic CF page and retry deterministically — see the `seedvr2_upscaled_*.jpg` width-too-large incident.
+
+**Audit checklist when adding/editing a wrapper:**
+1. Does the wrapper ever synthesize a status code that wasn't on `err`? If yes, can it pick the wrong one?
+2. Does it drop information from `err.Error()` other than URL masking?
+3. Does its `default`/fallthrough branch produce 5xx for a user-input case?
+4. If the upstream is HTTP-based, do we preserve the upstream HTTP status somewhere reachable by `errors.As`?
+
+Known prior offenders fixed: `relay/image_audit_error.go`, `controller/image_audit.go`. Known unfixed: `service/error.go::ClaudeErrorWrapper` ("请求上游地址失败" replacement), `service/error.go::RelayErrorHandler` (`showBodyWhenFail=false` discards upstream body in 11 prod call sites), `relay/relay_task.go:236,242` (hardcoded 500 for BuildRequestBody / DoRequest). Fix incrementally; the rule is the gate for new code.
