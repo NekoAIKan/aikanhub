@@ -109,11 +109,15 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 		// Per CLAUDE.md Rule 31: even when the upstream body isn't parseable as
 		// a known JSON shape, the caller is much better served by seeing what
 		// the upstream actually said than by a bare "bad response status code N".
-		// Always include a truncated, URL-masked body. Server log still receives
-		// the full unmasked body for ops/audit.
+		// Include a truncated, URL-masked body. Server log still receives the
+		// full unmasked body for ops/audit. We must populate BOTH Err and
+		// RelayError.Message — the response serializer (NewAPIError.ToOpenAIError)
+		// reads RelayError.Message, not Err, so a fix that only sets Err would
+		// silently fail (live-verified during PR #73 follow-up).
 		logger.LogError(ctx, fmt.Sprintf("bad response status code %d, body: %s", resp.StatusCode, string(responseBody)))
 		masked := common.MaskSensitiveInfo(truncateString(string(responseBody), 1024))
-		newApiErr.Err = fmt.Errorf("bad response status code %d, body: %s", resp.StatusCode, masked)
+		bodyErr := fmt.Errorf("bad response status code %d, body: %s", resp.StatusCode, masked)
+		newApiErr = types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
 		return
 	}
 

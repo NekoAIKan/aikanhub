@@ -113,7 +113,14 @@ func TestRelayErrorHandler_IncludesUpstreamBodyOnParseFailure(t *testing.T) {
 	require.NotNil(t, apiErr.Err)
 
 	assert.Equal(t, http.StatusServiceUnavailable, apiErr.StatusCode)
-	got := apiErr.Err.Error()
+
+	// CRITICAL: the response serializer reads RelayError.Message (via
+	// NewAPIError.ToOpenAIError), NOT Err. A fix that only sets Err would
+	// pass a naive .Err.Error() assertion but the client would still see
+	// the empty-message fallback "openai_error". Live-verification during
+	// the PR #73 follow-up caught this. Assert on the field the client
+	// actually sees.
+	got := apiErr.ToOpenAIError().Message
 	assert.Contains(t, got, "503", "status code should be in surfaced error")
 	assert.Contains(t, got, "upstream provider temporarily down",
 		"upstream body must reach caller, not just server log")
@@ -134,7 +141,7 @@ func TestRelayErrorHandler_TruncatesOversizeUpstreamBody(t *testing.T) {
 	require.NotNil(t, apiErr)
 	require.NotNil(t, apiErr.Err)
 
-	got := apiErr.Err.Error()
+	got := apiErr.ToOpenAIError().Message
 	assert.Contains(t, got, "(truncated)",
 		"oversize bodies must be truncated with a visible marker")
 	assert.Less(t, len(got), len(big), "surfaced error shorter than raw body")
