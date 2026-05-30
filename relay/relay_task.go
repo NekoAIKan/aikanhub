@@ -239,7 +239,10 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	// 9. 发送请求
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
-		return nil, service.TaskErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
+		// Transport-level failure between us and the upstream provider — that
+		// is by definition Bad Gateway (502), not Internal Server Error (500).
+		// Reserve 500 for genuine internal panics; matches CLAUDE.md Rule 31.
+		return nil, service.TaskErrorWrapper(err, "do_request_failed", http.StatusBadGateway)
 	}
 	if resp != nil && resp.StatusCode != http.StatusOK {
 		responseBody, _ := io.ReadAll(resp.Body)

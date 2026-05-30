@@ -60,11 +60,16 @@ func MidjourneyErrorWithStatusCodeWrapper(code int, desc string, statusCode int)
 
 func ClaudeErrorWrapper(err error, code string, statusCode int) *dto.ClaudeErrorWithStatusCode {
 	text := err.Error()
+	// Per CLAUDE.md Rule 31: don't replace the upstream message with a synthetic
+	// string. URL hosts/paths inside the error get masked (same policy as
+	// TaskErrorWrapper) so we don't leak our internal upstream endpoints, but
+	// the actual error wording is preserved — that's what makes the response
+	// actionable for the Claude API caller.
 	lowerText := strings.ToLower(text)
 	if !strings.HasPrefix(lowerText, "get file base64 from url") {
 		if strings.Contains(lowerText, "post") || strings.Contains(lowerText, "dial") || strings.Contains(lowerText, "http") {
 			common.SysLog(fmt.Sprintf("error: %s", text))
-			text = "请求上游地址失败"
+			text = common.MaskSensitiveInfo(text)
 		}
 	}
 	claudeError := types.ClaudeError{
@@ -101,12 +106,14 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 
 	err = common.Unmarshal(responseBody, &errResponse)
 	if err != nil {
-		if showBodyWhenFail {
-			newApiErr.Err = buildErrWithBody("")
-		} else {
-			logger.LogError(ctx, fmt.Sprintf("bad response status code %d, body: %s", resp.StatusCode, string(responseBody)))
-			newApiErr.Err = fmt.Errorf("bad response status code %d", resp.StatusCode)
-		}
+		// Per CLAUDE.md Rule 31: even when the upstream body isn't parseable as
+		// a known JSON shape, the caller is much better served by seeing what
+		// the upstream actually said than by a bare "bad response status code N".
+		// Always include a truncated, URL-masked body. Server log still receives
+		// the full unmasked body for ops/audit.
+		logger.LogError(ctx, fmt.Sprintf("bad response status code %d, body: %s", resp.StatusCode, string(responseBody)))
+		masked := common.MaskSensitiveInfo(truncateString(string(responseBody), 1024))
+		newApiErr.Err = fmt.Errorf("bad response status code %d, body: %s", resp.StatusCode, masked)
 		return
 	}
 
@@ -205,6 +212,17 @@ func TaskErrorWrapper(err error, code string, statusCode int) *dto.TaskError {
 	}
 
 	return taskError
+}
+
+// truncateString shortens s to at most n bytes, appending a marker so callers
+// know the message was cut. Used by RelayErrorHandler when surfacing an
+// unparseable upstream body to the caller — we still want the caller to see
+// what the upstream said, but not a 5 MB blob in a JSON error envelope.
+func truncateString(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "...(truncated)"
 }
 
 // TaskErrorFromAPIError 将 PreConsumeBilling 返回的 NewAPIError 转换为 TaskError。
