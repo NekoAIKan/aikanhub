@@ -523,7 +523,19 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	common2.TraceMark(c, "upstream_done")
 	if err != nil {
 		logger.LogError(c, "do request failed: "+err.Error())
-		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithHideErrMsg("upstream error: do request failed"))
+		// Per CLAUDE.md Rule 31: don't replace the upstream transport error
+		// with a synthetic string — callers can't debug "i/o timeout" /
+		// "connection refused" / DNS failures from "upstream error: do
+		// request failed". Mask URL hosts/paths/queries for safety, keep
+		// the actual failure mode visible. Status is 502 (we are gateway,
+		// we genuinely couldn't reach upstream — that's the literal HTTP
+		// semantics of Bad Gateway).
+		masked := common2.MaskSensitiveInfo(err.Error())
+		return nil, types.NewOpenAIError(
+			fmt.Errorf("upstream transport failure: %s", masked),
+			types.ErrorCodeDoRequestFailed,
+			http.StatusBadGateway,
+		)
 	}
 	if resp == nil {
 		return nil, errors.New("resp is nil")
