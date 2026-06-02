@@ -151,6 +151,32 @@ func TestConvertToRequestPayloadForwardsAdaptiveDurationSentinel(t *testing.T) {
 	})
 }
 
+func TestBuildRequestBodyRecordsUpstreamPromptPayload(t *testing.T) {
+	c := newJSONContext(`{
+		"model": "doubao-seedance-2-0-fast-260128",
+		"prompt": "debug marker: orange robot walks left",
+		"duration": 5,
+		"resolution": "720p"
+	}`)
+	info := &relaycommon.RelayInfo{
+		ChannelMeta:   &relaycommon.ChannelMeta{},
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+	}
+	a := &TaskAdaptor{}
+
+	require.Nil(t, a.ValidateRequestAndSetAction(c, info))
+	bodyReader, err := a.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	require.NotNil(t, bodyReader)
+
+	var payload requestPayload
+	require.NoError(t, common.Unmarshal(relaycommon.GetTaskUpstreamRequest(c), &payload))
+	require.Equal(t, "doubao-seedance-2-0-fast-260128", payload.Model)
+	require.Len(t, payload.Content, 1)
+	require.Equal(t, "text", payload.Content[0].Type)
+	require.Equal(t, "debug marker: orange robot walks left", payload.Content[0].Text)
+}
+
 // Top-level `ratio` must reach upstream Volcano Ark; otherwise the API
 // silently picks "auto" and the caller's aspect ratio is discarded. See
 // https://github.com/NekoAIKan/aikanhub/issues/60.

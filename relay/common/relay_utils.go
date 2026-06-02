@@ -1,6 +1,7 @@
 package common
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -21,6 +22,12 @@ type HasPrompt interface {
 type HasImage interface {
 	HasImage() bool
 }
+
+const (
+	TaskRequestContextKey         = "task_request"
+	TaskUpstreamRequestContextKey = "task_upstream_request"
+	maxTaskSnapshotBytes          = 32768
+)
 
 func GetFullRequestURL(baseURL string, requestURL string, channelType int) string {
 	fullRequestURL := fmt.Sprintf("%s%s", baseURL, requestURL)
@@ -56,11 +63,13 @@ func createTaskError(err error, code string, statusCode int, localError bool) *d
 }
 
 func storeTaskRequest(c *gin.Context, info *RelayInfo, action string, requestObj TaskSubmitReq) {
-	info.Action = action
-	c.Set("task_request", requestObj)
+	if info != nil {
+		info.Action = action
+	}
+	c.Set(TaskRequestContextKey, requestObj)
 }
 func GetTaskRequest(c *gin.Context) (TaskSubmitReq, error) {
-	v, exists := c.Get("task_request")
+	v, exists := c.Get(TaskRequestContextKey)
 	if !exists {
 		return TaskSubmitReq{}, fmt.Errorf("request not found in context")
 	}
@@ -69,6 +78,47 @@ func GetTaskRequest(c *gin.Context) (TaskSubmitReq, error) {
 		return TaskSubmitReq{}, fmt.Errorf("invalid task request type")
 	}
 	return req, nil
+}
+
+func SetTaskUpstreamRequest(c *gin.Context, data []byte) {
+	if c == nil || len(data) == 0 {
+		return
+	}
+	c.Set(TaskUpstreamRequestContextKey, cloneTaskSnapshot(data))
+}
+
+func GetTaskUpstreamRequest(c *gin.Context) json.RawMessage {
+	if c == nil {
+		return nil
+	}
+	v, ok := c.Get(TaskUpstreamRequestContextKey)
+	if !ok {
+		return nil
+	}
+	switch data := v.(type) {
+	case []byte:
+		return json.RawMessage(data)
+	case json.RawMessage:
+		return data
+	default:
+		return nil
+	}
+}
+
+func cloneTaskSnapshot(data []byte) []byte {
+	if len(data) <= maxTaskSnapshotBytes {
+		out := make([]byte, len(data))
+		copy(out, data)
+		return out
+	}
+	summary, err := common.Marshal(map[string]any{
+		"truncated": true,
+		"bytes":     len(data),
+	})
+	if err != nil {
+		return []byte(`{"truncated":true}`)
+	}
+	return summary
 }
 
 func validatePrompt(prompt string) *dto.TaskError {

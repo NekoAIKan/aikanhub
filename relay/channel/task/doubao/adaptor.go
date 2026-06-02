@@ -320,6 +320,7 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if err != nil {
 		return nil, err
 	}
+	relaycommon.SetTaskUpstreamRequest(c, data)
 	return bytes.NewReader(data), nil
 }
 
