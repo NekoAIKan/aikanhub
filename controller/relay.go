@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -575,6 +576,7 @@ func RelayTask(c *gin.Context) {
 		task.PrivateData.BillingSource = relayInfo.BillingSource
 		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 		task.PrivateData.TokenId = relayInfo.TokenId
+		attachTaskRequestSnapshot(c, task, relayInfo, result.Platform)
 		task.PrivateData.BillingContext = &model.TaskBillingContext{
 			ModelPrice:      relayInfo.PriceData.ModelPrice,
 			GroupRatio:      relayInfo.PriceData.GroupRatioInfo.GroupRatio,
@@ -597,6 +599,73 @@ func RelayTask(c *gin.Context) {
 	if taskErr != nil {
 		respondTaskError(c, taskErr)
 	}
+}
+
+func attachTaskRequestSnapshot(c *gin.Context, task *model.Task, relayInfo *relaycommon.RelayInfo, platform constant.TaskPlatform) {
+	if task == nil || relayInfo == nil {
+		return
+	}
+	req, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return
+	}
+	task.Properties.Input = req.Prompt
+
+	normalized, normalizedTruncated := marshalTaskSnapshot(req)
+	upstream := relaycommon.GetTaskUpstreamRequest(c)
+	channelID := 0
+	channelType := 0
+	upstreamModelName := ""
+	if relayInfo.ChannelMeta != nil {
+		channelID = relayInfo.ChannelId
+		channelType = relayInfo.ChannelType
+		upstreamModelName = relayInfo.UpstreamModelName
+	}
+	snapshot := &model.TaskRequestSnapshot{
+		Prompt:            req.Prompt,
+		Model:             req.Model,
+		OriginModelName:   relayInfo.OriginModelName,
+		UpstreamModelName: upstreamModelName,
+		Action:            relayInfo.Action,
+		Platform:          string(platform),
+		ChannelID:         channelID,
+		ChannelType:       channelType,
+		NormalizedRequest: normalized,
+		UpstreamRequest:   upstream,
+		Truncated:         normalizedTruncated || isTruncatedSnapshot(upstream),
+	}
+	task.PrivateData.RequestSnapshot = snapshot
+}
+
+func marshalTaskSnapshot(v any) (json.RawMessage, bool) {
+	data, err := common.Marshal(v)
+	if err != nil {
+		return nil, false
+	}
+	if len(data) <= 32768 {
+		return json.RawMessage(data), false
+	}
+	summary, err := common.Marshal(map[string]any{
+		"truncated": true,
+		"bytes":     len(data),
+	})
+	if err != nil {
+		return json.RawMessage(`{"truncated":true}`), true
+	}
+	return json.RawMessage(summary), true
+}
+
+func isTruncatedSnapshot(raw json.RawMessage) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var summary struct {
+		Truncated bool `json:"truncated"`
+	}
+	if err := common.Unmarshal(raw, &summary); err != nil {
+		return false
+	}
+	return summary.Truncated
 }
 
 // respondTaskError 统一输出 Task 错误响应（含 429 限流提示改写）

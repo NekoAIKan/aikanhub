@@ -102,10 +102,25 @@ type TaskPrivateData struct {
 	UpstreamTaskID string `json:"upstream_task_id,omitempty"` // 上游真实 task ID
 	ResultURL      string `json:"result_url,omitempty"`       // 任务成功后的结果 URL（视频地址等）
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
-	BillingSource  string              `json:"billing_source,omitempty"`  // "wallet" 或 "subscription"
-	SubscriptionId int                 `json:"subscription_id,omitempty"` // 订阅 ID，用于订阅退款
-	TokenId        int                 `json:"token_id,omitempty"`        // 令牌 ID，用于令牌额度退款
-	BillingContext *TaskBillingContext `json:"billing_context,omitempty"` // 计费参数快照（用于轮询阶段重新计算）
+	BillingSource   string               `json:"billing_source,omitempty"`  // "wallet" 或 "subscription"
+	SubscriptionId  int                  `json:"subscription_id,omitempty"` // 订阅 ID，用于订阅退款
+	TokenId         int                  `json:"token_id,omitempty"`        // 令牌 ID，用于令牌额度退款
+	BillingContext  *TaskBillingContext  `json:"billing_context,omitempty"` // 计费参数快照（用于轮询阶段重新计算）
+	RequestSnapshot *TaskRequestSnapshot `json:"request_snapshot,omitempty"`
+}
+
+type TaskRequestSnapshot struct {
+	Prompt            string          `json:"prompt,omitempty"`
+	Model             string          `json:"model,omitempty"`
+	OriginModelName   string          `json:"origin_model_name,omitempty"`
+	UpstreamModelName string          `json:"upstream_model_name,omitempty"`
+	Action            string          `json:"action,omitempty"`
+	Platform          string          `json:"platform,omitempty"`
+	ChannelID         int             `json:"channel_id,omitempty"`
+	ChannelType       int             `json:"channel_type,omitempty"`
+	NormalizedRequest json.RawMessage `json:"normalized_request,omitempty"`
+	UpstreamRequest   json.RawMessage `json:"upstream_request,omitempty"`
+	Truncated         bool            `json:"truncated,omitempty"`
 }
 
 // TaskBillingContext 记录任务提交时的计费参数，以便轮询阶段可以重新计算额度。
